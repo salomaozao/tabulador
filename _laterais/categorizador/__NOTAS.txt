@@ -1,0 +1,1 @@
+Melhorando o processo de codebook, podemos iniciar a ideia do dashboard de processamento, que engloba categorização, codebook, cruzamentos e talvez até gráficos
