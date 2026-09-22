@@ -523,19 +523,89 @@ def api_reabrir(qid):
         return _erro(e)
 
 
+def _versao_codigo() -> str:
+    """Impressão digital do código (tamanho + data dos arquivos): muda a cada atualização do programa."""
+    import hashlib
+    base = Path(__file__).resolve().parent
+    arqs = sorted([*base.glob("*.py"), *base.glob("static/*"), *base.glob("templates/*")])
+    h = hashlib.md5("".join(f"{p.name}{p.stat().st_size}{int(p.stat().st_mtime)}" for p in arqs).encode())
+    return h.hexdigest()[:12]
+
+
+VERSAO = _versao_codigo()
+
+
+@app.get("/api/versao")
+def api_versao():
+    return jsonify({"versao": VERSAO, "pid": os.getpid()})
+
+
 def _porta_ocupada(porta: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.5)
         return s.connect_ex(("127.0.0.1", porta)) == 0
 
 
+def _versao_rodando(url: str) -> dict | None:
+    import json as _json
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"{url}/api/versao", timeout=5) as r:
+            return _json.loads(r.read().decode("utf-8"))
+    except Exception:  # noqa: BLE001 - versão antiga (sem /api/versao) ou travada
+        return None
+
+
+def _pid_na_porta(porta: int) -> int | None:
+    import subprocess
+    try:
+        saida = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=15).stdout
+    except Exception:  # noqa: BLE001
+        return None
+    for linha in saida.splitlines():
+        partes = linha.split()
+        if len(partes) >= 5 and partes[1].endswith(f":{porta}") and partes[3].upper() in ("LISTENING", "ESCUTANDO"):
+            return int(partes[4])
+    return None
+
+
+def _encerrar_antigo(porta: int, info: dict | None) -> bool:
+    """Fecha um Categorizador DESATUALIZADO que ocupa a porta (só se for um python rodando app.py)."""
+    import subprocess
+    import time
+    pid = (info or {}).get("pid") or _pid_na_porta(porta)
+    if not pid or pid == os.getpid():
+        return False
+    try:
+        cmd = subprocess.run(["powershell", "-NoProfile", "-Command", f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine"],
+                             capture_output=True, text=True, timeout=20).stdout
+    except Exception:  # noqa: BLE001
+        cmd = ""
+    if "app.py" not in cmd and not info:  # porta ocupada por outro programa: não mexe
+        return False
+    subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, timeout=20)
+    for _ in range(20):
+        if not _porta_ocupada(porta):
+            return True
+        time.sleep(0.5)
+    return False
+
+
 if __name__ == "__main__":
     porta = int(os.getenv("CATEGORIZADOR_PORTA", "5000"))
     url = f"http://127.0.0.1:{porta}"
-    if _porta_ocupada(porta):  # já está aberto (ex.: duplo clique de novo): só abre o navegador
-        print(f"O Categorizador já está rodando em {url} — abrindo o navegador.")
-        webbrowser.open(f"{url}/?projeto={projetos.padrao()}")
-        sys.exit(0)
+    if _porta_ocupada(porta):
+        info = _versao_rodando(url)
+        if info and info.get("versao") == VERSAO:  # mesma versão já aberta (duplo clique de novo): só abre o navegador
+            print(f"O Categorizador já está rodando em {url} — abrindo o navegador.")
+            webbrowser.open(f"{url}/?projeto={projetos.padrao()}")
+            sys.exit(0)
+        print("Havia uma versão antiga do Categorizador aberta — fechando e abrindo a versão atual...")
+        if not _encerrar_antigo(porta, info):
+            print(f"\nA porta {porta} está ocupada por outro programa. Feche as outras janelas do Categorizador")
+            print("(janelas pretas) e abra de novo. Se não resolver, reinicie o computador.")
+            input("\nPressione Enter para fechar...")
+            sys.exit(1)
     config.garantir_pastas()
     import logging
     logging.getLogger("werkzeug").setLevel(logging.ERROR)  # sem log técnico na janela do usuário

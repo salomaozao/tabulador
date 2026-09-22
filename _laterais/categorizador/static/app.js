@@ -618,6 +618,22 @@ function rota() {
   else renderPainel();
 }
 window.addEventListener("hashchange", rota);
+// programa atualizado/reiniciado com a página aberta: avisa para recarregar (senão botões novos falham)
+let versaoPagina = null;
+setInterval(async () => {
+  try {
+    const v = (await (await fetch("/api/versao")).json()).versao;
+    if (versaoPagina && v !== versaoPagina && !document.querySelector("#aviso-versao")) {
+      const d = document.createElement("div");
+      d.id = "aviso-versao"; d.className = "faixa-teste";
+      d.innerHTML = `🔄 O programa foi atualizado. <span class="acoes"><button class="btn sm primary">Recarregar a página</button></span>`;
+      d.querySelector("button").onclick = () => location.reload();
+      document.querySelector(".top").after(d);
+    }
+    versaoPagina = versaoPagina || v;
+  } catch (e) { /* servidor fechado: o navegador mostra erro nas ações */ }
+}, 20000);
+fetch("/api/versao").then((r) => r.json()).then((j) => (versaoPagina = j.versao)).catch(() => {});
 (async () => {
   const pedido = new URLSearchParams(location.search).get("projeto");
   await carregarStatus();
