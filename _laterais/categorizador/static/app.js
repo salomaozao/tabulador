@@ -388,7 +388,7 @@ function renderCodificacao() {
     const cls = [r.alertas && !nc ? "alerta" : "", r.revisao === "corrigida" ? "humano" : "", r.revisao === "confirmada" ? "confirmada" : "", r.comentario_pendente ? "pendente" : "", nc ? "naocod" : ""].join(" ");
     const origem = nc ? '<span class="pill">não classificada</span>' : r.revisao === "corrigida" ? `<span class="pill human" title="${r.corrigido_de_nome ? "A IA tinha posto: " + esc(r.corrigido_de_nome) : ""}">✎ você</span>` : r.revisao === "confirmada" ? '<span class="pill ok">✓ conferida</span>' : r.origem === "regra" ? '<span class="pill">regra</span>' : r.origem === "llm+comentario" ? '<span class="pill acc">IA + comentário</span>' : r.origem === "erro" ? '<span class="pill warn">erro</span>' : '<span class="pill">IA</span>';
     const btnOk = nc || locked || r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
-    return `<tr class="${cls}" data-rid="${r.rid}">
+    return `<tr class="${cls}" data-rid="${r.rid}" tabindex="0">
       <td>${btnOk}</td>
       <td><div class="txt-resp${r.texto.length > 280 ? " longa" : ""}" title="${r.texto.length > 280 ? "clique para ver a resposta inteira" : ""}">${esc(r.texto)}</div>${r.justificativa ? `<small>IA: ${esc(r.justificativa)}</small>` : ""}${r.alertas && !nc ? `<br><span class="pill warn">${esc(r.alertas)}</span>` : ""}${r.corrigido_de_nome ? `<br><small>a IA tinha posto: ${esc(r.corrigido_de_nome)}</small>` : ""}</td>
       <td class="num">${r.n}</td>
@@ -420,7 +420,14 @@ function renderCodificacao() {
     </div>
     <table id="tab-cod"><thead><tr><th style="width:44px" title="Confirmar que a IA acertou">OK</th><th>Resposta <small>(e justificativa da IA)</small></th><th class="num" style="width:40px">n</th><th style="width:18%">Categoria principal</th><th style="width:16%">Secundária</th><th class="num" style="width:54px">Conf.</th><th style="width:19%">Comentário para a IA</th><th style="width:96px">Situação</th></tr></thead><tbody>${rows}</tbody></table>
     ${todas.length > vis.length ? `<div class="tools"><button class="btn" id="c-mais">Mostrar mais ${Math.min(POR_PAGINA, todas.length - vis.length)}</button><span class="small">${todas.length - vis.length} restantes</span></div>` : ""}
+    <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha da tabela primeiro): <kbd>↑</kbd><kbd>↓</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>C</kbd> escrever comentário · <kbd>1</kbd>–<kbd>9</kbd> trocar a categoria principal pelo código.</div>
     <div class="small">Mudar a categoria vale na hora (fica marcada como sua). ✓ = a IA acertou. Um comentário não muda nada sozinho: vira instrução obrigatória quando você clica em <b>Reclassificar comentadas</b>.</div>`;
+}
+function proximaLinha(tr, passo) {
+  let t = tr;
+  do { t = passo > 0 ? t?.nextElementSibling : t?.previousElementSibling; } while (t && t.classList.contains("hid"));
+  if (t) t.scrollIntoView({ block: "nearest" });
+  return t;
 }
 function bindCodificacao() {
   const P = state.P; if (!P.codificacao) return;
@@ -452,10 +459,27 @@ function bindCodificacao() {
     const rid = +tr.dataset.rid, r = state.P.itens.find((i) => i.rid === rid);
     const prim = tr.querySelector(".c-prim"), sec = tr.querySelector(".c-sec"), com = tr.querySelector(".c-com"), ok = tr.querySelector(".c-ok");
     if (locked) { prim.disabled = sec.disabled = com.disabled = true; continue; }
-    const salvar = async (body, msg) => {
+    const salvar = async (body, msg, proxima = false) => {
       const res = await post(`/api/pergunta/${P.qid}/item/${rid}`, body);
       aplicarItem(r, res.item); recalcular(); rerenderNaLinha(rid); toast(msg);
+      // devolve o foco à tabela para continuar pelo teclado
+      const atual = document.querySelector(`#tab-cod tr[data-rid="${rid}"]`);
+      (proxima ? proximaLinha(atual, 1) : atual)?.focus({ preventScroll: false });
     };
+    tr.onkeydown = (e) => {
+      if (e.target !== tr) return;  // digitando num campo: não interfere
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); proximaLinha(tr, e.key === "ArrowDown" ? 1 : -1)?.focus(); }
+      else if (e.key === "Enter" && r.primaria != null) {
+        e.preventDefault();
+        if (r.revisao === "pendente") salvar({ validado: true }, "Confirmada ✓", true);
+        else proximaLinha(tr, 1)?.focus();
+      } else if (e.key.toLowerCase() === "c" && !com.disabled) { e.preventDefault(); com.focus(); }
+      else if (/^[1-9]$/.test(e.key)) {
+        const cat = catsValidas().find((c) => c.codigo === +e.key);
+        if (cat && cat.codigo !== r.primaria) { e.preventDefault(); salvar({ primaria: cat.codigo }, `Categoria principal: ${cat.nome}`); }
+      }
+    };
+    com.addEventListener("keydown", (e) => { if (e.key === "Escape") { com.blur(); tr.focus(); } });
     prim.onchange = () => prim.value && salvar({ primaria: prim.value }, "Categoria principal alterada");
     sec.onchange = () => salvar({ secundaria: sec.value || null }, "Categoria secundária alterada");
     com.onchange = () => salvar({ comentario: com.value }, com.value.trim() ? "Comentário salvo — clique em 'Reclassificar comentadas' para a IA aplicar" : "Comentário removido");

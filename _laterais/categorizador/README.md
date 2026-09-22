@@ -51,6 +51,33 @@ Só entram perguntas **aprovadas**. Botões *Gerar/Atualizar* e *⬇ Baixar*, e 
 | Cruzamentos | `cruzamentos/cruzamentos.xlsx` (uma aba por pergunta, % por banner) |
 | Base processada | `base/base.xlsx` (códigos `<QID>_COD1/_COD2` e nomes) |
 
+### Revisão pelo teclado
+
+Clique numa linha da tabela de classificação e use: <kbd>↑</kbd>/<kbd>↓</kbd> navegar · <kbd>Enter</kbd>
+confirmar ✓ e ir para a próxima · <kbd>C</kbd> escrever comentário (<kbd>Esc</kbd> volta para a tabela) ·
+<kbd>1</kbd>–<kbd>9</kbd> trocar a categoria principal pelo código. Confirmar/corrigir não reordena a
+tabela (a linha fica no lugar); respostas longas mostram 5 linhas (clique para ver tudo).
+
+### 🧪 Modo teste (sem IA)
+
+Botão **🧪 Modo teste** no topo: a IA é trocada por valores **simulados** (`simulador.py`), sem internet,
+chave ou custo — para validar telas e fluxo. Os resultados vão para `<pasta de saída>_teste`
+(ex.: `SESI_cat/output_teste`), nunca misturados com os reais; na primeira vez a base já lida é copiada.
+Faixa amarela no topo com **Apagar dados de teste** e **Sair do modo teste** (volta ao provedor anterior).
+
+### Sempre a versão atual
+
+Dar dois cliques com o Categorizador já aberto reaproveita a janela se for a mesma versão; se for uma
+versão **antiga** (ex.: o programa foi atualizado), ela é fechada e a atual é aberta. Com a página aberta
+durante uma atualização, aparece o aviso "O programa foi atualizado — Recarregar a página".
+
+### Versionamento
+
+Repositório privado: https://github.com/salomaozao/jumppi-categorizador (raiz = pasta `jumppi`, com
+`.gitignore` que versiona só `_laterais/categorizador` e `SESI_cat`). **Nunca** vão para o git: `.env`
+(chaves), `SESI_cat/data/` (dados do cliente) e pastas `output*` (respostas e resultados). A tag
+`v0-base-antes-melhorias` marca a versão anterior às melhorias de usabilidade.
+
 ### IA: provedores e consumo
 
 - **⚙ Configurar IA** → *Provedor*: OpenAI, **Google Gemini** (AI Studio, plano gratuito), **Groq**
