@@ -10,7 +10,7 @@ from . import perfil as PF
 from . import registrar as REG
 from .rascunho import PREENCHER
 
-JUMPPI = config.BASE_DIR.parent  # pasta onde ficam os projetos (ex.: jumppi/SESI_cat)
+JUMPPI = config.BASE_DIR.parent  # pasta onde ficam os projetos, ao lado do app (ex.: SESI_cat)
 
 
 def pasta_padrao(nome: str) -> Path:

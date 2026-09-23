@@ -97,8 +97,8 @@ durante uma atualização, aparece o aviso "O programa foi atualizado — Recarr
 
 ### Versionamento
 
-Repositório privado: https://github.com/salomaozao/jumppi-categorizador (raiz = pasta `jumppi`, com
-`.gitignore` que versiona só `tabulador` e `SESI_cat`). **Nunca** vão para o git: `.env`
+Repositório privado: https://github.com/salomaozao/tabulador (raiz = pasta `jumppi`, com
+`.gitignore` que versiona só `tabulador/` e `SESI_cat/`). **Nunca** vão para o git: `.env`
 (chaves), `SESI_cat/data/` (dados do cliente) e pastas `output*` (respostas e resultados). A tag
 `v0-base-antes-melhorias` marca a versão anterior às melhorias de usabilidade.
 

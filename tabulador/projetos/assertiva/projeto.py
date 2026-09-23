@@ -29,7 +29,8 @@ CLIENTE = "Assertiva"
 FORMATO = "surveymonkey"  # cabeçalho duplo, duas abas (autopreenchido + telefone)
 
 _TABULADOR = Path(__file__).resolve().parents[2]
-_ONEDRIVE = _TABULADOR.parents[1]  # ...\INSTITUTO OLHAR - PESQUISA E INFORMACAO ESTRATEGICA LTDA
+# ...\INSTITUTO OLHAR - PESQUISA E INFORMACAO ESTRATEGICA LTDA: primeira pasta acima com "Shortcuts"
+_ONEDRIVE = next((p for p in _TABULADOR.parents if (p / "Shortcuts").is_dir()), _TABULADOR.parent)
 PROJETO_DIR = _ONEDRIVE / "Shortcuts" / "Projetos - ASSERTIVA - Análise de Credito"
 LEGADO_DIR = _ONEDRIVE / "Shortcuts" / "Projetos - Categorização de Respostas Abertas" / "Projeto IA" / "CategorizadorDeRespostasAbertas1"
 ENV_EXTRA = LEGADO_DIR / ".env"  # chave OpenAI do categorizador legado (somente leitura), se não houver outra
