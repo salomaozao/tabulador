@@ -1,10 +1,10 @@
-# Repositório do Categorizador: versiona SÓ o código do categorizador e a definição do projeto SESI.
+# Repositório do Tabulador: versiona SÓ o código do tabulador e a definição do projeto SESI.
 # Todo o resto da pasta jumppi (outros projetos) fica fora.
 /*
 !/.gitignore
 !/_laterais/
 /_laterais/*
-!/_laterais/categorizador/
+!/_laterais/tabulador/
 !/SESI_cat/
 
 # nunca versionar: chaves, dados de clientes e resultados (contêm respostas de pesquisa)

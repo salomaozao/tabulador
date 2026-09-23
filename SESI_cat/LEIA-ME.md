@@ -1,6 +1,6 @@
 # SESI Minas — categorização das perguntas abertas
 
-**Para usar:** dê dois cliques em `Abrir Categorizador.bat`. O navegador abre sozinho no projeto SESI.
+**Para usar:** dê dois cliques em `Abrir Tabulador.bat`. O navegador abre sozinho no projeto SESI.
 Na primeira vez: instala o que precisa (1–3 min) e pede a chave da OpenAI (botão **⚙ Configurar IA**).
 
 - `data/base_processamento.xlsx` — planilha-fonte (não é alterada)
@@ -10,4 +10,4 @@ Na primeira vez: instala o que precisa (1–3 min) e pede a chave da OpenAI (bot
   `output/base_processamento_categorizada.xlsx` (colunas `Q*_CAT` preenchidas, secundária em `Q*_CAT2`)
 
 O passo a passo do loop de validação está no próprio programa (barra lateral) e em
-`_laterais/categorizador/README.md`.
+`_laterais/tabulador/README.md`.

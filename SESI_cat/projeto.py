@@ -1,7 +1,7 @@
 """Projeto SESI — Pesquisa de satisfação das Escolas SESI Minas (pais e responsáveis).
 
-Definição do projeto para o Categorizador (código em _laterais/categorizador). Para abrir a
-interface já neste projeto, dê dois cliques em "Abrir Categorizador.bat" nesta pasta.
+Definição do projeto para o Tabulador (código em _laterais/tabulador). Para abrir a
+interface já neste projeto, dê dois cliques em "Abrir Tabulador.bat" nesta pasta.
 
 Planilha-fonte: data/base_processamento.xlsx (somente leitura)
   aba "base"     - uma linha por respondente, uma coluna por pergunta (Q1..Q35); as colunas

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tabulador de respostas</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%232a78d6'/%3E%3Cpath d='M4 5h8M4 8h6M4 11h4' stroke='white' stroke-width='1.6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">Tabulador de respostas abertas</div>
+  <label class="proj" title="Projeto (pesquisa) em que você está trabalhando">Projeto
+    <select id="sel-projeto"></select>
+  </label>
+  <button id="btn-novo" class="btn ghost" title="Criar um projeto novo a partir de uma planilha de pesquisa">+ Novo projeto</button>
+  <div id="base-status" class="muted">carregando…</div>
+  <button id="btn-teste" class="btn ghost" title="Liga/desliga o modo teste: a IA é substituída por valores simulados (sem custo) e os resultados vão para uma pasta separada">🧪 Modo teste</button>
+  <button id="btn-ia" class="btn ghost" title="Chave da OpenAI e modelo usado">⚙ Configurar IA</button>
+  <button id="btn-load" class="btn ghost" title="Relê a planilha-fonte e reconstrói a base">↻ Recarregar planilha</button>
+</header>
+<div id="faixa-teste" class="faixa-teste hidden">
+  🧪 <b>MODO TESTE</b> — categorias e classificações são <b>simuladas</b> (sem IA, sem custo). Os resultados ficam em uma pasta separada: <code id="faixa-pasta"></code>
+  <span class="acoes"><button class="btn sm" id="teste-limpar">Apagar dados de teste</button><button class="btn sm primary" id="teste-sair">Sair do modo teste</button></span>
+</div>
+
+<div class="layout">
+  <nav class="side">
+    <ul id="lista-topo">
+      <li id="li-painel"><span class="t">📊 Painel geral</span><span class="small">andamento de todas as perguntas</span></li>
+      <li id="li-resultados"><span class="t">📦 Resultados</span><span class="small">o que a pesquisa diz e os arquivos para baixar</span></li>
+      <li id="li-usage"><span class="t">📈 Consumo da IA</span><span class="small">chamadas, tokens, tempo e custo estimado</span></li>
+      <li id="li-gerenciar"><span class="t">🛠 Gerenciar projeto</span><span class="small">zona de perigo: apagar categorias, excluir projeto</span></li>
+    </ul>
+    <div class="side-title">Perguntas abertas</div>
+    <ul id="lista-perguntas"></ul>
+    <div class="side-help">
+      <b>Como funciona</b>
+      <ol>
+        <li>A IA propõe as <b>categorias</b>. Você ajusta (direto na tabela ou pedindo à IA) e aprova.</li>
+        <li>A IA <b>classifica</b> as respostas — comece por uma amostra. Você confirma ✓ o que está certo e corrige o que está errado (ou comenta e pede para a IA refazer).</li>
+        <li>Repita até a taxa de acerto ficar boa, classifique o restante e <b>aprove</b>. Os resultados ficam no painel geral.</li>
+      </ol>
+    </div>
+  </nav>
+
+  <main id="main">
+    <div class="empty">Carregando…</div>
+  </main>
+</div>
+
+<dialog id="dlg-ia">
+  <form method="dialog" id="form-ia">
+    <h2 style="margin-top:0">Configurar IA</h2>
+    <label class="campo">Provedor
+      <select id="ia-provedor"></select>
+    </label>
+    <p class="small" id="ia-estado"></p>
+    <label class="campo"><span>Chave <span id="ia-chave-dica" class="small"></span> <a id="ia-link" href="#" target="_blank" rel="noopener" class="small">obter chave ↗</a></span>
+      <input type="password" id="ia-chave" placeholder="cole aqui a chave — deixe em branco para manter a atual" autocomplete="off">
+    </label>
+    <label class="campo">Modelo
+      <select id="ia-modelo-sel"></select>
+      <input id="ia-modelo" class="hidden" placeholder="nome exato do modelo">
+    </label>
+    <label class="campo" id="ia-url-campo">Endereço da API (base URL)
+      <input id="ia-url" placeholder="https://…/v1">
+    </label>
+    <p class="small">As chaves ficam gravadas só neste computador (arquivo <code>.env</code> do tabulador) e nunca aparecem nos resultados. Cada provedor guarda a sua. Planos gratuitos têm limite de chamadas por minuto: em perguntas grandes a classificação pode ficar mais lenta.</p>
+    <div id="ia-teste-detalhe"></div>
+    <div class="dlg-acoes"><span id="ia-teste-res" class="small"></span><button class="btn" type="button" id="ia-testar">Testar conexão</button><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" id="ia-salvar" value="ok">Salvar</button></div>
+  </form>
+</dialog>
+
+<div id="busy" class="busy hidden" role="status" aria-live="polite"><div class="box">
+  <div class="busy-cab"><div class="cat-spin"></div><div><div id="busy-msg">Processando…</div><div id="busy-sub" class="small"></div></div><div id="busy-pct" class="busy-pct"></div></div>
+  <div id="busy-bar" class="prog grande indet"><i></i></div>
+  <div id="busy-stats" class="busy-stats"></div>
+  <ol id="busy-etapas" class="etapas"></ol>
+  <div id="busy-log" class="busy-log"></div>
+</div></div>
+<dialog id="dlg-perigo">
+  <form method="dialog" id="form-perigo">
+    <h2 style="margin-top:0" id="pg-titulo">Confirmar</h2>
+    <div id="pg-texto" class="small-t"></div>
+    <div id="pg-extra"></div>
+    <label class="campo" id="pg-campo">Para confirmar, digite <b id="pg-palavra"></b>
+      <input id="pg-input" autocomplete="off">
+    </label>
+    <div class="dlg-acoes"><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn perigo" id="pg-ok" value="ok" disabled>Apagar</button></div>
+  </form>
+</dialog>
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
