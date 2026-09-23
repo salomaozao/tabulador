@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Callable
 
 import config
+import progresso
 
 _cliente_fake: Callable | None = None
 _client = None
@@ -47,6 +48,8 @@ def _openai():
 
 
 def _log(nome: str, payload: dict) -> None:
+    uso = payload.get("uso") or {}
+    progresso.ia_fim(payload.get("segundos") or 0, payload.get("ok", True), uso.get("total_tokens"))
     config.garantir_pastas()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     (config.LLM_LOG_OUT / f"{ts}_{nome}.json").write_text(
@@ -119,11 +122,30 @@ def _uso(resp) -> dict | None:
         return {k: getattr(u, k, None) for k in ("prompt_tokens", "completion_tokens", "total_tokens")}
 
 
+def _chamar_cli(system: str, user: str, schema: dict, nome: str, base: dict, t0: float) -> dict:
+    """IA pelo programa instalado no computador (ver llm_cli.py)."""
+    import llm_cli
+    try:
+        resposta, uso = llm_cli.chamar(config.OPENAI_PROVEDOR, system, user, schema, config.OPENAI_MODEL)
+        dados = resposta if isinstance(resposta, dict) else extrair_json(resposta)
+    except Exception as e:
+        _log(nome, {**base, "segundos": round(time.time() - t0, 1), "uso": None, "ok": False,
+                    "erro": f"{type(e).__name__}: {str(e)[:500]}", "system": system, "user": user})
+        amigavel = mensagem_amigavel(e)
+        if amigavel:
+            raise RuntimeError(amigavel) from e
+        raise
+    _log(nome, {**base, "segundos": round(time.time() - t0, 1), "uso": uso, "ok": True, "modo": "cli",
+                "system": system, "user": user, "resposta": dados})
+    return dados
+
+
 def chamar_json(system: str, user: str, schema: dict, nome: str = "chamada") -> dict:
     """Retorna o JSON da resposta. `schema` é um JSON Schema (modo estrito quando o provedor aceita)."""
     if _cliente_fake is not None:
         return _cliente_fake(system, user, schema)
 
+    progresso.ia_inicio()
     t0 = time.time()
     base = {"modelo": config.OPENAI_MODEL, "provedor": config.OPENAI_PROVEDOR}
     if config.modo_teste():  # modo teste: valores simulados, sem rede nem custo (ver simulador.py)
@@ -134,6 +156,8 @@ def chamar_json(system: str, user: str, schema: dict, nome: str = "chamada") -> 
                     "uso": {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct},
                     "system": system, "user": user, "resposta": dados})
         return dados
+    if config.usa_cli():
+        return _chamar_cli(system, user, schema, nome, base, t0)
     try:
         client = _openai()
         instr_schema = "\nResponda SOMENTE com um objeto JSON válido, sem texto fora dele, seguindo este JSON Schema: " + json.dumps(schema, ensure_ascii=False)

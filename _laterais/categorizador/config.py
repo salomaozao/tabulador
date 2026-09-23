@@ -79,6 +79,16 @@ PROVEDORES = {
                  "modelos": ["deepseek-chat"], "chave_prefixo": "sk-", "link": "https://platform.deepseek.com/api_keys"},
     "personalizado": {"nome": "Personalizado (qualquer API compatível com a OpenAI)", "base_url": "", "modelo": "",
                       "modelos": [], "chave_prefixo": "", "link": ""},
+    # programas de IA instalados no computador (assinatura de quem usa; sem chave) — ver llm_cli.py
+    "cli_claude": {"nome": "💻 Claude Code instalado neste computador (usa o login do programa)", "base_url": "", "modelo": "sonnet",
+                   "modelos": ["sonnet", "opus", "haiku", "padrao"], "chave_prefixo": "", "link": "https://claude.com/claude-code",
+                   "sem_chave": True, "cli": True},
+    "cli_codex": {"nome": "💻 Codex (OpenAI) instalado neste computador (usa o login do programa) — não testado", "base_url": "", "modelo": "padrao",
+                  "modelos": ["padrao"], "chave_prefixo": "", "link": "https://developers.openai.com/codex/cli",
+                  "sem_chave": True, "cli": True},
+    "cli_gemini": {"nome": "💻 Gemini CLI instalado neste computador (usa o login do programa) — não testado", "base_url": "", "modelo": "padrao",
+                   "modelos": ["padrao", "gemini-2.5-pro", "gemini-2.5-flash"], "chave_prefixo": "", "link": "https://github.com/google-gemini/gemini-cli",
+                   "sem_chave": True, "cli": True},
     "simulado": {"nome": "🧪 Modo teste (valores simulados, sem IA)", "base_url": "", "modelo": "simulado",
                  "modelos": ["simulado"], "chave_prefixo": "", "link": "", "sem_chave": True},
 }
@@ -86,6 +96,16 @@ PROVEDORES = {
 
 def modo_teste() -> bool:
     return OPENAI_PROVEDOR == "simulado"
+
+
+def usa_cli() -> bool:
+    """IA pelo programa instalado no computador (Claude Code, Codex, Gemini CLI)."""
+    return bool(PROVEDORES.get(OPENAI_PROVEDOR, {}).get("cli"))
+
+
+def paralelo() -> int:
+    """Chamadas simultâneas à IA (os programas locais são mais pesados: no máximo 2)."""
+    return max(1, min(LLM_PARALELO, 2) if usa_cli() else LLM_PARALELO)
 
 
 def gravar_env(novos: dict) -> None:

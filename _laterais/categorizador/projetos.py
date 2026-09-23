@@ -1,7 +1,8 @@
 """Projetos do categorizador.
 
 Cada projeto é uma pasta com um `projeto.py` (planilha-fonte, contexto para a IA, perguntas,
-filtros, banners). A lista fica em `projetos.json` (caminhos relativos a esta pasta):
+filtros, banners) ou um `projeto.json` declarativo (criado pelo assistente "Novo projeto";
+formato em novo_projeto/FORMATO.md). A lista fica em `projetos.json` (caminhos relativos a esta pasta):
 
   {"ativo": "sesi", "projetos": {"assertiva": "projetos/assertiva", "sesi": "../../SESI_cat"}}
 
@@ -39,8 +40,12 @@ def pasta(slug: str) -> Path:
 def _carregar(slug: str):
     if slug not in _modulos:
         arq = pasta(slug) / "projeto.py"
+        if not arq.exists() and (pasta(slug) / "projeto.json").exists():
+            from novo_projeto import projeto_json  # projeto declarativo (criado pelo assistente)
+            _modulos[slug] = projeto_json.carregar(pasta(slug) / "projeto.json")
+            return _modulos[slug]
         if not arq.exists():
-            raise FileNotFoundError(f"{arq} não existe")
+            raise FileNotFoundError(f"{arq} (ou projeto.json) não existe")
         spec = importlib.util.spec_from_file_location(f"projeto_{slug}", arq)
         mod = importlib.util.module_from_spec(spec)
         antes, sys.dont_write_bytecode = sys.dont_write_bytecode, True  # sem __pycache__ na pasta do projeto

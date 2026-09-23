@@ -19,6 +19,7 @@ from datetime import datetime
 import config
 import llm
 import load
+import progresso
 import variables as V
 
 CODIGO_OUTROS = 97
@@ -190,6 +191,11 @@ RESPOSTAS (frequência x texto){nota}:
     return system, user
 
 
+def _resumo_pedido(dados: dict, texto: str) -> str:
+    linhas, nota = _linhas_inducao(dados)
+    return f"{len(linhas)} respostas enviadas à IA{' (amostra)' if nota else ''} · ~{max(1, round(len(texto) / 4 / 1000))} mil tokens"
+
+
 def induzir(qid: str, min_cat: int = 6, max_cat: int = 15, forcar: bool = False) -> dict:
     """Gera frame_proposto.json e frame.json (rascunho). Se frame.json já estiver aprovado, exige forcar."""
     atual = _ler(qid, "frame.json")
@@ -198,9 +204,15 @@ def induzir(qid: str, min_cat: int = 6, max_cat: int = 15, forcar: bool = False)
     if qid in V.BACKCODING:
         return frame_fixo(qid)
     spec = V.por_id(qid)
+    progresso.etapa("ler", "lendo a base de respondentes")
     dados = preparar(qid)
+    progresso.etapa("pedido", f"{dados['n_respondeu']} pessoas responderam · {dados['n_unicas']} respostas diferentes · {dados['n_nsnr_auto']} NS/NR separadas por regra")
     system, user = _prompt_inducao(qid, dados, spec, min_cat, max_cat)
+    progresso.evento(f"Pedido montado: {_resumo_pedido(dados, system + user)}")
+    progresso.etapa("ia", f"{_resumo_pedido(dados, system + user)} · modelo {config.OPENAI_MODEL}", estimativa=progresso.tempo_medio("frame_"))
     saida = llm.chamar_json(system, user, SCHEMA_FRAME, nome=f"frame_{qid}")
+    progresso.evento(f"A IA propôs {len(saida['categorias'])} categorias")
+    progresso.etapa("gravar", f"{len(saida['categorias'])} categorias + Outros e NS/NR")
     categorias = []
     for i, c in enumerate(saida["categorias"], start=1):
         categorias.append({"codigo": i, "nome": c["nome"].strip(), "definicao": c["definicao"].strip(), "exemplos": c.get("exemplos", []), "fixa": False})
@@ -289,7 +301,11 @@ Regras:
 RESPOSTAS (frequência x texto){nota}:
 {chr(10).join(linhas)}
 """
+    progresso.etapa("ia", f"{len(atual['categorias']) - 2} categorias atuais + seu pedido · {_resumo_pedido(dados, system + user)} · modelo {config.OPENAI_MODEL}",
+                    estimativa=progresso.tempo_medio("refino_") or progresso.tempo_medio("frame_"))
     saida = llm.chamar_json(system, user, SCHEMA_REFINO, nome=f"refino_{qid}")
+    progresso.evento(f"A IA devolveu a lista revisada com {len(saida['categorias'])} categorias")
+    progresso.etapa("gravar", "mantendo os códigos das categorias que continuam e remapeando as fundidas")
     antigos = {c["codigo"]: c for c in atual["categorias"] if not c.get("fixa")}
     usados: set = set()
     novas, pendentes = [], []

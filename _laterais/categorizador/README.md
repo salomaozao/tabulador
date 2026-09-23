@@ -40,9 +40,11 @@ as categorias e classifica as respostas; o pesquisador valida tudo pela interfac
 - **Comentário para a IA** (resposta): vira instrução obrigatória ao clicar em *Reclassificar comentadas*.
 - O Excel de revisão e o relatório HTML continuam disponíveis em cada pergunta.
 
-### Resultados (Painel geral → Resultados)
+### 📦 Resultados (aba própria na barra lateral)
 
-Só entram perguntas **aprovadas**. Botões *Gerar/Atualizar* e *⬇ Baixar*, e *📂 Abrir pasta de resultados*.
+Números gerais (perguntas aprovadas, respostas classificadas, conferidas por pessoas, acerto da IA), os
+arquivos para baixar (*↻ Atualizar todos*, *⬇ Baixar*, *📂 Abrir pasta*) e, para cada pergunta, o gráfico
+de categorias (% de quem respondeu que citou cada uma). Só entram nos arquivos as perguntas **aprovadas**.
 
 | Resultado | Arquivo (em `<pasta do projeto>/output/`) |
 |---|---|
@@ -50,6 +52,22 @@ Só entram perguntas **aprovadas**. Botões *Gerar/Atualizar* e *⬇ Baixar*, e 
 | Codebook | `codebook/codebook.xlsx` (+ `.html`) |
 | Cruzamentos | `cruzamentos/cruzamentos.xlsx` (uma aba por pergunta, % por banner) |
 | Base processada | `base/base.xlsx` (códigos `<QID>_COD1/_COD2` e nomes) |
+
+### Andamento das operações da IA
+
+Gerar/ajustar categorias, classificar, aprovar e gerar resultados abrem uma janela de andamento com as
+**etapas** (✓ feita, em andamento, a fazer), **barra de progresso**, tempo decorrido, **tempo restante**
+estimado, velocidade (respostas/min), lote atual, chamadas à IA em andamento, tokens e um registro ao vivo
+(ex.: "Lote 3 de 7 concluído"). Na classificação o progresso é real (respostas prontas); nas chamadas únicas
+(gerar categorias) a estimativa vem da média das últimas chamadas do mesmo tipo (`progresso.py`).
+
+### 🛠 Gerenciar projeto (zona de perigo)
+
+Mostra as pastas do projeto, de resultados e a lixeira. Zona de perigo: apagar a classificação de uma
+pergunta, apagar categorias + classificação de uma pergunta, recomeçar todas, e excluir o projeto da lista.
+Cada ação pede para **digitar** uma palavra de confirmação. Nada é apagado de verdade: os arquivos vão para
+`<saída>/_lixeira/<data>_<o quê>/`; excluir o projeto nunca apaga a pasta do projeto nem a planilha (os
+resultados, se marcado, viram `<saída>_excluido_<data>`). No modo teste, só os dados de teste são afetados.
 
 ### Revisão pelo teclado
 
@@ -93,10 +111,32 @@ Repositório privado: https://github.com/salomaozao/jumppi-categorizador (raiz =
   `CATEGORIZADOR_USD_BRL` (padrão 5,40).
 - Planos gratuitos têm limite de chamadas por minuto: se aparecer erro de limite, reduza
   `CATEGORIZADOR_PARALELO` (ex.: 1 ou 2) no `.env`.
+- **💻 Programa instalado no computador** (`llm_cli.py`): em ⚙ Configurar IA, os provedores *Claude Code*,
+  *Codex* e *Gemini CLI* usam o programa já instalado e logado no computador, sem chave de API. Cada chamada
+  abre o programa sem ferramentas (não lê nem grava arquivos), numa pasta temporária, com saída JSON.
+  É mais lento que a API (cerca de 5 a 10 s por chamada) e roda no máximo 2 chamadas ao mesmo tempo. O
+  Claude Code está testado; o Codex e o Gemini CLI seguem a documentação desses programas e ainda não
+  foram testados. Os que não estão instalados aparecem desabilitados.
+
+### Novo projeto
+
+Botão **+ Novo projeto** no topo. O assistente tem 5 passos:
+
+1. Escolher a planilha, que é copiada para a pasta do projeto.
+2. Conferir as colunas. O rascunho é montado **sem IA**, a partir dos dados: tipos, opções copiadas
+   literalmente, dados pessoais, quem recebeu cada aberta e o que categorizar pela cor do `_CAT`.
+3. Escrever o contexto para a IA. O botão ✨ sugere o contexto, os rótulos e as instruções.
+4. Conferir o pedido: quem confirmou e quais abertas foram pedidas.
+5. **Validar** (roda a leitura real da planilha) e **Criar**.
+
+O projeto fica num `projeto.json`, descrito em [novo_projeto/FORMATO.md](novo_projeto/FORMATO.md). Os
+mesmos passos funcionam pelo terminal (`python -m novo_projeto.cli ...`) e pela skill de IA
+[.claude/skills/novo-projeto](.claude/skills/novo-projeto/SKILL.md), que o `AGENTS.md` indica para Codex
+e Antigravity.
 
 ## Projetos
 
-Cada projeto é uma pasta com um `projeto.py`; a lista fica em `projetos.json` (caminhos relativos a
+Cada projeto é uma pasta com um `projeto.py` ou um `projeto.json` (criado pelo assistente); a lista fica em `projetos.json` (caminhos relativos a
 esta pasta). O projeto ativo é escolhido no topo da interface (ou `CATEGORIZADOR_PROJETO=sesi`, ou
 `python run.py --projeto sesi ...`).
 
@@ -109,7 +149,8 @@ O `projeto.py` define: `NOME`, `CLIENTE`, `CONTEXTO_PROJETO` (texto para a IA), 
 (`"plano"` ou `"surveymonkey"`), `PERGUNTAS` (com `"codificar": True` e `"instrucoes_frame"` nas
 abertas), `FILTROS`/`FILTROS_DESCRICAO` (quem recebeu cada pergunta), `DERIVADAS` e `BANNERS_PADRAO`
 (cruzamentos) e, opcionalmente, `BACKCODING`, `PII_MATCH`, `PLANO`, `SAIDA_PLANILHA`. Para um projeto
-novo no formato plano, copie `SESI_cat/projeto.py`, ajuste e acrescente a linha em `projetos.json`.
+novo no formato plano, use o assistente **+ Novo projeto** (ou a skill / `python -m novo_projeto.cli`), que gera
+e valida um `projeto.json`. O formato SurveyMonkey continua sendo configurado à mão em `projeto.py`.
 
 Dados pessoais (`PII_MATCH` / colunas não declaradas) nunca entram na base, nos prompts nem nas saídas
 — exceto a *planilha final*, que é uma cópia da planilha-fonte do próprio cliente.
@@ -146,6 +187,8 @@ Testes (não chamam a OpenAI; escrevem em pasta temporária): `python -m unittes
 | `exportar.py` | planilha final no formato da planilha-fonte |
 | `report.py`, `codebook.py`, `crosstabs.py` | relatório de conferência, codebook, cruzamentos |
 | `llm.py` | OpenAI com JSON Schema estrito; log de cada chamada em `output/llm_log/` |
+| `llm_cli.py` | IA pelo programa instalado no computador (Claude Code, Codex, Gemini CLI) |
+| `novo_projeto/` | criação de projetos: perfil da planilha, rascunho sem IA, validador, registro, assistente e CLI |
 | `app.py` + `templates/` + `static/` | interface web (Flask + JS puro, sem build) |
 | `iniciar.bat` | instalador/lançador (ambiente em `%LOCALAPPDATA%\Categorizador\venv`) |
 
