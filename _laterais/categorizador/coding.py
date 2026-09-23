@@ -114,7 +114,7 @@ def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], i
 
     resultados, falhas = {}, []
     limite_atingido = False
-    with ThreadPoolExecutor(max_workers=max(1, config.LLM_PARALELO)) as ex:
+    with ThreadPoolExecutor(max_workers=config.paralelo()) as ex:
         futuros = {ex.submit(_um, (k, lote)): k for k, lote in enumerate(lotes)}
         for fut in as_completed(futuros):
             k = futuros[fut]

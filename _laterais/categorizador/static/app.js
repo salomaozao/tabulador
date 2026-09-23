@@ -34,7 +34,10 @@ function toast(msg, err = false) {
 async function api(path, opts = {}, msg, progresso = false) {
   if (msg) busy(msg, progresso);
   try {
-    const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+    const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts }).catch(() => {
+      // "Failed to fetch": o servidor não respondeu (janela do programa fechada ou reiniciada)
+      throw new Error("o Categorizador não respondeu — a janela do programa foi fechada ou reiniciada. Abra-o de novo pelo atalho e recarregue a página.");
+    });
     const j = await r.json().catch(() => ({ erro: r.statusText }));
     if (!r.ok) throw new Error(j.erro || r.statusText);
     return j;
@@ -497,24 +500,42 @@ async function recarregarPlanilha() {
 // ---- modal "Configurar IA" (provedores compatíveis com a API da OpenAI)
 function preencherProvedor(prov, inicial) {
   const ia = state.status.ia, P = ia.provedores[prov] || {}, atual = prov === ia.provedor;
-  $("#ia-estado").innerHTML = P.sem_chave
+  $("#ia-estado").innerHTML = P.cli
+    ? (P.disponivel
+      ? `💻 Usa o programa instalado neste computador, com o login/assinatura de quem usa — <b>sem chave</b>. É mais lento que a API (cada chamada abre o programa, ~5–10 s) e roda no máximo 2 chamadas ao mesmo tempo. As respostas vão para o provedor do programa, como numa conversa normal. Modelo "padrao" = o padrão do programa.`
+      : `⚠ Este programa não foi encontrado neste computador. Instale-o e faça login nele antes (link ao lado).`)
+    : P.sem_chave
     ? `🧪 Não usa chave nem internet: as categorias e classificações são <b>simuladas</b>, para testar o app sem custo. Os resultados vão para uma pasta separada.`
     : P.tem_chave
     ? `✓ Já existe uma chave guardada para este provedor. Cole outra só se quiser trocar.`
     : `⚠ Nenhuma chave guardada para este provedor — cole a chave para usá-lo.`;
   $("#ia-chave").closest("label").classList.toggle("hidden", !!P.sem_chave);
-  $("#ia-modelo").closest("label").classList.toggle("hidden", !!P.sem_chave);
+  $("#ia-modelo").closest("label").classList.toggle("hidden", !!P.sem_chave && !P.cli);
   $("#ia-chave-dica").textContent = P.chave_prefixo ? `(começa com ${P.chave_prefixo}…)` : "";
   $("#ia-link").classList.toggle("hidden", !P.link); $("#ia-link").href = P.link || "#";
-  $("#ia-modelos").innerHTML = (P.modelos || []).map((m) => `<option value="${esc(m)}">`).join("");
-  $("#ia-modelo").value = atual && inicial ? ia.modelo : P.modelo || "";
+  preencherModelos(P, atual && inicial ? ia.modelo : P.modelo || "");
   $("#ia-url").value = atual && inicial ? ia.base_url : P.base_url || "";
   $("#ia-url-campo").classList.toggle("hidden", prov !== "personalizado" && !(atual && inicial && ia.base_url && ia.base_url !== (P.base_url || "")));
-  $("#ia-teste-res").textContent = "";
+  $("#ia-teste-res").textContent = ""; $("#ia-teste-detalhe").innerHTML = "";
 }
+// lista fixa de modelos do provedor + "outro…" (campo livre, para um modelo que não está na lista)
+const OUTRO_MODELO = "__outro";
+function preencherModelos(P, valor) {
+  const lista = P.modelos || [], sel = $("#ia-modelo-sel");
+  sel.innerHTML = lista.map((m) => `<option value="${esc(m)}">${m === "padrao" ? "padrão do programa" : esc(m)}</option>`).join("")
+    + `<option value="${OUTRO_MODELO}">outro…</option>`;
+  sel.value = lista.length && (!valor || lista.includes(valor)) ? valor || lista[0] : OUTRO_MODELO;
+  $("#ia-modelo").value = sel.value === OUTRO_MODELO ? valor || "" : sel.value;
+  $("#ia-modelo").classList.toggle("hidden", sel.value !== OUTRO_MODELO);
+}
+$("#ia-modelo-sel").onchange = (e) => {
+  const outro = e.target.value === OUTRO_MODELO, campo = $("#ia-modelo");
+  campo.classList.toggle("hidden", !outro);
+  if (outro) { campo.value = ""; campo.focus(); } else campo.value = e.target.value;
+};
 function abrirIA() {
   const ia = state.status.ia;
-  $("#ia-provedor").innerHTML = Object.entries(ia.provedores).map(([k, p]) => `<option value="${k}" ${k === ia.provedor ? "selected" : ""}>${esc(p.nome)}${p.tem_chave ? " ✓" : ""}</option>`).join("");
+  $("#ia-provedor").innerHTML = Object.entries(ia.provedores).map(([k, p]) => `<option value="${k}" ${k === ia.provedor ? "selected" : ""} ${p.disponivel === false ? "disabled" : ""}>${esc(p.nome)}${p.disponivel === false ? " (não instalado)" : p.tem_chave && !p.cli ? " ✓" : ""}</option>`).join("");
   $("#ia-chave").value = ""; preencherProvedor(ia.provedor, true);
   $("#dlg-ia").showModal();
 }
@@ -543,13 +564,33 @@ $("#form-ia").addEventListener("submit", async (e) => {
   $("#dlg-ia").close(); toast("Configuração da IA salva"); state.qid = null; await carregarStatus(); rota();  // modo teste troca a pasta: recarrega a tela
 });
 $("#ia-testar").onclick = async () => {
-  const res = $("#ia-teste-res");
+  const res = $("#ia-teste-res"), det = $("#ia-teste-detalhe"), btn = $("#ia-testar");
   try { await salvarIA(); } catch (err) { if (err.message !== "cancelado") toast(err.message, true); return; }
-  res.textContent = "testando…";
-  try { const r = await post("/api/config/testar", {}); res.innerHTML = r.ok ? `<span class="pill ok">✓ funcionou (${esc(r.modelo)})</span>` : '<span class="pill warn">resposta inesperada</span>'; }
-  catch (err) { res.innerHTML = '<span class="pill warn">falhou — veja a mensagem</span>'; }
-  preencherProvedor($("#ia-provedor").value, true); carregarStatus();
+  res.textContent = "⏳ testando… (programas instalados levam ~5–10 s)"; det.innerHTML = ""; btn.disabled = true;
+  let r;
+  try { r = await post("/api/config/testar", {}); }
+  catch (err) {  // o servidor nem respondeu (ou devolveu erro fora do padrão)
+    r = { ok: false, erro: err.message, explicacao: "O teste não chegou a rodar: " + err.message,
+          solucao: "Confira se a janela do Categorizador continua aberta; se não, abra-o pelo atalho e recarregue a página." };
+  } finally { btn.disabled = false; }
+  await carregarStatus(); preencherProvedor($("#ia-provedor").value, true);  // limpa o resultado; é preenchido logo abaixo
+  mostrarTesteIA(r);
 };
+function mostrarTesteIA(r) {
+  const res = $("#ia-teste-res"), det = $("#ia-teste-detalhe");
+  const quem = `${esc(r.provedor_nome || r.provedor || "")} · modelo <b>${esc(r.modelo || "?")}</b>`;
+  if (r.ok) {
+    res.innerHTML = `<span class="pill ok">✓ funcionou (${esc(r.modelo)} · ${r.segundos} s)</span>`;
+    det.innerHTML = `<div class="teste-ia ok"><div>✅ <b>Conexão confirmada.</b> A IA respondeu corretamente em ${r.segundos} s. Pode salvar.</div><small>${quem}</small></div>`;
+    return;
+  }
+  res.innerHTML = '<span class="pill warn">✗ falhou</span>';
+  det.innerHTML = `<div class="teste-ia falhou">
+    <div>❌ <b>O teste falhou.</b> <small>${quem}${r.segundos != null ? ` · ${r.segundos} s` : ""}</small></div>
+    <div><b>O que aconteceu:</b> ${esc(r.explicacao || r.erro || "erro desconhecido")}</div>
+    <div><b>Como resolver:</b> ${esc(r.solucao || "Confira a configuração e teste de novo.")}</div>
+    ${r.erro ? `<details><summary>Mensagem original</summary><pre>${esc(r.erro)}</pre></details>` : ""}</div>`;
+}
 
 // ---------------------------------------------------------------- consumo da IA
 const fmtN = (n) => (n == null ? "–" : Number(n).toLocaleString("pt-BR"));
@@ -634,10 +675,230 @@ $("#sel-projeto").onchange = async (e) => {
   if (location.hash === "#usage") renderUsage(); else if (location.hash === "#painel" || !location.hash) renderPainel(); else irPara(null);
 };
 
+// ---------------------------------------------------------------- novo projeto (assistente)
+// O rascunho vem do servidor, feito sem IA a partir da planilha. Aqui a pessoa só revisa: tipos,
+// rótulos, o que categorizar, contexto e conferência do pedido. Criar exige validação sem erros.
+const TIPOS_NOVO = { meta: "controle (id, data…)", unica: "fechada (escolha única)", numerica: "número", aberta: "aberta (texto)", pii: "🔒 dado pessoal", ignorar: "ignorar" };
+const normNome = (s) => String(s).replace(/[–—]/g, "-").normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim().toLowerCase();
+const ehCat = (c) => /.+_CAT2?$/.test(c);
+function specDe(col) { return state.novo.projeto.PERGUNTAS.find((p) => (p.coluna || p.id) === col); }
+function tipoDe(c) {
+  const s = specDe(c.coluna);
+  if (s) return s.tipo;
+  return (state.novo.projeto.PII_MATCH || []).includes(normNome(c.coluna)) ? "pii" : "ignorar";
+}
+function novoId(col) {
+  const usados = new Set(state.novo.projeto.PERGUNTAS.map((p) => p.id));
+  let base = /^[A-Za-z][A-Za-z0-9_]*$/.test(col) ? col : col.normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase().slice(0, 30);
+  if (!/^[A-Za-z]/.test(base)) base = "V_" + base;
+  let id = base, i = 2;
+  while (usados.has(id)) id = `${base}_${i++}`;
+  return id;
+}
+function mudarTipo(c, tipo) {
+  const P = state.novo.projeto, antigo = specDe(c.coluna), n = normNome(c.coluna);
+  if (tipo === "unica" && !c.valores) { toast("Esta coluna tem valores diferentes demais para ser uma fechada.", true); return false; }
+  P.PERGUNTAS = P.PERGUNTAS.filter((p) => p !== antigo);
+  P.PII_MATCH = (P.PII_MATCH || []).filter((x) => x !== n);
+  if (tipo === "pii") P.PII_MATCH.push(n);
+  if (["meta", "unica", "numerica", "aberta"].includes(tipo)) {
+    const s = { id: antigo ? antigo.id : novoId(c.coluna), tipo, rotulo: (antigo && antigo.rotulo) || c.enunciado || c.coluna };
+    if (s.id !== c.coluna) s.coluna = c.coluna;
+    if (tipo === "unica") s.niveis = c.valores.map((v) => v[0]);
+    if (tipo === "aberta") { s.codificar = false; if (antigo && antigo.base) s.base = antigo.base; }
+    if (tipo === "numerica" && antigo && antigo.nps) s.nps = true;
+    P.PERGUNTAS.push(s);
+    const ordem = state.novo.colunas.map((x) => x.coluna);
+    P.PERGUNTAS.sort((a, b) => ordem.indexOf(a.coluna || a.id) - ordem.indexOf(b.coluna || b.id));
+  }
+  return true;
+}
+function corDe(col) { const c = state.novo.colunas.find((x) => x.coluna === col); return c ? c.cor : null; }
+function amostraCor(cor) {
+  if (!cor || cor === state.novo.cor_maioria) return "";
+  const css = /^FF[0-9A-F]{6}$/.test(cor) ? "#" + cor.slice(2) : "var(--accent-2)";
+  return `<span class="cor" style="background:${css}" title="cabeçalho destacado na planilha"></span>`;
+}
+function descFiltro(base) {
+  if (!base || base === "todos") return "todos os respondentes";
+  const r = (state.novo.projeto.FILTROS || {})[base];
+  return r ? r.descricao || base : `⚠ filtro ${base} não existe`;
+}
+
+function renderNovo() {
+  state.view = "novo"; state.qid = null; state.P = null; renderSidebar();
+  const N = state.novo;
+  const viaSkill = `
+    <details class="via-skill">
+      <summary>🤖 Prefere criar com uma IA? Veja como funciona a skill <code>novo-projeto</code></summary>
+      <p>O mesmo projeto pode ser criado conversando com o Claude Code, o Codex ou o Antigravity, abertos na pasta
+      <code>_laterais/categorizador</code>. A IA segue o roteiro de <code>.claude/skills/novo-projeto/SKILL.md</code>
+      (o <code>AGENTS.md</code> aponta para ele), com as mesmas travas deste assistente.</p>
+      <ol>
+        <li><b>Perfil da planilha</b> (<code>python -m novo_projeto.cli perfil &lt;planilha&gt;</code>): lê tipos, opções, dados pessoais e as colunas <code>_CAT</code> destacadas, sem IA. Se a planilha for SurveyMonkey (cabeçalho duplo), a IA para e avisa que esse formato é configurado à mão.</li>
+        <li><b>Perguntas obrigatórias a você</b>, antes de gerar qualquer coisa: nome, cliente e pasta; quem pediu a categorização e por qual canal; quais abertas foram pedidas; contexto da pesquisa; regras de pulo do questionário. O que você não souber fica como "não informado", e a IA não pode inventar.</li>
+        <li><b>Rascunho sem IA</b> (<code>rascunho</code>): copia a planilha para a pasta do projeto e cria o <code>projeto.json</code>, com a lista "Confira" (a mesma que este assistente mostra no passo 2).</li>
+        <li><b>Completar o projeto.json</b>: a IA só escreve contexto, rótulos, instruções e a conferência do pedido. Opções, filtros, dados pessoais e tipos vêm dos dados e só mudam se você confirmar.</li>
+        <li><b>Validar</b> (<code>validar</code>) até aparecer "✅ Projeto válido". A IA mostra todos os avisos e anota a sua decisão.</li>
+        <li><b>Registrar</b> (<code>registrar</code>) e ler a base. O projeto aparece no seletor do topo.</li>
+        <li><b>Relatório final</b>: abertas que serão categorizadas, filtros para confirmar e avisos aceitos.</li>
+      </ol>
+      <p>Pedido para colar na IA:</p>
+      <pre class="pedido-skill">Crie um projeto novo no Categorizador com a planilha &lt;caminho da planilha.xlsx&gt;, seguindo a skill novo-projeto.</pre>
+      <p class="small">Regra da skill: <b>dados vêm do código; intenção vem da pessoa; a IA não inventa nenhum dos dois.</b></p>
+    </details>`;
+  const passo1 = `
+    <h2>1. Planilha</h2>
+    <div class="info">A planilha precisa ter <b>uma linha de cabeçalho e uma coluna por pergunta</b> (como a do SESI). Ela é copiada para a pasta do projeto e nunca é alterada. Nada é enviado para a IA nesta etapa.</div>
+    <div class="form-novo">
+      <label class="campo">Nome do projeto <input id="nv-nome" value="${esc(N ? N.projeto.NOME : "")}" placeholder="ex.: SESI Minas — Satisfação 2026"></label>
+      <label class="campo">Cliente <input id="nv-cliente" value="${esc(N ? N.projeto.CLIENTE : "")}" placeholder="(opcional)"></label>
+      <label class="campo">Pasta do projeto <input id="nv-pasta" value="${esc(N ? N.pasta : "")}" placeholder="padrão: jumppi\\<Nome>_cat"></label>
+      <label class="campo">Planilha (.xlsx) <input type="file" id="nv-arquivo" accept=".xlsx,.xlsm"></label>
+      <div><button class="btn primary" id="nv-ler">${N ? "Ler outra planilha" : "Ler planilha"}</button></div>
+    </div>
+    ${N ? `<div class="small">Lida: <b>${N.n_linhas}</b> linhas · pasta <code>${esc(N.pasta)}</code> · aba
+      <select id="nv-aba">${N.abas.map((a) => `<option ${a === N.aba ? "selected" : ""}>${esc(a)}</option>`).join("")}</select></div>` : ""}`;
+  if (!N) { $("#main").innerHTML = `<h1>Novo projeto</h1>${viaSkill}${passo1}`; ligarNovo(); return; }
+
+  const P = N.projeto;
+  const notas = (P._notas || []).map((n) => `<li>${esc(n)}</li>`).join("");
+  const linhas = N.colunas.filter((c) => !ehCat(c.coluna)).map((c) => {
+    const tipo = tipoDe(c), s = specDe(c.coluna), cat = N.colunas.find((x) => x.coluna === c.coluna + "_CAT");
+    const opcoes = Object.entries(TIPOS_NOVO).map(([k, v]) => `<option value="${k}" ${k === tipo ? "selected" : ""}>${v}</option>`).join("");
+    let det = `${c.n} preenchidas`;
+    if (tipo === "unica" && s) det += ` · <span title="${esc((s.niveis || []).join("\n"))}">${(s.niveis || []).length} opções</span>`;
+    if (tipo === "numerica" && c.min != null) det += ` · ${c.min}–${c.max}${s && s.nps ? " · NPS" : ""}`;
+    if (tipo === "aberta" && s) det += `<br>Quem recebeu: <select data-base="${esc(c.coluna)}"><option value="todos">todos os respondentes</option>${Object.entries(P.FILTROS || {}).map(([k, r]) => `<option value="${esc(k)}" ${s.base === k ? "selected" : ""}>${esc(r.descricao || k)}</option>`).join("")}</select>`;
+    if (c.pii) det += ` · <span class="pill warn">parece dado pessoal (${esc(c.pii)})</span>`;
+    return `<tr class="${tipo === "ignorar" || tipo === "pii" ? "apagada" : ""}">
+      <td><b>${esc(c.coluna)}</b>${c.enunciado ? `<br><small>${esc(c.enunciado.split(" — ").pop().slice(0, 90))}</small>` : ""}</td>
+      <td>${cat ? `${esc(cat.coluna)} ${amostraCor(cat.cor)}` : ""}</td>
+      <td><select data-tipo="${esc(c.coluna)}">${opcoes}</select></td>
+      <td>${s ? `<input class="inline" data-rotulo="${esc(c.coluna)}" value="${esc(s.rotulo)}">` : ""}</td>
+      <td class="small">${det}</td>
+      <td>${tipo === "aberta" && s ? `<label><input type="checkbox" data-cod="${esc(c.coluna)}" ${s.codificar ? "checked" : ""}> categorizar</label>` : ""}</td></tr>`;
+  }).join("");
+  const abertas = P.PERGUNTAS.filter((p) => p.tipo === "aberta");
+  const marcadas = abertas.filter((p) => p.codificar);
+  const C = P.CONFERENCIA || (P.CONFERENCIA = {});
+  if (!C.data) C.data = new Date().toISOString().slice(0, 10);
+  const pedidas = new Set(C.abertas_pedidas || []);
+  const V = N.validacao;
+  $("#main").innerHTML = `
+    <h1>Novo projeto <small>${esc(P.NOME)}</small></h1>
+    ${viaSkill}
+    ${passo1}
+    <h2>2. Colunas <small>o rascunho foi montado a partir dos dados — confira</small></h2>
+    ${notas ? `<div class="aviso"><b>Para conferir:</b><ul class="notas">${notas}</ul></div>` : ""}
+    <div class="info">As opções das fechadas são copiadas da planilha exatamente como estão (mesmo com erro de digitação), para nenhuma resposta se perder. Colunas marcadas como <b>dado pessoal</b> ou <b>ignorar</b> não entram na base nem vão para a IA. Os filtros ("quem recebeu") foram deduzidos de quem respondeu; quem respondeu nunca fica de fora.</div>
+    <table class="novo"><thead><tr><th>Coluna na planilha</th><th>Coluna de categoria</th><th>Tipo</th><th>Rótulo</th><th>Detalhes</th><th>Categorizar?</th></tr></thead><tbody>${linhas}</tbody></table>
+
+    <h2>3. Contexto para a IA</h2>
+    <label class="campo">Descrição da pesquisa (vai em todos os pedidos à IA: quem respondeu, objetivo, temas)
+      <textarea id="nv-contexto" rows="4" placeholder="ex.: Pesquisa de satisfação com pais e responsáveis de alunos das escolas…">${esc(P.CONTEXTO_PROJETO || "")}</textarea></label>
+    <div class="box-instr">
+      <label class="campo">Anotações para a IA sugerir o texto (opcional)<textarea id="nv-notas" rows="2" placeholder="o que você sabe do projeto: cliente, público, objetivo…">${esc(N.notas || "")}</textarea></label>
+      <button class="btn" id="nv-sugerir">✨ Sugerir contexto, rótulos e instruções com IA</button>
+      <span class="small">Usa a IA configurada em ⚙ (inclusive o Claude Code do computador). Envia os enunciados e até 12 respostas de exemplo de cada aberta marcada. Você revisa tudo antes de criar.</span>
+    </div>
+    ${marcadas.length ? `<h3>Instruções por pergunta (opcional)</h3>${marcadas.map((p) => `<label class="campo"><b>${esc(p.id)}</b> · ${esc(p.rotulo)}
+      <textarea rows="2" data-instr="${esc(p.id)}" placeholder="que tipo de categoria criar (ex.: PONTOS A MELHORAR, temáticas, nomes curtos)">${esc(p.instrucoes_frame || "")}</textarea></label>`).join("")}` : ""}
+
+    <h2>4. Conferência do pedido</h2>
+    <div class="info">Confirme com quem pediu <b>quais abertas devem ser categorizadas</b>. É o que evita categorizar uma pergunta que não foi pedida (ou esquecer uma). Se a lista abaixo for diferente das marcadas em "Categorizar?", a validação avisa.</div>
+    <div class="form-novo">
+      <label class="campo">Quem confirmou <input id="nv-resp" value="${esc(C.responsavel || "")}" placeholder="nome"></label>
+      <label class="campo">Data <input type="date" id="nv-data" value="${esc(C.data)}"></label>
+      <label class="campo">De onde veio o pedido <input id="nv-origem" value="${esc(C.origem_pedido || "")}" placeholder="e-mail, reunião, planilha marcada em amarelo…"></label>
+    </div>
+    <div class="pedidas">${abertas.map((p) => {
+      const cat = (P.SAIDA_PLANILHA && P.SAIDA_PLANILHA.colunas || {})[p.id] || (p.coluna || p.id) + "_CAT";
+      return `<label><input type="checkbox" data-pedida="${esc(p.id)}" ${pedidas.has(p.id) ? "checked" : ""}> <b>${esc(p.id)}</b> ${esc(p.rotulo)} ${amostraCor(corDe(cat))}</label>`;
+    }).join("") || '<span class="small">Nenhuma coluna marcada como aberta.</span>'}</div>
+
+    <h2>5. Validar e criar</h2>
+    <div class="tools">
+      <label>Nome curto (sem espaços) <input id="nv-slug" value="${esc(N.slug || "")}" placeholder="automático"></label>
+      <button class="btn" id="nv-validar">Validar</button>
+      <button class="btn primary" id="nv-criar" ${V && V.valido ? "" : "disabled"} title="Disponível depois de uma validação sem erros">Criar projeto</button>
+    </div>
+    ${V ? `<div class="validacao">${V.valido ? '<div class="pill ok">✓ Projeto válido</div>' : `<div class="pill warn">${V.erros.length} erro(s) — corrija e valide de novo</div>`}
+      <ul>${V.erros.map((e) => `<li class="erro">❌ ${esc(e)}</li>`).join("")}${V.avisos.map((a) => `<li class="av">⚠ ${esc(a)}</li>`).join("")}${V.ok.map((o) => `<li class="small">✓ ${esc(o)}</li>`).join("")}</ul></div>` : ""}`;
+  ligarNovo();
+}
+
+function lerCamposNovo() {
+  const P = state.novo.projeto;
+  P.CONTEXTO_PROJETO = $("#nv-contexto").value.trim();
+  state.novo.notas = $("#nv-notas").value;
+  state.novo.slug = $("#nv-slug").value.trim();
+  P.CONFERENCIA = { responsavel: $("#nv-resp").value.trim(), data: $("#nv-data").value, origem_pedido: $("#nv-origem").value.trim(),
+    abertas_pedidas: [...document.querySelectorAll("[data-pedida]")].filter((x) => x.checked).map((x) => x.dataset.pedida) };
+}
+function invalidarNovo() { if (state.novo) { state.novo.validacao = null; const b = $("#nv-criar"); if (b) b.disabled = true; } }
+function redesenharNovo() { if (state.novo && $("#nv-contexto")) lerCamposNovo(); manterScroll(renderNovo); }
+
+function ligarNovo() {
+  $("#nv-ler").onclick = async () => {
+    const f = $("#nv-arquivo").files[0], nome = $("#nv-nome").value.trim();
+    if (!nome) return toast("Informe o nome do projeto.", true);
+    if (!f) return toast("Escolha a planilha (.xlsx).", true);
+    const enviar = async (substituir) => {
+      const fd = new FormData();
+      fd.append("planilha", f); fd.append("nome", nome); fd.append("cliente", $("#nv-cliente").value.trim());
+      fd.append("pasta", $("#nv-pasta").value.trim()); if (substituir) fd.append("substituir", "1");
+      busy("Lendo a planilha e montando o rascunho… (pode levar até 1 minuto)");
+      try { return await fetch("/api/novo/iniciar", { method: "POST", body: fd }); } finally { idle(); }
+    };
+    let r = await enviar(false), j = await r.json();
+    if (r.status === 409 && confirm(j.erro + "\n\nSubstituir o projeto.json dessa pasta pelo rascunho novo?")) { r = await enviar(true); j = await r.json(); }
+    if (!r.ok) return toast("Erro: " + j.erro, true);
+    state.novo = { ...j, validacao: null, notas: "", slug: "" }; renderNovo(); toast("Rascunho pronto — confira as colunas.");
+  };
+  if (!state.novo) return;
+  $("#nv-aba") && ($("#nv-aba").onchange = async (e) => {
+    if (!confirm("Reler usando outra aba refaz o rascunho (as edições desta tela se perdem). Continuar?")) { e.target.value = state.novo.aba; return; }
+    const j = await post("/api/novo/aba", { pasta: state.novo.pasta, aba: e.target.value }, "Relendo a planilha…");
+    state.novo = { ...j, validacao: null, notas: "", slug: "" }; renderNovo();
+  });
+  document.querySelectorAll("[data-tipo]").forEach((el) => (el.onchange = () => {
+    const c = state.novo.colunas.find((x) => x.coluna === el.dataset.tipo);
+    if (mudarTipo(c, el.value)) { invalidarNovo(); redesenharNovo(); } else el.value = tipoDe(c);
+  }));
+  document.querySelectorAll("[data-rotulo]").forEach((el) => (el.onchange = () => { specDe(el.dataset.rotulo).rotulo = el.value.trim(); invalidarNovo(); }));
+  document.querySelectorAll("[data-base]").forEach((el) => (el.onchange = () => { const s = specDe(el.dataset.base); if (el.value === "todos") delete s.base; else s.base = el.value; invalidarNovo(); }));
+  document.querySelectorAll("[data-cod]").forEach((el) => (el.onchange = () => { specDe(el.dataset.cod).codificar = el.checked; invalidarNovo(); redesenharNovo(); }));
+  document.querySelectorAll("[data-instr]").forEach((el) => (el.onchange = () => { state.novo.projeto.PERGUNTAS.find((p) => p.id === el.dataset.instr).instrucoes_frame = el.value.trim(); invalidarNovo(); }));
+  ["#nv-contexto", "#nv-resp", "#nv-data", "#nv-origem"].forEach((s) => ($(s).oninput = invalidarNovo));
+  document.querySelectorAll("[data-pedida]").forEach((el) => (el.onchange = invalidarNovo));
+  $("#nv-sugerir").onclick = async () => {
+    lerCamposNovo();
+    const r = await post("/api/novo/sugerir", { pasta: state.novo.pasta, projeto: state.novo.projeto, notas: state.novo.notas }, "A IA está sugerindo textos… (pode levar até 1 minuto)");
+    const P = state.novo.projeto;
+    if (r.contexto && (!P.CONTEXTO_PROJETO || confirm("Substituir a descrição da pesquisa pela sugestão da IA?\n\n" + r.contexto))) P.CONTEXTO_PROJETO = r.contexto;
+    for (const x of r.rotulos || []) { const s = P.PERGUNTAS.find((p) => p.id === x.id); if (s && x.rotulo) s.rotulo = x.rotulo; }
+    for (const x of r.instrucoes || []) { const s = P.PERGUNTAS.find((p) => p.id === x.id && p.codificar); if (s && x.instrucoes && !s.instrucoes_frame) s.instrucoes_frame = x.instrucoes; }
+    invalidarNovo(); manterScroll(renderNovo); toast("Sugestões aplicadas — revise os textos antes de criar.");
+  };
+  $("#nv-validar").onclick = async () => {
+    lerCamposNovo();
+    state.novo.validacao = await post("/api/novo/validar", { pasta: state.novo.pasta, projeto: state.novo.projeto }, "Validando (lendo a planilha como o categorizador vai ler)…");
+    manterScroll(renderNovo);
+  };
+  $("#nv-criar").onclick = async () => {
+    lerCamposNovo();
+    const r = await post("/api/novo/criar", { pasta: state.novo.pasta, projeto: state.novo.projeto, slug: state.novo.slug }, "Criando o projeto e lendo a planilha…");
+    state.novo = null; toast(`Projeto criado (${r.slug}).`); await carregarStatus(); irPara(null); renderPainel();
+  };
+}
+$("#btn-novo").onclick = () => { if (location.hash === "#novo") renderNovo(); else location.hash = "novo"; };
+
 // ---------------------------------------------------------------- rotas / boot
 function rota() {
   const h = decodeURIComponent(location.hash.slice(1));
-  if (h === "usage") renderUsage();
+  if (h === "novo") renderNovo();
+  else if (h === "usage") renderUsage();
   else if (h && h !== "painel" && state.status.perguntas.some((s) => s.qid === h)) abrir(h);
   else renderPainel();
 }

@@ -11,6 +11,8 @@
 .env
 .env.*
 !.env.example
+credentials.json
+token.json
 /SESI_cat/data/
 **/output/
 **/output_teste/

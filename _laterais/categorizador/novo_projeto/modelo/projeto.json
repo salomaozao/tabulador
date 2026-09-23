@@ -1,0 +1,36 @@
+{
+ "_ajuda": "Modelo para escrever um projeto à mão. Prefira gerar o rascunho a partir da planilha (assistente 'Novo projeto' no app, ou: python -m novo_projeto.cli rascunho ...), que já traz tipos, opções e filtros tirados dos dados. Chaves que começam com _ são ignoradas. Detalhes de cada campo: novo_projeto/FORMATO.md. Troque todos os PREENCHER e rode: python -m novo_projeto.cli validar <pasta>.",
+ "NOME": "PREENCHER — nome que aparece na interface",
+ "CLIENTE": "PREENCHER",
+ "FORMATO": "plano",
+ "FONTE_XLSX": "data/PREENCHER.xlsx",
+ "PLANO": {"aba": "base", "aba_codebook": "Codebook", "id": "respondent_id"},
+ "PII_MATCH": ["ip_address", "email_address", "first_name", "last_name"],
+ "CONTEXTO_PROJETO": "PREENCHER — quem respondeu, sobre o quê, temas avaliados, como costumam ser as respostas.",
+ "FILTROS": {
+  "base_Q4": {"descricao": "Deram nota 0 a 6 (Q3)", "pergunta": "Q3", "entre": [0, 6], "ou_respondeu": "Q4"},
+  "base_Q2": {"descricao": "Vínculo = Outro (Q1)", "pergunta": "Q1", "em": ["Outro. Qual?"], "ou_respondeu": "Q2"}
+ },
+ "PERGUNTAS": [
+  {"id": "respondent_id", "tipo": "meta", "rotulo": "ID do respondente"},
+  {"id": "ESCOLA", "coluna": "custom_1", "tipo": "meta", "rotulo": "Escola"},
+  {"id": "Q1", "tipo": "unica", "rotulo": "Relação com o aluno", "niveis": ["Mãe", "Pai", "Outro. Qual?"]},
+  {"id": "Q2", "tipo": "aberta", "rotulo": "Outro vínculo (qual?)", "base": "base_Q2", "codificar": true, "instrucoes_frame": ""},
+  {"id": "Q3", "tipo": "numerica", "rotulo": "Nota de recomendação (0-10)", "nps": true},
+  {"id": "Q4", "tipo": "aberta", "rotulo": "O que precisa melhorar", "base": "base_Q4", "codificar": true,
+   "instrucoes_frame": "Categorias de PONTOS A MELHORAR, com nomes curtos e neutros."}
+ ],
+ "DERIVADAS": {
+  "NPS_GRUPO": {"rotulo": "Grupo NPS", "origem": "Q3",
+                "faixas": [[0, 6, "Detratores (0-6)"], [7, 8, "Neutros (7-8)"], [9, 10, "Promotores (9-10)"]],
+                "niveis": ["Promotores (9-10)", "Neutros (7-8)", "Detratores (0-6)"]},
+  "VINCULO": {"rotulo": "Vínculo", "origem": "Q1",
+              "mapa": {"Mãe": "Mãe", "Pai": "Pai", "Outro. Qual?": "Outro"}, "niveis": ["Mãe", "Pai", "Outro"]}
+ },
+ "BANNERS_PADRAO": ["NPS_GRUPO", "VINCULO"],
+ "SAIDA_PLANILHA": {"arquivo": "PREENCHER_categorizada.xlsx", "aba": "base", "id": "respondent_id",
+                    "colunas": {"Q2": "Q2_CAT", "Q4": "Q4_CAT"}},
+ "CONFERENCIA": {"responsavel": "PREENCHER — quem confirmou o pedido", "data": "PREENCHER — AAAA-MM-DD",
+                 "origem_pedido": "PREENCHER — e-mail, reunião, planilha marcada...",
+                 "abertas_pedidas": ["Q2", "Q4"]}
+}

@@ -347,14 +347,14 @@ def carregar_base() -> tuple[pd.DataFrame, dict]:
     return df, registro
 
 
-def _enunciados_codebook(aba: str | None) -> dict[str, str]:
+def _enunciados_codebook(aba: str | None, fonte=None) -> dict[str, str]:
     """{coluna: enunciado} a partir de uma aba 'Codebook' (Questão | Pergunta). Linhas sem pergunta
     são títulos de bloco (ex.: 'Os itens abaixo tratam da estrutura...') e viram prefixo dos itens
     seguintes, até a próxima pergunta propriamente dita (texto terminado em '?')."""
     if not aba:
         return {}
     try:
-        cb = pd.read_excel(config.FONTE_XLSX, sheet_name=aba)
+        cb = pd.read_excel(fonte or config.FONTE_XLSX, sheet_name=aba)
     except ValueError:
         return {}
     saida, bloco = {}, None

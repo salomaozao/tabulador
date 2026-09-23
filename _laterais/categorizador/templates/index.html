@@ -13,6 +13,7 @@
   <label class="proj" title="Projeto (pesquisa) em que você está trabalhando">Projeto
     <select id="sel-projeto"></select>
   </label>
+  <button id="btn-novo" class="btn ghost" title="Criar um projeto novo a partir de uma planilha de pesquisa">+ Novo projeto</button>
   <div id="base-status" class="muted">carregando…</div>
   <button id="btn-teste" class="btn ghost" title="Liga/desliga o modo teste: a IA é substituída por valores simulados (sem custo) e os resultados vão para uma pasta separada">🧪 Modo teste</button>
   <button id="btn-ia" class="btn ghost" title="Chave da OpenAI e modelo usado">⚙ Configurar IA</button>
@@ -57,13 +58,14 @@
       <input type="password" id="ia-chave" placeholder="cole aqui a chave — deixe em branco para manter a atual" autocomplete="off">
     </label>
     <label class="campo">Modelo
-      <input id="ia-modelo" list="ia-modelos">
-      <datalist id="ia-modelos"></datalist>
+      <select id="ia-modelo-sel"></select>
+      <input id="ia-modelo" class="hidden" placeholder="nome exato do modelo">
     </label>
     <label class="campo" id="ia-url-campo">Endereço da API (base URL)
       <input id="ia-url" placeholder="https://…/v1">
     </label>
     <p class="small">As chaves ficam gravadas só neste computador (arquivo <code>.env</code> do categorizador) e nunca aparecem nos resultados. Cada provedor guarda a sua. Planos gratuitos têm limite de chamadas por minuto: em perguntas grandes a classificação pode ficar mais lenta.</p>
+    <div id="ia-teste-detalhe"></div>
     <div class="dlg-acoes"><span id="ia-teste-res" class="small"></span><button class="btn" type="button" id="ia-testar">Testar conexão</button><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" id="ia-salvar" value="ok">Salvar</button></div>
   </form>
 </dialog>

@@ -109,6 +109,60 @@ def mensagem_amigavel(e: Exception) -> str | None:
     return None
 
 
+def diagnosticar(e: Exception) -> dict:
+    """Erro de uma chamada à IA -> {explicacao, solucao} em linguagem simples (usado no botão 'Testar conexão')."""
+    raiz = e.__cause__ or e
+    msg = f"{e} {raiz}".lower()
+    prov_id = config.OPENAI_PROVEDOR
+    P = config.PROVEDORES.get(prov_id, {})
+    prov, modelo = P.get("nome", prov_id), config.OPENAI_MODEL
+    if P.get("cli"):
+        import llm_cli
+        prog = llm_cli.PROGRAMAS.get(prov_id, prov_id)
+        if "não está instalado" in msg:
+            return {"explicacao": f"O programa '{prog}' não foi encontrado neste computador (ou não está no PATH).",
+                    "solucao": f"Instale o programa ({P.get('link', '')}), faça login nele e abra o Categorizador de novo pelo atalho."}
+        if any(k in msg for k in ("not logged in", "/login", "please login", "log in", "unauthenticated", "authentication", "oauth", "credentials")):
+            return {"explicacao": f"O programa '{prog}' está instalado, mas não está logado (ou o login expirou).",
+                    "solucao": f"Abra um terminal, rode '{prog}' e faça login (no Claude Code: comando /login). Depois clique em 'Testar conexão' de novo."}
+        if "não respondeu em" in msg or "timed out" in msg:
+            return {"explicacao": f"O programa '{prog}' demorou mais que {llm_cli.TEMPO_LIMITE} s para responder.",
+                    "solucao": "Tente de novo. Se continuar, escolha um modelo mais rápido (ex.: haiku) ou aumente CATEGORIZADOR_CLI_TEMPO no .env."}
+        if any(k in msg for k in ("usage limit", "limit reached", "rate limit", "quota", "credit", "overloaded")):
+            return {"explicacao": f"O programa '{prog}' recusou a chamada por limite de uso da assinatura (ou o serviço está sobrecarregado).",
+                    "solucao": "Espere o limite renovar e tente de novo, ou troque de modelo/provedor em '⚙ Configurar IA'."}
+        if "model" in msg and any(k in msg for k in ("not found", "invalid", "unknown", "not available", "not exist", "issue with the selected model", "not have access")):
+            return {"explicacao": f"O modelo '{modelo}' não existe (ou não está liberado) no programa '{prog}'.",
+                    "solucao": "Escolha outro modelo da lista, ou 'padrao' para usar o padrão do programa."}
+        if "resposta inesperada" in msg or "json" in msg:
+            return {"explicacao": f"O programa '{prog}' respondeu, mas fora do formato esperado (JSON).",
+                    "solucao": f"Tente de novo. Se repetir, atualize o programa (ex.: '{prog} update') ou escolha outro modelo."}
+        return {"explicacao": f"O programa '{prog}' falhou: {str(raiz)[:300]}",
+                "solucao": f"Abra um terminal e rode '{prog}' para ver se ele funciona e está logado; depois teste de novo."}
+    if config.modo_teste():
+        return {"explicacao": "O modo teste está ligado: não há IA real para testar.", "solucao": "Desligue o modo teste no topo da página."}
+    cod = getattr(raiz, "status_code", None)
+    if not config.OPENAI_API_KEY:
+        return {"explicacao": f"Não há chave guardada para o provedor {prov}.", "solucao": "Cole a chave do provedor em '⚙ Configurar IA' e teste de novo."}
+    if "insufficient_quota" in msg or "no credits" in msg or ("credit" in msg and "exhaust" in msg):
+        return {"explicacao": f"A conta do provedor {prov} está sem créditos.",
+                "solucao": "Adicione créditos na conta, ou troque para um provedor com plano gratuito (Google Gemini ou Groq)."}
+    if cod == 401 or any(k in msg for k in ("invalid api key", "incorrect api key", "api key not valid", "unauthorized")):
+        return {"explicacao": f"A chave do provedor {prov} foi recusada (inválida ou revogada).",
+                "solucao": f"Gere uma chave nova ({P.get('link', 'site do provedor')}) e cole em '⚙ Configurar IA'."}
+    if cod == 429 or any(k in msg for k in ("rate limit", "rate_limit_exceeded", "resource_exhausted")):
+        return {"explicacao": f"Limite de uso do provedor {prov} atingido (chamadas por minuto ou cota diária).",
+                "solucao": "Espere alguns minutos e teste de novo, ou troque de provedor/modelo."}
+    if cod == 404 or "model_not_found" in msg or ("model" in msg and "not found" in msg):
+        return {"explicacao": f"O modelo '{modelo}' não existe ou não está disponível no provedor {prov}.",
+                "solucao": "Escolha um modelo da lista em '⚙ Configurar IA'."}
+    if any(k in msg for k in ("connection", "timed out", "timeout", "getaddrinfo", "name resolution")):
+        return {"explicacao": f"Não foi possível conectar ao provedor {prov}.",
+                "solucao": "Verifique a internet (e o endereço da API, se for personalizado) e teste de novo."}
+    return {"explicacao": f"O provedor {prov} devolveu um erro: {str(raiz)[:300]}",
+            "solucao": "Confira a chave, o modelo e o endereço em '⚙ Configurar IA'. Se persistir, veja a mensagem original abaixo."}
+
+
 def _uso(resp) -> dict | None:
     u = getattr(resp, "usage", None)
     if u is None:
@@ -117,6 +171,24 @@ def _uso(resp) -> dict | None:
         return u.model_dump()
     except Exception:  # noqa: BLE001
         return {k: getattr(u, k, None) for k in ("prompt_tokens", "completion_tokens", "total_tokens")}
+
+
+def _chamar_cli(system: str, user: str, schema: dict, nome: str, base: dict, t0: float) -> dict:
+    """IA pelo programa instalado no computador (ver llm_cli.py)."""
+    import llm_cli
+    try:
+        resposta, uso = llm_cli.chamar(config.OPENAI_PROVEDOR, system, user, schema, config.OPENAI_MODEL)
+        dados = resposta if isinstance(resposta, dict) else extrair_json(resposta)
+    except Exception as e:
+        _log(nome, {**base, "segundos": round(time.time() - t0, 1), "uso": None, "ok": False,
+                    "erro": f"{type(e).__name__}: {str(e)[:500]}", "system": system, "user": user})
+        amigavel = mensagem_amigavel(e)
+        if amigavel:
+            raise RuntimeError(amigavel) from e
+        raise
+    _log(nome, {**base, "segundos": round(time.time() - t0, 1), "uso": uso, "ok": True, "modo": "cli",
+                "system": system, "user": user, "resposta": dados})
+    return dados
 
 
 def chamar_json(system: str, user: str, schema: dict, nome: str = "chamada") -> dict:
@@ -134,6 +206,8 @@ def chamar_json(system: str, user: str, schema: dict, nome: str = "chamada") -> 
                     "uso": {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct},
                     "system": system, "user": user, "resposta": dados})
         return dados
+    if config.usa_cli():
+        return _chamar_cli(system, user, schema, nome, base, t0)
     try:
         client = _openai()
         instr_schema = "\nResponda SOMENTE com um objeto JSON válido, sem texto fora dele, seguindo este JSON Schema: " + json.dumps(schema, ensure_ascii=False)

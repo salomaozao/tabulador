@@ -132,3 +132,22 @@ body.modo-teste .top{box-shadow:inset 0 3px 0 #e0a800}
 #tab-cod tbody tr:focus td{background:color-mix(in srgb,var(--accent) 8%,transparent)}
 kbd{font:11px/1 ui-monospace,Consolas,monospace;padding:2px 5px;border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;background:var(--surface-2);color:var(--text);margin:0 1px}
 .atalhos{margin:6px 0}
+/* assistente "Novo projeto" */
+.form-novo{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;align-items:end;margin:8px 0}
+.form-novo .campo,.box-instr .campo{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--text-2)}
+main>.campo{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--text-2);margin:8px 0}
+main>.campo textarea,.box-instr textarea{width:100%}
+table.novo select{max-width:190px}table.novo input.inline{min-width:240px}table.novo td:first-child{max-width:320px}table.novo tr.apagada td{color:var(--text-3)}table.novo tr.apagada td b{font-weight:400}
+.cor{display:inline-block;width:12px;height:12px;border-radius:3px;border:1px solid var(--border);vertical-align:middle}
+ul.notas{margin:4px 0;padding-left:18px}
+.pedidas{display:flex;flex-direction:column;gap:4px;margin:8px 0}
+.validacao ul{list-style:none;padding:0;margin:8px 0}.validacao li{padding:3px 0}.validacao li.erro{color:var(--danger)}.validacao li.av{color:var(--warn)}
+h3{font-size:14px;margin:16px 0 6px}
+.via-skill{background:var(--surface-2);border-radius:8px;margin:8px 0 16px;padding:8px 12px;font-size:13px;color:var(--text-2)}
+.via-skill summary{cursor:pointer;color:var(--text);font-weight:600}
+.via-skill ol{margin:8px 0;padding-left:20px}.via-skill li{margin:4px 0}
+.via-skill .pedido-skill{white-space:pre-wrap;background:var(--surface);padding:8px;border-radius:6px;margin:4px 0;user-select:all}
+.teste-ia{border-radius:8px;padding:8px 12px;margin:8px 0;font-size:13px;display:grid;gap:4px}
+.teste-ia.ok{background:var(--ok-bg,#e6f4ea);color:var(--ok,#1e7a3a)}
+.teste-ia.falhou{background:var(--warn-bg);color:var(--warn)}
+.teste-ia pre{white-space:pre-wrap;word-break:break-word;max-height:140px;overflow:auto;margin:4px 0 0;font-size:12px}

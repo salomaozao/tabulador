@@ -7,6 +7,7 @@ grava fora do output/ do projeto ativo (exceto a chave da OpenAI, em categorizad
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import socket
@@ -27,6 +28,7 @@ import config
 import crosstabs
 import exportar
 import llm
+import llm_cli
 import load
 import projetos
 import report
@@ -180,10 +182,11 @@ def api_projeto():
 def _ia() -> dict:
     """Estado da IA para a interface (nunca devolve a chave)."""
     return {
-        "tem_chave": bool(config.OPENAI_API_KEY) or config.modo_teste(), "modelo": config.OPENAI_MODEL,
+        "tem_chave": bool(config.OPENAI_API_KEY) or config.modo_teste() or config.usa_cli(), "modelo": config.OPENAI_MODEL,
         "provedor": config.OPENAI_PROVEDOR, "base_url": config.OPENAI_BASE_URL or "",
         "modo_teste": config.modo_teste(), "saida": str(config.OUTPUT_DIR), "saida_real": str(config.SAIDA_REAL),
-        "provedores": {k: {**v, "tem_chave": config.chave_salva(k)} for k, v in config.PROVEDORES.items()},
+        "provedores": {k: {**v, "tem_chave": config.chave_salva(k), "disponivel": not v.get("cli") or llm_cli.disponivel(k)}
+                       for k, v in config.PROVEDORES.items()},
     }
 
 
@@ -241,14 +244,21 @@ def api_modo_teste_limpar():
 
 @app.post("/api/config/testar")
 def api_config_testar():
-    """Faz uma chamada mínima ao modelo configurado para conferir chave/URL/modelo."""
+    """Faz uma chamada mínima ao modelo configurado para conferir chave/URL/modelo.
+    Sempre responde 200: {ok, provedor, modelo, segundos} e, se falhar, {erro, explicacao, solucao}."""
+    import time
+    t0 = time.time()
+    base = {"provedor": config.OPENAI_PROVEDOR, "provedor_nome": config.PROVEDORES.get(config.OPENAI_PROVEDOR, {}).get("nome", config.OPENAI_PROVEDOR),
+            "modelo": config.OPENAI_MODEL}
     try:
         r = llm.chamar_json("Responda em JSON.", 'Devolva {"ok": true}.',
                             {"type": "object", "additionalProperties": False, "properties": {"ok": {"type": "boolean"}}, "required": ["ok"]},
                             nome="teste_conexao")
-        return jsonify({"ok": bool(r.get("ok")), "modelo": config.OPENAI_MODEL})
+        if r.get("ok") is not True:
+            raise ValueError(f"resposta inesperada da IA: {json.dumps(r, ensure_ascii=False)[:200]}")
+        return jsonify({**base, "ok": True, "segundos": round(time.time() - t0, 1)})
     except Exception as e:
-        return _erro(e)
+        return jsonify({**base, "ok": False, "segundos": round(time.time() - t0, 1), "erro": str(e.__cause__ or e), **llm.diagnosticar(e)})
 
 
 @app.get("/api/usage")
@@ -310,6 +320,90 @@ def api_load():
         return jsonify({"ok": True, "n": int(len(df))})
     except Exception as e:
         return _erro(e, 500)
+
+
+# ----------------------------------------------------------------------------- API: novo projeto
+@app.post("/api/novo/iniciar")
+def api_novo_iniciar():
+    """Upload da planilha (multipart: planilha, nome, cliente, pasta, aba, substituir) -> rascunho sem IA."""
+    import tempfile
+
+    from werkzeug.utils import secure_filename
+
+    from novo_projeto import assistente
+    try:
+        f = request.files.get("planilha")
+        nome = (request.form.get("nome") or "").strip()
+        if not nome:
+            raise ValueError("Informe o nome do projeto.")
+        if not f or not f.filename.lower().endswith((".xlsx", ".xlsm")):
+            raise ValueError("Escolha a planilha (.xlsx).")
+        tmp = Path(tempfile.mkdtemp(prefix="categorizador_upload_")) / (secure_filename(f.filename) or "planilha.xlsx")
+        f.save(tmp)
+        with _lock:
+            dados = assistente.iniciar(tmp, nome, request.form.get("cliente") or None, request.form.get("pasta") or None,
+                                       request.form.get("aba") or None, request.form.get("substituir") == "1")
+        shutil.rmtree(tmp.parent, ignore_errors=True)
+        return jsonify(dados)
+    except FileExistsError as e:
+        return jsonify({"erro": str(e), "existe": True}), 409
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/novo/aba")
+def api_novo_aba():
+    """Relê a planilha já copiada usando outra aba (refaz o rascunho)."""
+    from novo_projeto import assistente
+    try:
+        d = request.get_json() or {}
+        pasta = Path(d["pasta"])
+        atual = json.loads((pasta / "projeto.json").read_text(encoding="utf-8"))
+        with _lock:
+            dados = assistente.iniciar(pasta / atual["FONTE_XLSX"], atual["NOME"], atual.get("CLIENTE"), str(pasta), d["aba"], True)
+        return jsonify(dados)
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/novo/validar")
+def api_novo_validar():
+    """{pasta, projeto} -> grava o projeto.json e devolve a validação (roda a leitura real)."""
+    from novo_projeto import assistente
+    from novo_projeto.validar import validar
+    try:
+        d = request.get_json() or {}
+        with _lock:
+            assistente.salvar(d["pasta"], d["projeto"])
+            res = validar(d["pasta"])
+        return jsonify(res)
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/novo/sugerir")
+def api_novo_sugerir():
+    """{pasta, projeto, notas} -> sugestões da IA (contexto, rótulos, instruções) para a pessoa revisar."""
+    from novo_projeto import assistente
+    try:
+        d = request.get_json() or {}
+        return jsonify(assistente.sugerir(d["pasta"], d["projeto"], d.get("notas", "")))
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/novo/criar")
+def api_novo_criar():
+    """{pasta, projeto, slug?} -> valida, registra em projetos.json, ativa e lê a planilha."""
+    from novo_projeto import assistente
+    try:
+        d = request.get_json() or {}
+        with _lock:
+            assistente.salvar(d["pasta"], d["projeto"])
+            slug = assistente.criar(d["pasta"], d.get("slug"))
+        return jsonify({"ok": True, "slug": slug})
+    except Exception as e:
+        return _erro(e)
 
 
 # ----------------------------------------------------------------------------- API: pergunta
@@ -527,7 +621,7 @@ def _versao_codigo() -> str:
     """Impressão digital do código (tamanho + data dos arquivos): muda a cada atualização do programa."""
     import hashlib
     base = Path(__file__).resolve().parent
-    arqs = sorted([*base.glob("*.py"), *base.glob("static/*"), *base.glob("templates/*")])
+    arqs = sorted([*base.glob("*.py"), *base.glob("novo_projeto/*.py"), *base.glob("static/*"), *base.glob("templates/*")])
     h = hashlib.md5("".join(f"{p.name}{p.stat().st_size}{int(p.stat().st_mtime)}" for p in arqs).encode())
     return h.hexdigest()[:12]
 
