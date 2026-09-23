@@ -1167,7 +1167,7 @@ function renderNovo() {
     <details class="via-skill">
       <summary>🤖 Prefere criar com uma IA? Veja como funciona a skill <code>novo-projeto</code></summary>
       <p>O mesmo projeto pode ser criado conversando com o Claude Code, o Codex ou o Antigravity, abertos na pasta
-      <code>_laterais/tabulador</code>. A IA segue o roteiro de <code>.claude/skills/novo-projeto/SKILL.md</code>
+      <code>tabulador</code>. A IA segue o roteiro de <code>.claude/skills/novo-projeto/SKILL.md</code>
       (o <code>AGENTS.md</code> aponta para ele), com as mesmas travas deste assistente.</p>
       <ol>
         <li><b>Perfil da planilha</b> (<code>python -m novo_projeto.cli perfil &lt;planilha&gt;</code>): lê tipos, opções, dados pessoais e as colunas <code>_CAT</code> destacadas, sem IA. Se a planilha for SurveyMonkey (cabeçalho duplo), a IA para e avisa que esse formato é configurado à mão.</li>

@@ -1,7 +1,7 @@
 {
  "ativo": "sesi",
  "projetos": {
-  "sesi": "../../SESI_cat",
+  "sesi": "../SESI_cat",
   "assertiva": "projetos/assertiva"
  }
 }

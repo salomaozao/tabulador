@@ -1,6 +1,6 @@
 """Projeto SESI — Pesquisa de satisfação das Escolas SESI Minas (pais e responsáveis).
 
-Definição do projeto para o Tabulador (código em _laterais/tabulador). Para abrir a
+Definição do projeto para o Tabulador (código em ../tabulador). Para abrir a
 interface já neste projeto, dê dois cliques em "Abrir Tabulador.bat" nesta pasta.
 
 Planilha-fonte: data/base_processamento.xlsx (somente leitura)

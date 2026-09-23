@@ -25,7 +25,7 @@ Por isso vale a regra: **dados vêm do código; intenção vem da pessoa; você 
 
 ## Como rodar os comandos
 
-Rode sempre na pasta `_laterais/tabulador`, com o Python do ambiente do tabulador:
+Rode sempre na pasta `tabulador` (em `jumppi`), com o Python do ambiente do tabulador:
 
 ```
 PY = %LOCALAPPDATA%\Tabulador\venv\Scripts\python.exe   (se não existir: python)

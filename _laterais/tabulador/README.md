@@ -98,7 +98,7 @@ durante uma atualização, aparece o aviso "O programa foi atualizado — Recarr
 ### Versionamento
 
 Repositório privado: https://github.com/salomaozao/jumppi-categorizador (raiz = pasta `jumppi`, com
-`.gitignore` que versiona só `_laterais/tabulador` e `SESI_cat`). **Nunca** vão para o git: `.env`
+`.gitignore` que versiona só `tabulador` e `SESI_cat`). **Nunca** vão para o git: `.env`
 (chaves), `SESI_cat/data/` (dados do cliente) e pastas `output*` (respostas e resultados). A tag
 `v0-base-antes-melhorias` marca a versão anterior às melhorias de usabilidade.
 
@@ -148,7 +148,7 @@ esta pasta). O projeto ativo é escolhido no topo da interface (ou `TABULADOR_PR
 
 | Projeto | Definição | Planilha-fonte | Saídas |
 |---|---|---|---|
-| `sesi` | `../../SESI_cat/projeto.py` | `SESI_cat/data/base_processamento.xlsx` (formato "plano": 1 cabeçalho, 1 coluna por pergunta) | `SESI_cat/output/` |
+| `sesi` | `../SESI_cat/projeto.py` | `SESI_cat/data/base_processamento.xlsx` (formato "plano": 1 cabeçalho, 1 coluna por pergunta) | `SESI_cat/output/` |
 | `assertiva` | `projetos/assertiva/projeto.py` | SurveyMonkey de cabeçalho duplo (2 abas), via `Shortcuts/...` | `output/` (desta pasta, como antes) |
 
 O `projeto.py` define: `NOME`, `CLIENTE`, `CONTEXTO_PROJETO` (texto para a IA), `FONTE_XLSX`, `FORMATO`

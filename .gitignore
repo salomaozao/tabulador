@@ -2,9 +2,7 @@
 # Todo o resto da pasta jumppi (outros projetos) fica fora.
 /*
 !/.gitignore
-!/_laterais/
-/_laterais/*
-!/_laterais/tabulador/
+!/tabulador/
 !/SESI_cat/
 
 # nunca versionar: chaves, dados de clientes e resultados (contêm respostas de pesquisa)

@@ -10,4 +10,4 @@ Na primeira vez: instala o que precisa (1–3 min) e pede a chave da OpenAI (bot
   `output/base_processamento_categorizada.xlsx` (colunas `Q*_CAT` preenchidas, secundária em `Q*_CAT2`)
 
 O passo a passo do loop de validação está no próprio programa (barra lateral) e em
-`_laterais/tabulador/README.md`.
+`tabulador/README.md`.

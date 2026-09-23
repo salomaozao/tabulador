@@ -47,7 +47,7 @@ for _k in [k for k in os.environ if k.startswith("CATEGORIZADOR_")]:
     os.environ.setdefault("TABULADOR_" + _k[len("CATEGORIZADOR_"):], os.environ[_k])
 # chave padrão da equipe: .env do categorizador V3 na pasta do SharePoint
 # "IA - Jumppi/Categorização de Respostas Abertas", sincronizada como atalho no OneDrive
-_ONEDRIVE = BASE_DIR.parents[2]  # ...\OneDrive - INSTITUTO OLHAR - PESQUISA E INFORMACAO ESTRATEGICA LTDA
+_ONEDRIVE = BASE_DIR.parents[1]  # ...\OneDrive - INSTITUTO OLHAR - PESQUISA E INFORMACAO ESTRATEGICA LTDA
 ENV_EQUIPE = [
     p / "Projeto IA" / sub / ".env"
     for p in sorted((_ONEDRIVE / "Shortcuts").glob("*Categoriza*Respostas Abertas*"))
