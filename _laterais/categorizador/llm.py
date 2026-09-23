@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Callable
 
 import config
+import progresso
 
 _cliente_fake: Callable | None = None
 _client = None
@@ -47,6 +48,8 @@ def _openai():
 
 
 def _log(nome: str, payload: dict) -> None:
+    uso = payload.get("uso") or {}
+    progresso.ia_fim(payload.get("segundos") or 0, payload.get("ok", True), uso.get("total_tokens"))
     config.garantir_pastas()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     (config.LLM_LOG_OUT / f"{ts}_{nome}.json").write_text(
@@ -196,6 +199,7 @@ def chamar_json(system: str, user: str, schema: dict, nome: str = "chamada") -> 
     if _cliente_fake is not None:
         return _cliente_fake(system, user, schema)
 
+    progresso.ia_inicio()
     t0 = time.time()
     base = {"modelo": config.OPENAI_MODEL, "provedor": config.OPENAI_PROVEDOR}
     if config.modo_teste():  # modo teste: valores simulados, sem rede nem custo (ver simulador.py)

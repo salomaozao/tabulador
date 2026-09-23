@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import random
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
@@ -19,6 +20,7 @@ import pandas as pd
 
 import codeframe as CF
 import config
+import progresso
 import llm
 import load
 import variables as V
@@ -106,6 +108,13 @@ def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], i
     if not lotes:
         return {"limite_atingido": False, "nao_tentados": 0}
     _progresso(ativo=True, qid=qid, feitos=0, total=len(pendentes), erros=0, limite_atingido=False)
+    par = min(config.paralelo(), len(lotes))
+    media = progresso.tempo_medio("code_")
+    progresso.atualizar(feitos=0, total=len(pendentes), lotes_feitos=0, lotes_total=len(lotes), erros=0, limite_atingido=False,
+                        paralelo=par, tamanho_lote=config.LLM_LOTE)
+    progresso.etapa("ia", f"{len(pendentes)} respostas em {len(lotes)} lote(s) de até {config.LLM_LOTE} · {par} chamada(s) ao mesmo tempo · modelo {config.OPENAI_MODEL}",
+                    estimativa=media * -(-len(lotes) // par) if media else None)
+    t_ini = time.time()
 
     def _um(k_lote):
         k, lote = k_lote
@@ -131,6 +140,11 @@ def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], i
                         if outro is not fut:
                             outro.cancel()
             _progresso(feitos=PROGRESSO.get("feitos", 0) + len(lotes[k]), erros=len(falhas), limite_atingido=limite_atingido)
+            progresso.atualizar(feitos=PROGRESSO["feitos"], lotes_feitos=progresso.ESTADO.get("lotes_feitos", 0) + 1,
+                                erros=len(falhas), limite_atingido=limite_atingido)
+            progresso.evento(f"Lote {k + 1} de {len(lotes)} {'com ERRO' if resultados[k] is None else 'concluído'} "
+                             f"({len(lotes[k])} respostas) · {PROGRESSO['feitos']} de {len(pendentes)} prontas em {time.time() - t_ini:.0f} s")
+    progresso.etapa("gravar", "juntando as respostas classificadas e salvando")
     _progresso(ativo=False)
     nao_tentados = sum(len(lote) for k, lote in enumerate(lotes) if k not in resultados)
     if falhas and len(falhas) == len(resultados) and resultados:
@@ -201,6 +215,7 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
     atual = CF._ler(qid, "codificacao.json")
     if atual and atual.get("status") == "aprovado" and not forcar:
         raise RuntimeError(f"{qid}: codificação já aprovada. Use --forcar para recodificar.")
+    progresso.etapa("preparar", "separando NS/NR (por regra) e o que você já conferiu")
     dados = CF.respostas(qid)
     codigos_validos = {c["codigo"]: c for c in frame["categorias"]}
     anteriores = {i["rid"]: i for i in (atual or {}).get("itens", [])}
@@ -259,6 +274,7 @@ def recodificar(qid: str, rids: list[int] | None = None, apenas_comentados: bool
     elif rids is None:
         rids = [rid for rid, i in itens.items() if i.get("comentario") and not i.get("comentario_aplicado_em")] if apenas_comentados else list(itens)
     pendentes = [dict(por_rid[rid], comentario=(itens.get(rid) or {}).get("comentario")) for rid in rids if rid in por_rid]
+    progresso.etapa("preparar", f"{len(pendentes)} resposta(s) para a IA refazer (o que você corrigiu/confirmou é mantido)")
     if not pendentes:
         cod["_recodificados"] = 0
         return cod

@@ -40,9 +40,11 @@ as categorias e classifica as respostas; o pesquisador valida tudo pela interfac
 - **Comentário para a IA** (resposta): vira instrução obrigatória ao clicar em *Reclassificar comentadas*.
 - O Excel de revisão e o relatório HTML continuam disponíveis em cada pergunta.
 
-### Resultados (Painel geral → Resultados)
+### 📦 Resultados (aba própria na barra lateral)
 
-Só entram perguntas **aprovadas**. Botões *Gerar/Atualizar* e *⬇ Baixar*, e *📂 Abrir pasta de resultados*.
+Números gerais (perguntas aprovadas, respostas classificadas, conferidas por pessoas, acerto da IA), os
+arquivos para baixar (*↻ Atualizar todos*, *⬇ Baixar*, *📂 Abrir pasta*) e, para cada pergunta, o gráfico
+de categorias (% de quem respondeu que citou cada uma). Só entram nos arquivos as perguntas **aprovadas**.
 
 | Resultado | Arquivo (em `<pasta do projeto>/output/`) |
 |---|---|
@@ -50,6 +52,22 @@ Só entram perguntas **aprovadas**. Botões *Gerar/Atualizar* e *⬇ Baixar*, e 
 | Codebook | `codebook/codebook.xlsx` (+ `.html`) |
 | Cruzamentos | `cruzamentos/cruzamentos.xlsx` (uma aba por pergunta, % por banner) |
 | Base processada | `base/base.xlsx` (códigos `<QID>_COD1/_COD2` e nomes) |
+
+### Andamento das operações da IA
+
+Gerar/ajustar categorias, classificar, aprovar e gerar resultados abrem uma janela de andamento com as
+**etapas** (✓ feita, em andamento, a fazer), **barra de progresso**, tempo decorrido, **tempo restante**
+estimado, velocidade (respostas/min), lote atual, chamadas à IA em andamento, tokens e um registro ao vivo
+(ex.: "Lote 3 de 7 concluído"). Na classificação o progresso é real (respostas prontas); nas chamadas únicas
+(gerar categorias) a estimativa vem da média das últimas chamadas do mesmo tipo (`progresso.py`).
+
+### 🛠 Gerenciar projeto (zona de perigo)
+
+Mostra as pastas do projeto, de resultados e a lixeira. Zona de perigo: apagar a classificação de uma
+pergunta, apagar categorias + classificação de uma pergunta, recomeçar todas, e excluir o projeto da lista.
+Cada ação pede para **digitar** uma palavra de confirmação. Nada é apagado de verdade: os arquivos vão para
+`<saída>/_lixeira/<data>_<o quê>/`; excluir o projeto nunca apaga a pasta do projeto nem a planilha (os
+resultados, se marcado, viram `<saída>_excluido_<data>`). No modo teste, só os dados de teste são afetados.
 
 ### Revisão pelo teclado
 

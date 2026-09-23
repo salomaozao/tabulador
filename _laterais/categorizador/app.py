@@ -30,6 +30,7 @@ import exportar
 import llm
 import llm_cli
 import load
+import progresso
 import projetos
 import report
 import usage
@@ -132,7 +133,10 @@ def _arquivo_resultado(tipo: str) -> Path:
 # ----------------------------------------------------------------------------- páginas
 @app.get("/")
 def index():
-    return send_from_directory(app.template_folder, "index.html")
+    # sem cache e com ?v=<versão> nos estáticos: depois de atualizar o programa, o navegador nunca usa CSS/JS velhos
+    html = (Path(app.template_folder) / "index.html").read_text(encoding="utf-8")
+    html = html.replace("/static/app.css", f"/static/app.css?v={VERSAO}").replace("/static/app.js", f"/static/app.js?v={VERSAO}")
+    return html, 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"}
 
 
 @app.get("/relatorio/<qid>")
@@ -271,7 +275,7 @@ def api_usage():
 
 @app.get("/api/progresso")
 def api_progresso():
-    return jsonify(CD.PROGRESSO)
+    return jsonify(progresso.ler())
 
 
 @app.post("/api/gerar/<tipo>")
@@ -281,7 +285,9 @@ def api_gerar(tipo):
     if tipo not in geradores:
         abort(404)
     try:
-        with _lock:
+        nomes = {"codebook": "Gerando o codebook", "cruzamentos": "Gerando os cruzamentos (tabelas)", "planilha": "Gerando a planilha final categorizada"}
+        with _lock, progresso.operacao(nomes[tipo], [("gerar", "Montar o arquivo com as perguntas aprovadas", 3)]):
+            progresso.etapa("gerar", f"projeto {config.NOME_PROJETO}")
             geradores[tipo](verbose=False)
         return jsonify({"ok": True, "url": f"/arquivo/{tipo}", "resultados": _resultados()})
     except Exception as e:
@@ -313,13 +319,182 @@ def api_abrir_pasta():
 @app.post("/api/load")
 def api_load():
     try:
-        with _lock:
+        with _lock, progresso.operacao("Lendo a planilha-fonte", [("ler", "Ler a planilha e montar a base", 3), ("aplicar", "Reaplicar as classificações aprovadas")]):
             incluir_tel = bool((request.get_json(silent=True) or {}).get("telefone", True))
+            progresso.etapa("ler", str(config.FONTE_XLSX.name))
             df, _ = load.executar(incluir_telefone=incluir_tel, verbose=False)
+            progresso.etapa("aplicar", f"{len(df)} respondentes lidos")
             CD.aplicar_na_base(verbose=False)  # reaplica codificações aprovadas na base nova
         return jsonify({"ok": True, "n": int(len(df))})
     except Exception as e:
         return _erro(e, 500)
+
+
+# ----------------------------------------------------------------------------- API: resultados
+@app.get("/api/resultados")
+def api_resultados():
+    """Aba 'Resultados': arquivos para baixar + distribuição das categorias de cada pergunta."""
+    try:
+        perguntas = []
+        for qid in V.perguntas_codificaveis():
+            st = report.status_pergunta(qid)
+            item = {k: st.get(k) for k in ("qid", "rotulo", "respondeu", "respostas", "frame", "codificacao", "n_categorias",
+                                          "n_codificadas", "n_revisadas", "n_confirmadas", "n_corrigidas", "acerto_ia",
+                                          "n_avaliadas_ia", "n_faltantes", "relatorio")}
+            item["categorias"] = []
+            frame = CF.frame(qid)
+            if st.get("codificacao") and frame:
+                cont = _payload_pergunta(qid)["contagens"]
+                for c in frame["categorias"]:
+                    k = cont.get(str(c["codigo"]), {"primaria": 0, "secundaria": 0})
+                    m = k["primaria"] + k["secundaria"]
+                    if m:
+                        item["categorias"].append({"codigo": c["codigo"], "nome": c["nome"], "definicao": c.get("definicao", ""),
+                                                   "primaria": k["primaria"], "mencoes": m})
+                item["categorias"].sort(key=lambda c: -c["mencoes"])
+            perguntas.append(item)
+        return jsonify({"projeto": config.NOME_PROJETO, "arquivos": _resultados(), "perguntas": perguntas})
+    except Exception as e:
+        return _erro(e, 500)
+
+
+@app.post("/api/gerar-todos")
+def api_gerar_todos():
+    """Atualiza todos os arquivos de resultado de uma vez (planilha final, codebook, cruzamentos)."""
+    tipos = [("planilha", "Planilha final categorizada", exportar.gerar)] if exportar.disponivel() else []
+    tipos += [("codebook", "Codebook", codebook.gerar), ("cruzamentos", "Cruzamentos (tabelas)", crosstabs.gerar)]
+    try:
+        with _lock, progresso.operacao("Gerando todos os resultados", [(t, n, 3) for t, n, _ in tipos]):
+            for t, n, f in tipos:
+                progresso.etapa(t, "usa só as perguntas aprovadas")
+                f(verbose=False)
+                progresso.evento(f"{n}: pronto")
+        return jsonify({"ok": True, "resultados": _resultados()})
+    except Exception as e:
+        return _erro(e, 500)
+
+
+# ----------------------------------------------------------------------------- API: zona de perigo
+# Nada é apagado de verdade: os arquivos vão para uma lixeira dentro da pasta de resultados
+# (output/_lixeira/<data>_<o que>/), de onde podem ser recuperados copiando de volta.
+ARQ_CLASSIFICACAO = ["codificacao.json", "revisao.xlsx", "relatorio.html"]
+ARQ_CATEGORIAS = ["frame.json", "frame_proposto.json", "frame_anterior.json"]
+
+
+def _tirar_da_base(qids: list[str]) -> None:
+    """Remove da base as colunas de categoria das perguntas apagadas e reaplica as aprovadas."""
+    if not (config.BASE_OUT / "base.json").exists():
+        return
+    df, registro = load.carregar_base()
+    prefixos = tuple(f"{q}_COD" for q in qids)
+    cols = [c for c in df.columns if str(c).startswith(prefixos)]
+    if cols:
+        df = df.drop(columns=cols)
+        for c in cols:
+            registro.pop(c, None)
+        load.salvar_base(df, registro)
+    CD.aplicar_na_base(verbose=False)
+
+
+def _apagar_pergunta(qid: str, o_que: str, destino: Path) -> list[str]:
+    nomes = ARQ_CLASSIFICACAO + (ARQ_CATEGORIAS if o_que == "tudo" else [])
+    movidos = []
+    for nome in nomes:
+        p = CF.pasta(qid) / nome
+        if p.exists():
+            (destino / qid).mkdir(parents=True, exist_ok=True)
+            shutil.move(str(p), str(destino / qid / nome))
+            movidos.append(nome)
+    return movidos
+
+
+@app.get("/api/perigo")
+def api_perigo():
+    """Resumo do que existe no projeto ativo, para a aba 'Gerenciar projeto'."""
+    try:
+        perguntas = []
+        for qid in V.perguntas_codificaveis():
+            st = report.status_pergunta(qid)
+            perguntas.append({**{k: st.get(k) for k in ("qid", "rotulo", "frame", "codificacao", "n_categorias", "n_codificadas", "n_revisadas")},
+                              "backcoding": qid in V.BACKCODING})
+        lixo = config.OUTPUT_DIR / "_lixeira"
+        return jsonify({"projeto": {"slug": config.PROJETO, "nome": config.NOME_PROJETO, "pasta": str(config.PROJETO_PASTA),
+                                    "saida": str(config.OUTPUT_DIR), "saida_real": str(config.SAIDA_REAL)},
+                        "modo_teste": config.modo_teste(), "n_projetos": len(projetos.listar()),
+                        "lixeira": str(lixo), "n_lixeira": len(list(lixo.iterdir())) if lixo.exists() else 0,
+                        "perguntas": perguntas})
+    except Exception as e:
+        return _erro(e, 500)
+
+
+@app.post("/api/perigo/pergunta")
+def api_perigo_pergunta():
+    """{qids: [..] | "todas", o_que: "classificacao" | "tudo"} -> move os arquivos para a lixeira."""
+    try:
+        d = request.get_json() or {}
+        o_que = d.get("o_que")
+        if o_que not in ("classificacao", "tudo"):
+            raise ValueError("o_que deve ser 'classificacao' ou 'tudo'")
+        todas = d.get("qids") == "todas"
+        qids = V.perguntas_codificaveis() if todas else list(d.get("qids") or [])
+        for q in qids:
+            V.por_id(q)  # KeyError se não existir
+        if not qids:
+            raise ValueError("Escolha ao menos uma pergunta.")
+        rotulo = ("todas" if todas else "_".join(qids))[:40] + "_" + o_que
+        destino = config.OUTPUT_DIR / "_lixeira" / f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{rotulo}"
+        with _lock:
+            apagados = {}
+            for q in qids:
+                movidos = _apagar_pergunta(q, o_que, destino)
+                if movidos:
+                    apagados[q] = movidos
+            if apagados:
+                _tirar_da_base(list(apagados))
+                report.gerar_indice()
+        return jsonify({"ok": True, "apagados": apagados, "lixeira": str(destino) if apagados else None})
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/perigo/projeto")
+def api_perigo_projeto():
+    """{slug, confirmacao (nome do projeto), apagar_resultados} -> tira o projeto da lista do Categorizador.
+    A pasta do projeto (planilha, projeto.json/py) nunca é apagada. Com apagar_resultados, a pasta de
+    resultados é renomeada para <saída>_excluido_<data> (recuperável)."""
+    try:
+        d = request.get_json() or {}
+        slug = d.get("slug")
+        reg = projetos._registro()
+        if slug not in reg["projetos"]:
+            raise KeyError(f"Projeto desconhecido: {slug}")
+        nome = next((p["nome"] for p in projetos.listar() if p["slug"] == slug), slug)
+        if (d.get("confirmacao") or "").strip().lower() != str(nome).strip().lower():
+            raise ValueError("O nome digitado não confere com o nome do projeto.")
+        if len(reg["projetos"]) <= 1:
+            raise ValueError("Este é o único projeto: crie outro antes de excluir este.")
+        pasta_projeto = str(projetos.pasta(slug))
+        movidas = []
+        with _lock:
+            if d.get("apagar_resultados"):
+                projetos.ativar(slug)
+                real = config.SAIDA_REAL
+                carimbo = datetime.now().strftime("%Y%m%d_%H%M%S")
+                for pasta in (real, real.parent / (real.name + "_teste")):
+                    if pasta.exists():
+                        alvo = pasta.parent / f"{pasta.name}_excluido_{carimbo}"
+                        pasta.rename(alvo)
+                        movidas.append(str(alvo))
+            reg["projetos"].pop(slug)
+            if reg.get("ativo") == slug:
+                reg["ativo"] = next(iter(reg["projetos"]))
+            projetos.ARQUIVO.write_text(json.dumps(reg, ensure_ascii=False, indent=1), encoding="utf-8")
+            projetos._modulos.pop(slug, None)
+            projetos.ativar(reg["ativo"])
+            config.garantir_pastas()
+        return jsonify({"ok": True, "ativo": reg["ativo"], "resultados_movidos": movidas, "pasta_projeto": pasta_projeto})
+    except Exception as e:
+        return _erro(e)
 
 
 # ----------------------------------------------------------------------------- API: novo projeto
@@ -442,8 +617,8 @@ def api_instrucoes(qid):
 def api_induzir(qid):
     try:
         d = request.get_json(silent=True) or {}
-        with _lock:
-            CF.preparar(qid)
+        with _lock, progresso.operacao(f"Gerando categorias com IA · {qid}", [("ler", "Ler as respostas da base"), ("pedido", "Montar o pedido para a IA"),
+                                                                            ("ia", "A IA lê as respostas e propõe as categorias", 10), ("gravar", "Gravar as categorias propostas")]):
             CF.induzir(qid, forcar=True, min_cat=int(d.get("min", 6)), max_cat=int(d.get("max", 15)))
         return jsonify(_payload_pergunta(qid))
     except Exception as e:
@@ -501,7 +676,8 @@ def api_frame_refinar(qid):
     """{feedback} -> a IA revisa o frame conforme o pedido do pesquisador."""
     try:
         d = request.get_json() or {}
-        with _lock:
+        with _lock, progresso.operacao(f"Ajustando as categorias com IA · {qid}", [("ia", "A IA revisa a lista conforme o seu pedido", 10),
+                                                                                   ("gravar", "Gravar a lista revisada")]):
             CF.refinar(qid, d.get("feedback", ""))
         return jsonify(_payload_pergunta(qid))
     except Exception as e:
@@ -524,7 +700,9 @@ def api_codificar(qid):
     try:
         d = request.get_json(silent=True) or {}
         limite = int(d["limite"]) if d.get("limite") else None
-        with _lock:
+        titulo = f"Classificando {'uma amostra de ' + str(limite) + ' respostas' if limite else 'as respostas'} · {qid}"
+        with _lock, progresso.operacao(titulo, [("preparar", "Separar o que vai para a IA"), ("ia", "A IA classifica as respostas em lotes", 12),
+                                           ("gravar", "Gravar a classificação")]):
             cod = CD.codificar(qid, forcar=True, limite=limite, somente_faltantes=bool(d.get("restantes")))
         out = _payload_pergunta(qid)
         out["limite_atingido"] = cod.get("_limite_atingido")
@@ -553,7 +731,8 @@ def api_recodificar(qid):
     """{apenas_comentados: true} (padrão) ou {rids: [..]} ou {apenas_comentados: false} = tudo (mantém correções humanas)."""
     try:
         d = request.get_json(silent=True) or {}
-        with _lock:
+        with _lock, progresso.operacao(f"Reclassificando com IA · {qid}", [("preparar", "Separar o que vai para a IA"), ("ia", "A IA classifica as respostas em lotes", 12),
+                                           ("gravar", "Gravar a classificação")]):
             if d.get("rids"):
                 cod = CD.recodificar(qid, rids=[int(r) for r in d["rids"]])
             elif d.get("apenas_comentados", True):
@@ -590,12 +769,15 @@ def api_item(qid, rid):
 @app.post("/api/pergunta/<qid>/aprovar")
 def api_aprovar(qid):
     try:
-        with _lock:
+        with _lock, progresso.operacao(f"Aprovando a classificação · {qid}", [("aprovar", "Travar a classificação"), ("base", "Gravar as categorias na base", 3),
+                                                                              ("relatorio", "Gerar o relatório da pergunta", 2)]):
             CD.aprovar(qid)
+            progresso.etapa("base", "uma linha por respondente, com os códigos das categorias")
             if qid in V.BACKCODING:
                 backcoding.aplicar([qid])
             else:
                 CD.aplicar_na_base(verbose=False)
+            progresso.etapa("relatorio")
             report.gerar(qid)
             report.gerar_indice()
         return jsonify(_payload_pergunta(qid))

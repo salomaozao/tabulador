@@ -27,8 +27,10 @@
 <div class="layout">
   <nav class="side">
     <ul id="lista-topo">
-      <li id="li-painel"><span class="t">📊 Painel geral e resultados</span><span class="small">andamento de todas as perguntas, downloads</span></li>
+      <li id="li-painel"><span class="t">📊 Painel geral</span><span class="small">andamento de todas as perguntas</span></li>
+      <li id="li-resultados"><span class="t">📦 Resultados</span><span class="small">o que a pesquisa diz e os arquivos para baixar</span></li>
       <li id="li-usage"><span class="t">📈 Consumo da IA</span><span class="small">chamadas, tokens, tempo e custo estimado</span></li>
+      <li id="li-gerenciar"><span class="t">🛠 Gerenciar projeto</span><span class="small">zona de perigo: apagar categorias, excluir projeto</span></li>
     </ul>
     <div class="side-title">Perguntas abertas</div>
     <ul id="lista-perguntas"></ul>
@@ -70,7 +72,24 @@
   </form>
 </dialog>
 
-<div id="busy" class="busy hidden"><div class="box"><div class="spinner"></div><div class="busy-info"><div id="busy-msg">Processando…</div><div id="busy-prog" class="small"></div><div id="busy-bar" class="prog hidden"><i style="width:0%"></i></div></div></div></div>
+<div id="busy" class="busy hidden" role="status" aria-live="polite"><div class="box">
+  <div class="busy-cab"><div class="cat-spin"></div><div><div id="busy-msg">Processando…</div><div id="busy-sub" class="small"></div></div><div id="busy-pct" class="busy-pct"></div></div>
+  <div id="busy-bar" class="prog grande indet"><i></i></div>
+  <div id="busy-stats" class="busy-stats"></div>
+  <ol id="busy-etapas" class="etapas"></ol>
+  <div id="busy-log" class="busy-log"></div>
+</div></div>
+<dialog id="dlg-perigo">
+  <form method="dialog" id="form-perigo">
+    <h2 style="margin-top:0" id="pg-titulo">Confirmar</h2>
+    <div id="pg-texto" class="small-t"></div>
+    <div id="pg-extra"></div>
+    <label class="campo" id="pg-campo">Para confirmar, digite <b id="pg-palavra"></b>
+      <input id="pg-input" autocomplete="off">
+    </label>
+    <div class="dlg-acoes"><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn perigo" id="pg-ok" value="ok" disabled>Apagar</button></div>
+  </form>
+</dialog>
 <div id="toast" class="toast hidden"></div>
 
 <script src="/static/app.js"></script>
