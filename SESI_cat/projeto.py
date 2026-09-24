@@ -181,6 +181,15 @@ DERIVADAS = {
     },
 }
 
+# Perfil de quem citou cada categoria (janela de aprovação): comparado com quem respondeu a mesma pergunta
+PERFIL = {
+    "nps": "Q3",                              # nota 0-10
+    "satisfacao": "Q34",                      # satisfação geral (escala de 5)
+    "retencao": ("RETENCAO2", "Pode trocar"),
+    "grupo": "ESCOLA",
+    "atributos": [f"Q{i}" for i in range(6, 27)],  # satisfação por tema (Q6-Q26)
+}
+
 BANNERS_PADRAO = ["VINCULO", "NPS_GRUPO", "COMPARACAO3", "RETENCAO2", "SATISFACAO3"]
 
 # --------------------------------------------------------------------------------------

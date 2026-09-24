@@ -74,10 +74,27 @@ def _operacao(nome: str) -> tuple[str, str]:
     if nome == "teste_conexao":
         return "teste de conexão", "—"
     tipo, _, resto = nome.partition("_")
-    rotulo = {"code": "classificação", "frame": "categorias", "refino": "ajuste de categorias"}.get(tipo, tipo)
-    if tipo == "code":
+    rotulo = {"code": "classificação", "frame": "categorias", "refino": "ajuste de categorias",
+              "audit": "auditoria"}.get(tipo, tipo)
+    if tipo in ("code", "audit"):
         resto = re.sub(r"_\d+$", "", resto)
     return rotulo, resto or "—"
+
+
+def _conferencia() -> dict:
+    """Quem conferiu a classificação, por pergunta: pessoas, aceite automático e sugestões do auditor."""
+    import coding as CD
+    import supervisao
+    import variables as V
+    out = {}
+    for qid in V.perguntas_codificaveis():
+        try:
+            cod = CD.codificacao(qid)
+        except Exception:  # noqa: BLE001 - uma pergunta ilegível não derruba a aba de consumo
+            cod = None
+        if cod:
+            out[qid] = supervisao.conferencia(cod["itens"])
+    return out
 
 
 def _novo() -> dict:
@@ -125,8 +142,10 @@ def consolidar(ultimas: int = 50) -> dict:
     total, por_modelo, por_pergunta, por_dia, por_hora = _novo(), {}, {}, {}, {}
     for c in chamadas:
         _somar(total, c)
-        h = por_hora.setdefault(c["_hora"], {**_novo(), "cls": 0})
+        h = por_hora.setdefault(c["_hora"], {**_novo(), "cls": 0, "aud": 0})
         _somar(h, c)
+        if c["operacao"] == "auditoria":
+            h["aud"] += c["total"]  # tokens do segundo codificador (auditor), separados da classificação
         if c["operacao"] == "classificação":
             h["cls"] += c["total"]  # tokens gastos classificando (base da eficiência por resposta)
         _somar(por_modelo.setdefault(c["modelo"], _novo()), c)
@@ -153,8 +172,9 @@ def consolidar(ultimas: int = 50) -> dict:
             "pct": round(100 * usado_hoje / lim, 1) if lim else None,
         },
         # série por hora (a interface agrupa por hora/dia conforme o período escolhido)
+        "conferencia": _conferencia(),
         "serie_hora": [{"h": datetime.strptime(k, "%Y%m%d_%H").strftime("%Y-%m-%dT%H"), **{c: v[c] for c in
-                        ("chamadas", "ok", "erros", "prompt", "completion", "total", "sem_preco", "cls")},
+                        ("chamadas", "ok", "erros", "prompt", "completion", "total", "sem_preco", "cls", "aud")},
                         "segundos": round(v["segundos"], 1), "usd": round(v["usd"], 6)} for k, v in sorted(por_hora.items())],
         "ultimas": [{k: v for k, v in c.items() if k not in ("_ord", "_dia", "_hora")} for c in chamadas[:ultimas]],
     }

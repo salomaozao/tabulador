@@ -13,6 +13,7 @@ import json
 import re
 import time
 from datetime import datetime
+from contextlib import contextmanager
 from typing import Callable
 
 import config
@@ -26,6 +27,31 @@ OPENAI_URL_PADRAO = "https://api.openai.com/v1"
 def set_cliente(func: Callable | None) -> None:
     global _cliente_fake
     _cliente_fake = func
+
+
+@contextmanager
+def usando(provedor: str | None = None, modelo: str | None = None):
+    """Troca provedor/modelo só durante o bloco (ex.: o auditor, segundo codificador, usa outra IA).
+    Não grava nada no .env; ao sair, volta exatamente ao que estava."""
+    if not provedor or (provedor == config.OPENAI_PROVEDOR and (not modelo or modelo == config.OPENAI_MODEL)):
+        yield
+        return
+    P = config.PROVEDORES.get(provedor)
+    if P is None:
+        raise ValueError(f"Provedor desconhecido: {provedor}")
+    antes = (config.OPENAI_PROVEDOR, config.OPENAI_MODEL, config.OPENAI_BASE_URL, config.OPENAI_API_KEY)
+    sem_chave = bool(P.get("sem_chave") or P.get("cli"))
+    chave = None if sem_chave else config._chave_guardada(provedor)
+    if not sem_chave and not chave:
+        raise RuntimeError(f"Não há chave guardada para {P['nome']}. Cole a chave em '⚙ Configurar IA' (uma vez) e tente de novo.")
+    config.OPENAI_PROVEDOR, config.OPENAI_MODEL = provedor, modelo or P.get("modelo") or antes[1]
+    config.OPENAI_BASE_URL, config.OPENAI_API_KEY = P.get("base_url") or None, chave or antes[3]
+    resetar()
+    try:
+        yield
+    finally:
+        config.OPENAI_PROVEDOR, config.OPENAI_MODEL, config.OPENAI_BASE_URL, config.OPENAI_API_KEY = antes
+        resetar()
 
 
 def resetar() -> None:

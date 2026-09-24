@@ -105,3 +105,75 @@ def gravar(projeto: str, qid: str, arquivo: str, dados: dict) -> None:
         "ON CONFLICT (projeto, qid, arquivo) DO UPDATE SET dados = excluded.dados, atualizado_em = excluded.atualizado_em",
         [projeto, qid, arquivo, json.dumps(dados, ensure_ascii=False), agora],
     )
+
+# ----------------------------------------------------------------------------- manutenção (linha de comando)
+def fechar() -> None:
+    """Fecha a conexão (o cliente síncrono mantém uma thread aberta; sem isto um script não termina)."""
+    global _cliente, _tabela_pronta
+    if _cliente is not None:
+        _cliente.close()
+    _cliente, _tabela_pronta = None, False
+
+
+def listar(projeto: str) -> list[dict]:
+    rs = _obter_cliente().execute("SELECT qid, arquivo, atualizado_em, dados FROM blobs WHERE projeto = ? ORDER BY qid, arquivo", [projeto])
+    return [{"qid": r[0], "arquivo": r[1], "atualizado_em": r[2], "dados": json.loads(r[3])} for r in rs.rows]
+
+
+def apagar_projeto(projeto: str) -> int:
+    """Apaga TODAS as linhas do projeto na nuvem (faça o backup antes: `backup`)."""
+    return _obter_cliente().execute("DELETE FROM blobs WHERE projeto = ?", [projeto]).rows_affected
+
+
+def subir_pasta(projeto: str, pasta_perguntas) -> list[tuple[str, str]]:
+    """Sobe os JSON de <pasta>/<QID>/*.json (os mesmos que codeframe grava) para a nuvem."""
+    from pathlib import Path
+    enviados = []
+    for d in sorted(p for p in Path(pasta_perguntas).iterdir() if p.is_dir()):
+        for arq in sorted(d.glob("*.json")):
+            gravar(projeto, d.name, arq.name, json.loads(arq.read_text(encoding="utf-8")))
+            enviados.append((d.name, arq.name))
+    return enviados
+
+
+def _main() -> None:
+    """python nuvem.py -p sesi status | backup | subir [--limpar-antes]"""
+    import argparse
+    from pathlib import Path
+
+    import projetos
+    ap = argparse.ArgumentParser(description="Banco em nuvem do Tabulador (Turso)")
+    ap.add_argument("-p", "--projeto", required=True)
+    ap.add_argument("acao", choices=["status", "backup", "subir"])
+    ap.add_argument("--limpar-antes", action="store_true", help="subir: apaga o que o projeto tem na nuvem antes (depois do backup)")
+    a = ap.parse_args()
+    projetos.ativar(a.projeto)
+    if not config.TURSO_URL:
+        raise SystemExit("Nuvem não configurada (TABULADOR_TURSO_URL no .env).")
+    try:
+        linhas = listar(a.projeto)
+        print(f"nuvem: {len(linhas)} arquivo(s) do projeto '{a.projeto}'")
+        for r in linhas:
+            print(f"  {r['qid']:>6} {r['arquivo']:<22} {r['atualizado_em']}")
+        if a.acao in ("backup", "subir"):
+            destino = config.SAIDA_REAL / "_backup" / f"nuvem_{datetime.now():%Y%m%d_%H%M%S}.json"
+            destino.parent.mkdir(parents=True, exist_ok=True)
+            destino.write_text(json.dumps(linhas, ensure_ascii=False), encoding="utf-8")
+            print(f"backup: {destino}")
+        if a.acao == "subir":
+            if a.limpar_antes:
+                print(f"apagadas: {apagar_projeto(a.projeto)} linha(s)")
+            enviados = subir_pasta(a.projeto, Path(config.SAIDA_REAL) / "perguntas")
+            print(f"enviados: {len(enviados)} arquivo(s) de {len({q for q, _ in enviados})} pergunta(s)")
+            # confere: o que está na nuvem agora é igual ao arquivo local
+            for qid, nome in enviados:
+                local = json.loads((Path(config.SAIDA_REAL) / "perguntas" / qid / nome).read_text(encoding="utf-8"))
+                if ler(a.projeto, qid, nome) != local:
+                    raise SystemExit(f"DIFERENTE depois de subir: {qid}/{nome}")
+            print("conferido: nuvem igual aos arquivos locais")
+    finally:
+        fechar()
+
+
+if __name__ == "__main__":
+    _main()

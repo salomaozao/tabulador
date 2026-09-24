@@ -35,9 +35,10 @@ from datetime import datetime
 import codeframe as CF
 import coding as CD
 import config
+import supervisao as SUP
 import variables as V
 
-AUTO = "auto"
+AUTO = SUP.AUTO
 
 
 def _nomes(qid: str) -> dict[int, str]:
@@ -213,42 +214,13 @@ def cmd_adotar_sugestoes(a):
 
 def cmd_auto_aceitar(a):
     for qid in _qids(a.qids):
-        cod = CD.codificacao(qid)
-        agora = datetime.now().isoformat(timespec="seconds")
-        n = Counter()
-        for i in cod["itens"]:
-            if i.get("primaria") is None or i.get("validado") or i.get("origem") == "humano":
-                continue
-            motivo = None
-            if i.get("origem") == "erro":
-                motivo = "erro"
-            elif i["primaria"] == CF.CODIGO_OUTROS:
-                motivo = "Outros"
-            elif i.get("confianca", 0) < a.limiar and i.get("origem") != "regra":
-                motivo = "confiança baixa"
-            elif not a.sem_auditoria and _auditoria_concorda(i) is not True:
-                motivo = "auditoria discorda" if _auditoria_concorda(i) is False else "sem auditoria"
-            if motivo:
-                n["fica p/ revisão: " + motivo] += 1
-                continue
-            i["validado"], i["validado_em"], i["validado_por"] = True, agora, AUTO
-            n["aceita"] += 1
-        cod["status"] = "rascunho"
-        CF._gravar(qid, "codificacao.json", cod)
-        print(f"{qid}: {dict(n)}")
+        r = SUP.auto_aceitar(qid, a.limiar, exigir_auditoria=not a.sem_auditoria)
+        print(f"{qid}: {r['aceitas']} aceitas; ficam para revisão: {r['ficaram']}")
 
 
 def cmd_desfazer_auto(a):
     for qid in _qids(a.qids):
-        cod = CD.codificacao(qid)
-        k = 0
-        for i in cod["itens"]:
-            if i.get("validado_por") == AUTO:
-                for c in ("validado", "validado_em", "validado_por"):
-                    i.pop(c, None)
-                k += 1
-        CF._gravar(qid, "codificacao.json", cod)
-        print(f"{qid}: {k} confirmações automáticas desfeitas")
+        print(f"{qid}: {SUP.desfazer_auto(qid)} confirmações automáticas desfeitas")
 
 
 def cmd_fila(a):

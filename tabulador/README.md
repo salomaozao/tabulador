@@ -82,6 +82,34 @@ tabela: ao confirmar ✓, a linha vai para o fim e a seguinte sobe para o lugar 
 confirmar em sequência sem mexer o mouse. Corrigir não tira a linha do lugar (para ainda dar para
 ajustar a secundária). Respostas longas mostram 5 linhas (clique para ver tudo).
 
+### 🔎 Supervisão: segundo codificador e aceite automático
+
+- **🔎 Auditar com outra IA**: um segundo provedor ou modelo, escolhido na hora, confere a classificação.
+  Quando discorda, a linha mostra "auditor sugere: X", com o botão **aceitar sugestão** (ou a tecla <kbd>S</kbd>).
+  O filtro *auditor discordou* mostra só essas.
+- **⚡ Aceitar alta confiança**: confirma sozinho o que tem confiança ≥ limiar (padrão 0,85, ajustável)
+  **e** o auditor concordou. Aparece como "⚡ auto", fica separado das conferências humanas e pode ser desfeito.
+- **🗂 Revisar por categoria**: um card por categoria com definição, exemplos e o **perfil de quem citou**
+  (NPS, satisfação geral, intenção de trocar, escolas e os atributos que essas pessoas avaliam pior),
+  comparado com todos que responderam a mesma pergunta. Também tem **Confirmar N pendentes** (nunca
+  inclui as respostas em que o auditor discordou). A configuração fica em `PERFIL`, no `projeto.py`.
+- Linha de comando: `supervisor.py` usa as mesmas regras (`supervisao.py`).
+
+### 🔄 Base nova (mais entrevistas)
+
+Troque a planilha em `data/` e clique em **Recarregar planilha**. Cada resposta é identificada pelo texto,
+então o que já foi classificado e conferido continua nas mesmas respostas, e textos repetidos herdam a
+categoria. O app mostra, por pergunta, os respondentes novos, as respostas novas sem classificação e as
+removidas. Perguntas aprovadas que ganharam respostas novas voltam para revisão. Cada versão fica
+registrada em `output/base/versoes.json`.
+
+### ☁ Nuvem (revisão compartilhada)
+
+Com `TABULADOR_TURSO_URL`/`_TOKEN` configurados, a revisão fica num banco compartilhado, e todos veem
+os mesmos dados. **Uma pessoa por pergunta de cada vez**, porque a última gravação vence. Ver
+[`docs/nuvem_turso.md`](docs/nuvem_turso.md), inclusive como subir um projeto que estava só no disco
+(`python nuvem.py -p sesi subir`).
+
 ### 🧪 Modo teste (sem IA)
 
 Botão **🧪 Modo teste** no topo: a IA é trocada por valores **simulados** (`simulador.py`), sem internet,

@@ -200,15 +200,20 @@ function recalcular() {
   P.n_comentarios_pendentes = P.itens.filter((r) => r.comentario_pendente).length;
   // confirmadas pelo supervisor.py (auto) não medem o acerto da IA — mesma regra de coding.resumo_revisao
   const aval = conf - confAuto + corrIA, tot = P.itens.length;
-  P.revisao = { n_unicas: tot, n_codificadas: cod, n_faltantes: tot - cod, n_confirmadas: conf, n_corrigidas: corr, n_revisadas: conf + corr, acerto_ia: aval ? (conf - confAuto) / aval : null, n_avaliadas_ia: aval };
+  P.revisao = { n_unicas: tot, n_codificadas: cod, n_faltantes: tot - cod, n_confirmadas: conf, n_confirmadas_auto: confAuto, n_corrigidas: corr, n_revisadas: conf + corr, acerto_ia: aval ? (conf - confAuto) / aval : null, n_avaliadas_ia: aval };
 }
 function aplicarItem(r, it) {
+  const au = it.auditoria || null;
   Object.assign(r, {
     primaria: it.primaria, secundaria: it.secundaria, origem: it.origem, confianca: it.confianca,
     comentario: it.comentario || null, comentario_pendente: !!it.comentario && !it.comentario_aplicado_em,
     revisao: it.primaria == null ? null : it.origem === "humano" ? "corrigida" : it.validado ? "confirmada" : "pendente",
     validado_por: it.validado_por ?? null,
     corrigido_de_nome: it.corrigido_de != null ? nomeCat(it.corrigido_de) : null,
+    auditoria: au,
+    sugestao_nome: au && au.ok === false ? nomeCat(au.primaria) : null,
+    sugestao_sec_nome: au && au.ok === false && au.secundaria != null ? nomeCat(au.secundaria) : null,
+    ia_original_nome: it.ia_original ? nomeCat(it.ia_original.primaria) : null,
   });
   r.primaria_nome = nomeCat(r.primaria); r.secundaria_nome = nomeCat(r.secundaria);
   r.alertas = r.revisao === "pendente" ? r._alertas_ia || "" : r.revisao ? "" : "não codificado";
@@ -250,6 +255,7 @@ function render() {
       <span class="acoes">
         ${!F ? `<button class="btn primary" id="b-induzir">✨ Gerar categorias com IA</button>` : ""}
         ${F && !F.fixo ? `<button class="btn" id="b-induzir">✨ Gerar do zero</button>` : ""}
+        ${F ? `<button class="btn" id="b-janela-cat" title="Cada categoria com definição, exemplos${C ? ", perfil de quem citou e confirmação em bloco" : ""}">🗂 Revisar por categoria</button>` : ""}
         ${F && !frameOk ? `<button class="btn ok" id="b-aprovar-frame">✓ Aprovar categorias</button>` : ""}
       </span>
     </h2>
@@ -273,6 +279,7 @@ function render() {
     refresh(await post(`/api/pergunta/${P.qid}/frame/induzir`, {}, "Gerando categorias com IA…"));
   });
   $("#b-aprovar-frame")?.addEventListener("click", async () => refresh(await post(`/api/pergunta/${P.qid}/frame/aprovar`, {}, "Aprovando…")));
+  $("#b-janela-cat")?.addEventListener("click", () => abrirJanelaCategorias());
   $("#b-reabrir")?.addEventListener("click", async () => refresh(await post(`/api/pergunta/${P.qid}/reabrir`, {}, "Reabrindo…")));
   bindFrame(); bindAcoesCod(); bindCodificacao(); bindAprovarBar();
 }
@@ -349,7 +356,7 @@ function renderAcoesCod() {
   return `
     <div class="passo">
       <div class="revbar">
-        <div><b>Revisão:</b> ${V.n_revisadas} de ${V.n_codificadas} classificadas conferidas (${pct(V.n_revisadas, V.n_codificadas)}) · <span class="pill ok">✓ ${V.n_confirmadas} confirmadas</span> <span class="pill human">✎ ${V.n_corrigidas} corrigidas</span>
+        <div><b>Revisão:</b> ${V.n_revisadas} de ${V.n_codificadas} classificadas conferidas (${pct(V.n_revisadas, V.n_codificadas)}) · <span class="pill ok">✓ ${V.n_confirmadas - (V.n_confirmadas_auto || 0)} confirmadas por pessoas</span>${V.n_confirmadas_auto ? ` <span class="pill ok auto" title="Confirmadas sozinhas: confiança alta e o auditor (outra IA) concordou">⚡ ${V.n_confirmadas_auto} automáticas</span>` : ""} <span class="pill human">✎ ${V.n_corrigidas} corrigidas</span>
         ${acerto != null ? ` · <b>a IA acertou ${acerto}%</b> <small>(de ${V.n_avaliadas_ia} conferidas)</small>` : ""}</div>
         <div class="small"><b>Classificadas:</b> ${V.n_codificadas} de ${V.n_unicas} respostas (${pct(V.n_codificadas, V.n_unicas)})${V.n_faltantes ? ` · faltam ${V.n_faltantes}` : ""}
           <span class="legenda"><i class="conf"></i>conferidas <i class="ia"></i>classificadas, a conferir <i></i>ainda não classificadas</span></div>
@@ -361,6 +368,15 @@ function renderAcoesCod() {
         <button class="btn primary" id="b-recod-com" ${P.n_comentarios_pendentes ? "" : "disabled"}>✨ Reclassificar comentadas (${P.n_comentarios_pendentes})</button>
         <button class="btn" id="b-recod-tudo" title="Refaz com a IA tudo que você ainda não conferiu">↻ Reclassificar tudo</button>
         ${V.n_faltantes ? `<span class="sep"></span><button class="btn" id="b-mais">+ Classificar mais ${tam}</button><button class="btn primary" id="b-restantes">Classificar as restantes (${V.n_faltantes})</button>` : ""}
+      </div>
+      <div class="tools supervisao">
+        <b>Supervisão:</b>
+        <button class="btn" id="b-auditar" title="Outra IA confere a classificação, resposta por resposta (segundo codificador)">🔎 Auditar com outra IA</button>
+        <button class="btn" id="b-auto" title="Confirma sozinho o que tem confiança alta E o auditor concordou">⚡ Aceitar alta confiança</button>
+        <label class="small">limiar <input id="auto-limiar" type="number" min="0.5" max="1" step="0.05" value="${state.limiar ?? 0.85}" style="width:64px"></label>
+        ${V.n_confirmadas_auto ? `<button class="btn ghost" id="b-desfazer-auto">↶ Desfazer as ${V.n_confirmadas_auto} automáticas</button>` : ""}
+        <span class="sep"></span>
+        <button class="btn" id="b-janela" title="Cada categoria com exemplos, perfil de quem citou e confirmação em bloco">🗂 Revisar por categoria</button>
       </div>
     </div>`;
 }
@@ -377,6 +393,131 @@ function bindAcoesCod() {
     if (!confirm("Reclassificar com a IA tudo o que você ainda não conferiu? O que você corrigiu ou confirmou é mantido.")) return;
     refresh(await post(`/api/pergunta/${P.qid}/recodificar`, { apenas_comentados: false }, "Reclassificando…", true));
   });
+  $("#auto-limiar")?.addEventListener("change", (e) => (state.limiar = Math.min(1, Math.max(0.5, +e.target.value || 0.85))));
+  $("#b-auto")?.addEventListener("click", async () => {
+    const limiar = state.limiar ?? 0.85;
+    if (!confirm(`Confirmar sozinho as respostas com confiança ≥ ${limiar.toFixed(2)} em que o auditor (outra IA) concordou?\n\nO que você já conferiu não muda. Dá para desfazer depois.`)) return;
+    const r = await post(`/api/pergunta/${P.qid}/auto-aceitar`, { limiar }, "Aceitando as de alta confiança…");
+    refresh(r); mostrarResultadoAuto(r.auto);
+  });
+  $("#b-desfazer-auto")?.addEventListener("click", async () => {
+    if (!confirm("Desfazer todas as confirmações automáticas desta pergunta? (A auditoria continua guardada.)")) return;
+    const r = await post(`/api/pergunta/${P.qid}/desfazer-auto`, {}, "Desfazendo…"); toast(`${r.alterados} confirmação(ões) automática(s) desfeita(s)`); refresh(r);
+  });
+  $("#b-auditar")?.addEventListener("click", abrirAuditoria);
+  $("#b-janela")?.addEventListener("click", () => abrirJanelaCategorias());
+}
+function mostrarResultadoAuto(a) {
+  if (!a) return;
+  const ficaram = Object.entries(a.ficaram || {}).map(([m, n]) => `<li>${esc(m)}: <b>${fmtN(n)}</b></li>`).join("");
+  abrirJanela("Aceite automático", `<p><b>${fmtN(a.aceitas)} resposta(s) confirmadas sozinhas</b> (confiança ≥ ${Number(a.limiar).toFixed(2)}${a.exigir_auditoria ? " e auditor concordando" : ""}).</p>
+    ${ficaram ? `<p>Ficaram para você conferir:</p><ul>${ficaram}</ul>` : "<p>Nenhuma ficou de fora.</p>"}
+    ${a.ficaram && a.ficaram["ainda sem auditoria"] ? `<p class="small">As "sem auditoria" precisam passar antes por <b>🔎 Auditar com outra IA</b>.</p>` : ""}`);
+}
+
+// ---- janela de revisão por categoria: definição, exemplos, perfil de quem citou e confirmação em bloco
+const fmt1 = (v, casas = 1) => (v == null ? "–" : Number(v).toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas }));
+function linhaPerfil(rotulo, v, vb, casas, suf = "", titulo = "") {
+  if (v == null) return "";
+  const d = vb == null ? null : v - vb;
+  const seta = d == null || Math.abs(d) < (casas ? 0.05 : 0.5) ? "" : d > 0 ? "▲" : "▼";
+  return `<tr title="${esc(titulo)}"><td>${rotulo}</td><td class="num"><b>${fmt1(v, casas)}${suf}</b></td><td class="num small">${fmt1(vb, casas)}${suf}</td><td class="num small">${seta ? `${seta} ${fmt1(Math.abs(d), casas)}` : "≈"}</td></tr>`;
+}
+function cardCategoria(c, D, podeEditar, catsOpc) {
+  const b = D.base || {}, p = c.perfil || {}, cfg = D.config || {};
+  const perfil = D.classificada && c.n ? `
+    <table class="perfil"><thead><tr><th></th><th class="num">quem citou</th><th class="num small">todos (base)</th><th class="num small">diferença</th></tr></thead><tbody>
+      ${p.nps ? linhaPerfil("NPS", p.nps.nps, b.nps?.nps, 0, "", cfg.nps || "") + linhaPerfil("nota média (0–10)", p.nps.media, b.nps?.media, 1) + linhaPerfil("% detratores (0–6)", p.nps.detratores, b.nps?.detratores, 0, "%") : ""}
+      ${linhaPerfil("satisfação geral (1–5)", p.satisfacao, b.satisfacao, 2, "", cfg.satisfacao || "")}
+      ${cfg.retencao ? linhaPerfil(`% ${esc(cfg.retencao.toLowerCase())}`, p.retencao_risco, b.retencao_risco, 0, "%") : ""}
+    </tbody></table>
+    ${c.n < 10 ? `<div class="small warn-t">Base pequena (n=${c.n}): leia o perfil com cuidado.</div>` : ""}
+    ${(c.atributos_piores || []).length ? `<div class="small"><b>Avaliam pior que a base:</b> ${c.atributos_piores.map((a) => `${esc(a.rotulo)} <b>${fmt1(a.media, 2)}</b> vs ${fmt1(a.media_base, 2)}`).join(" · ")}</div>` : ""}
+    ${(c.grupos_acima || []).length ? `<div class="small"><b>${esc(cfg.grupo || "Grupo")} acima do esperado:</b> ${c.grupos_acima.map((g) => `${esc(g.nome)} (${g.n}; ${fmt1(g.pct)}% vs ${fmt1(g.pct_base)}%)`).join(" · ")}</div>` : ""}` : "";
+  const exemplos = (c.exemplos || []).map((e) => {
+    const t = typeof e === "string" ? e : e.texto, curto = t.length > 140 ? t.slice(0, 140) + "…" : t;
+    return `<li title="${esc(t)}">${esc(curto)}${e.n > 1 ? ` <small>×${e.n}</small>` : ""}</li>`;
+  }).join("");
+  const pend = (c.pendentes || []).length;
+  return `<div class="card-cat" data-cod="${c.codigo}">
+    <div class="cc-cab"><span class="cc-cod">${c.codigo}</span>
+      ${podeEditar && !c.fixa ? `<input class="inline cc-nome" value="${esc(c.nome)}">` : `<b>${esc(c.nome)}</b>`}
+      ${D.classificada ? `<span class="cc-n"><b>${fmtN(c.n || 0)}</b> <small>${c.pct != null ? fmt1(c.pct) + "%" : ""}</small></span>` : ""}</div>
+    ${podeEditar && !c.fixa ? `<textarea class="inline cc-def" rows="2">${esc(c.definicao)}</textarea>` : `<div class="small">${esc(c.definicao)}</div>`}
+    ${exemplos ? `<ul class="cc-ex">${exemplos}</ul>` : ""}
+    ${perfil}
+    <div class="cc-acoes">
+      ${D.classificada && pend ? `<button class="btn sm ok cc-conf" title="${esc((c.menor_confianca || []).map((m) => `${fmt1(m.confianca, 2)} · ${m.texto}`).join("\n"))}">✓ Confirmar ${pend} pendente${pend > 1 ? "s" : ""}</button>` : D.classificada ? `<span class="small">nada a conferir</span>` : ""}
+      ${c.com_sugestao ? `<span class="small" title="O auditor discordou: confira uma a uma (filtro 'auditor discordou')">🔎 ${c.com_sugestao} com sugestão do auditor ficam fora</span>` : ""}
+      ${podeEditar && !c.fixa ? `<select class="sm cc-mesclar"><option value="">mesclar em…</option>${catsOpc(c.codigo)}</select>` : ""}
+    </div>
+    ${D.classificada && pend && (c.menor_confianca || []).length ? `<div class="small cc-menor">Menor confiança: ${c.menor_confianca.map((m) => `“${esc(m.texto.slice(0, 80))}${m.texto.length > 80 ? "…" : ""}” (${fmt1(m.confianca, 2)})`).join(" · ")}</div>` : ""}
+  </div>`;
+}
+async function abrirJanelaCategorias() {
+  const P = state.P, qid = P.qid;
+  const D = await api(`/api/pergunta/${qid}/perfil`, {}, "Montando o perfil das categorias…");
+  const F = P.frame, frameOk = F && F.status === "aprovado", locked = P.codificacao?.status === "aprovado";
+  const podeEditar = !F?.fixo && !locked;
+  const catsOpc = (excl) => catsValidas().filter((c) => !c.fixa && c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  const b = D.base || {};
+  const cats = D.classificada ? [...D.categorias].sort((x, y) => (y.n || 0) - (x.n || 0)) : D.categorias;
+  abrirJanela(`Categorias · ${qid}`, `
+    ${D.classificada ? `<div class="small cc-base">Perfil comparado com <b>todos que responderam ${esc(qid)}</b> (n=${fmtN(b.n)}${b.nps ? `; NPS ${fmt1(b.nps.nps, 0)}` : ""}${b.satisfacao != null ? `; satisfação ${fmt1(b.satisfacao, 2)}` : ""}) — não com o total da pesquisa. ▲▼ = acima/abaixo da base.</div>`
+      : `<div class="info">Ainda não há respostas classificadas: aqui aparecem a definição e os exemplos que a IA propôs. Depois de classificar uma amostra, esta janela mostra também o <b>perfil de quem citou</b> cada categoria.</div>`}
+    <div class="cards-cat">${cats.map((c) => cardCategoria(c, D, podeEditar, catsOpc)).join("")}</div>
+    ${F && !frameOk ? `<div class="dlg-acoes"><button class="btn ok" type="button" id="jc-aprovar">✓ Aprovar categorias</button></div>` : ""}`);
+  const depois = async (payload, msg) => { if (payload) refresh(payload); if (msg) toast(msg); await abrirJanelaCategorias(); };
+  document.querySelectorAll(".card-cat").forEach((card) => {
+    const cod = card.dataset.cod, c = D.categorias.find((x) => String(x.codigo) === cod);
+    card.querySelector(".cc-nome")?.addEventListener("change", async (e) => depois(await post(`/api/pergunta/${qid}/frame/categoria`, { codigo: cod, nome: e.target.value }), "Categoria renomeada"));
+    card.querySelector(".cc-def")?.addEventListener("change", async (e) => { await post(`/api/pergunta/${qid}/frame/categoria`, { codigo: cod, definicao: e.target.value }); toast("Definição salva"); });
+    card.querySelector(".cc-mesclar")?.addEventListener("change", async (e) => {
+      const dest = e.target.value; if (!dest) return;
+      if (!confirm(`Mesclar "${c.nome}" em "${nomeCat(dest)}"? As respostas passam para a categoria de destino.`)) { e.target.value = ""; return; }
+      await depois(await post(`/api/pergunta/${qid}/frame/fundir`, { destino: dest, origens: [cod] }, "Mesclando…"), "Categorias mescladas");
+    });
+    card.querySelector(".cc-conf")?.addEventListener("click", async () => {
+      const menor = (c.menor_confianca || []).map((m) => `• ${m.texto.slice(0, 90)} (${fmt1(m.confianca, 2)})`).join("\n");
+      if (!confirm(`Confirmar as ${c.pendentes.length} respostas a conferir de "${c.nome}"? Contam como conferidas por você.${menor ? `\n\nAs de menor confiança:\n${menor}` : ""}`)) return;
+      const r = await post(`/api/pergunta/${qid}/validar`, { rids: c.pendentes, valor: true }, "Confirmando…");
+      await depois(r, `${r.alterados} resposta(s) confirmada(s) em ${c.nome}`);
+    });
+  });
+  $("#jc-aprovar")?.addEventListener("click", async () => { const r = await post(`/api/pergunta/${qid}/frame/aprovar`, {}, "Aprovando…"); $("#dlg-janela").close(); refresh(r); toast("Categorias aprovadas"); });
+}
+
+// ---- auditoria por outra IA (segundo codificador)
+function abrirAuditoria() {
+  const P = state.P, ia = state.status.ia, provs = ia.provedores || {};
+  // só provedores prontos: programa instalado (CLI), chave guardada, ou o simulador no modo teste
+  const pronto = (k, p) => (p.cli ? p.disponivel : p.sem_chave ? ia.modo_teste : p.tem_chave);
+  const opcoes = Object.entries(provs).filter(([k, p]) => pronto(k, p))
+    .map(([k, p]) => `<option value="${k}">${esc(p.nome)}${k === ia.provedor ? " (o mesmo que classificou)" : ""}</option>`).join("");
+  const dlg = abrirJanela("🔎 Auditar com outra IA", `
+    <p>Um <b>segundo codificador</b> (outra IA) confere a classificação resposta por resposta. Quando ele discorda, a sugestão
+    aparece na linha da resposta para você aceitar ou não. O ideal é usar um provedor ou modelo diferente do que classificou (${esc(provs[ia.provedor]?.nome || ia.provedor)} · ${esc(ia.modelo || "")}).</p>
+    <label class="campo">Provedor do auditor <select id="au-prov">${opcoes}</select></label>
+    <label class="campo">Modelo <select id="au-mod"></select></label>
+    <label class="campo">O que auditar <select id="au-esc"><option value="pendentes">só as ainda não auditadas (a conferir)</option><option value="todas">todas as que você ainda não conferiu</option></select></label>
+    <label><input type="checkbox" id="au-aceitar" checked> depois, aceitar sozinhas as de confiança ≥ ${(state.limiar ?? 0.85).toFixed(2)} em que o auditor concordou</label>
+    <div class="dlg-acoes"><button class="btn primary" id="au-ok" type="button">🔎 Auditar</button></div>`);
+  const selProv = $("#au-prov"), selMod = $("#au-mod");
+  const outro = Object.keys(provs).find((k) => k !== ia.provedor && !provs[k].sem_chave && pronto(k, provs[k]));
+  if (outro) selProv.value = outro;
+  const encherModelos = () => { const p = provs[selProv.value] || {}; selMod.innerHTML = (p.modelos || [p.modelo]).filter(Boolean).map((m) => `<option>${esc(m)}</option>`).join(""); };
+  selProv.onchange = encherModelos; encherModelos();
+  $("#au-ok").onclick = async () => {
+    const body = { provedor: selProv.value, modelo: selMod.value, escopo: $("#au-esc").value, aceitar: $("#au-aceitar").checked, limiar: state.limiar ?? 0.85 };
+    dlg.close();
+    const r = await post(`/api/pergunta/${P.qid}/auditar`, body, "O auditor está conferindo a classificação…", true);
+    refresh(r);
+    const A = r.auditoria || {};
+    abrirJanela("Auditoria concluída", `<p>Auditor: <b>${esc(A.por || "—")}</b>. ${fmtN(A.auditadas || 0)} resposta(s) conferidas:
+      <b>${fmtN(A.concorda || 0)}</b> concordam e <b>${fmtN(A.discorda || 0)}</b> discordam.${A.lotes_com_erro ? ` ${A.lotes_com_erro} lote(s) deram erro (rode de novo depois).` : ""}</p>
+      ${A.auto ? `<p><b>${fmtN(A.auto.aceitas)}</b> aceitas sozinhas (confiança alta + auditor concordando).</p>` : ""}
+      <p class="small">As discordâncias aparecem na tabela com <b>🔎 auditor sugere…</b>. Filtre por <b>auditor discordou</b> e use o botão ou a tecla <kbd>S</kbd> para aceitar a sugestão.</p>`);
+  };
 }
 // botão de aprovar fica no fim da tabela (depois de revisar tudo), não no topo — ver renderCodificacao
 function renderAprovarBar() {
@@ -397,6 +538,15 @@ function bindAprovarBar() {
 }
 
 // ---------------------------------------------------------------- tabela de classificação
+const temSugestao = (r) => r.revisao === "pendente" && r.auditoria?.ok === false && r.auditoria.primaria != null && r.auditoria.primaria !== r.primaria;
+function situacaoOk(r, s) {
+  if (!s) return true;
+  if (s === "nao") return r.primaria == null;
+  if (s === "auto") return r.revisao === "confirmada" && r.validado_por === "auto";
+  if (s === "humano") return r.revisao === "confirmada" && r.validado_por !== "auto";
+  if (s === "discorda") return temSugestao(r);
+  return r.revisao === s;
+}
 function filtrarItens() {
   // depois de confirmar/corrigir uma linha a ordem fica CONGELADA (nada some do filtro nem troca de
   // lugar, exceto a linha recém-confirmada, que vai para o fim); só reordena/refiltra quando o
@@ -411,7 +561,7 @@ function filtrarItens() {
     (!f.cat || String(r.primaria) === f.cat || String(r.secundaria) === f.cat) &&
     (!f.alertas || (r.alertas && r.alertas !== "não codificado")) &&
     (!f.comentarios || r.comentario) &&
-    (!f.situacao || (f.situacao === "nao" ? r.primaria == null : r.revisao === f.situacao)));
+    situacaoOk(r, f.situacao));
   const conf = (r) => (r.primaria == null ? 9 : r.revisao !== "pendente" ? 2 + (r.confianca ?? 0) : r.confianca ?? 0);
   const faixaConf = (r) => Math.floor(conf(r) * 10);  // agrupa em faixas de 10% para poder desempatar por categoria
   const k = f.ordem;
@@ -438,7 +588,7 @@ function renderCodificacao() {
       if (q && !(r.texto + " " + (r.justificativa || "")).toLowerCase().includes(q)) return;
       if (f.alertas && !(r.alertas && r.alertas !== "não codificado")) return;
       if (f.comentarios && !r.comentario) return;
-      if (f.situacao && !(f.situacao === "nao" ? r.primaria == null : r.revisao === f.situacao)) return;
+      if (!situacaoOk(r, f.situacao)) return;
       if (r.primaria != null) conta.set(r.primaria, (conta.get(r.primaria) || 0) + 1);
     });
     const chips = cats.filter((c) => conta.get(c.codigo)).map((c) =>
@@ -448,11 +598,17 @@ function renderCodificacao() {
   const rows = vis.map((r) => {
     const nc = r.primaria == null;
     const cls = [r.alertas && !nc ? "alerta" : "", r.revisao === "corrigida" ? "humano" : "", r.revisao === "confirmada" ? "confirmada" : "", r.comentario_pendente ? "pendente" : "", nc ? "naocod" : ""].join(" ");
-    const origem = nc ? '<span class="pill">não classificada</span>' : r.revisao === "corrigida" ? `<span class="pill human" title="${r.corrigido_de_nome ? "A IA tinha posto: " + esc(r.corrigido_de_nome) : ""}">✎ você</span>` : r.revisao === "confirmada" ? '<span class="pill ok">✓ conferida</span>' : r.origem === "regra" ? '<span class="pill">regra</span>' : r.origem === "llm+comentario" ? '<span class="pill acc">IA + comentário</span>' : r.origem === "erro" ? '<span class="pill warn">erro</span>' : '<span class="pill">IA</span>';
+    const origem = nc ? '<span class="pill">não classificada</span>' : r.revisao === "corrigida" ? `<span class="pill human" title="${r.corrigido_de_nome ? "A IA tinha posto: " + esc(r.corrigido_de_nome) : ""}">✎ você</span>`
+      : r.revisao === "confirmada" ? (r.validado_por === "auto" ? `<span class="pill ok auto" title="Confirmada sozinha: confiança alta e o auditor concordou">⚡ auto</span>` : '<span class="pill ok">✓ conferida</span>')
+      : r.ia_original_nome ? `<span class="pill acc" title="O auditor corrigiu; a IA tinha posto: ${esc(r.ia_original_nome)}">revisor</span>`
+      : r.origem === "regra" ? '<span class="pill">regra</span>' : r.origem === "llm+comentario" ? '<span class="pill acc">IA + comentário</span>' : r.origem === "erro" ? '<span class="pill warn">erro</span>' : '<span class="pill">IA</span>';
+    // justificativa: sugestões já adotadas (supervisor.py) guardam o texto do revisor; mostra rotulado
+    const just = r.justificativa ? (r.ia_original_nome ? `<small>revisor: ${esc(r.justificativa.replace(/^\[revisor [^:]*: ?/, "").replace(/\] IA tinha: .*$/, ""))} · a IA tinha posto: ${esc(r.ia_original_nome)}</small>` : `<small>IA: ${esc(r.justificativa)}</small>`) : "";
+    const sugestao = !locked && temSugestao(r) ? `<div class="sugestao">🔎 auditor sugere: <b>${esc(r.sugestao_nome || r.auditoria.primaria)}</b>${r.sugestao_sec_nome ? ` + ${esc(r.sugestao_sec_nome)}` : ""}${r.auditoria.nota ? ` — ${esc(r.auditoria.nota)}` : ""} <button class="btn sm c-sug" title="Aceitar a sugestão do auditor (tecla S)">aceitar sugestão</button></div>` : "";
     const btnOk = nc || locked || r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
     return `<tr class="${cls}" data-rid="${r.rid}" tabindex="0">
       <td>${btnOk}</td>
-      <td><div class="txt-resp${r.texto.length > 280 ? " longa" : ""}" title="${r.texto.length > 280 ? "clique para ver a resposta inteira" : ""}">${esc(r.texto)}</div>${r.justificativa ? `<small>IA: ${esc(r.justificativa)}</small>` : ""}${r.alertas && !nc ? `<br><span class="pill warn">${esc(r.alertas)}</span>` : ""}${r.corrigido_de_nome ? `<br><small>a IA tinha posto: ${esc(r.corrigido_de_nome)}</small>` : ""}</td>
+      <td><div class="txt-resp${r.texto.length > 280 ? " longa" : ""}" title="${r.texto.length > 280 ? "clique para ver a resposta inteira" : ""}">${esc(r.texto)}</div>${just}${sugestao}${r.alertas && !nc ? `<br><span class="pill warn">${esc(r.alertas)}</span>` : ""}${r.corrigido_de_nome ? `<br><small>a IA tinha posto: ${esc(r.corrigido_de_nome)}</small>` : ""}</td>
       <td class="num">${r.n}</td>
       <td><select class="cat c-prim">${nc ? `<option value="" selected>— escolha —</option>` : ""}${optCat(r.primaria, null)}</select></td>
       <td><select class="cat c-sec" ${nc ? "disabled" : ""}>${optCat(r.secundaria, "— nenhuma —")}</select></td>
@@ -469,7 +625,10 @@ function renderCodificacao() {
       <select id="c-sit">
         <option value="">todas as situações</option>
         <option value="pendente" ${f.situacao === "pendente" ? "selected" : ""}>a conferir</option>
-        <option value="confirmada" ${f.situacao === "confirmada" ? "selected" : ""}>confirmadas ✓</option>
+        <option value="confirmada" ${f.situacao === "confirmada" ? "selected" : ""}>confirmadas ✓ (todas)</option>
+        <option value="humano" ${f.situacao === "humano" ? "selected" : ""}>confirmadas por pessoas</option>
+        <option value="auto" ${f.situacao === "auto" ? "selected" : ""}>confirmadas automaticamente ⚡</option>
+        <option value="discorda" ${f.situacao === "discorda" ? "selected" : ""}>auditor discordou 🔎</option>
         <option value="corrigida" ${f.situacao === "corrigida" ? "selected" : ""}>corrigidas por você</option>
         <option value="nao" ${f.situacao === "nao" ? "selected" : ""}>não classificadas</option>
       </select>
@@ -483,7 +642,7 @@ function renderCodificacao() {
     ${chipsCat}
     <table id="tab-cod"><thead><tr><th style="width:44px" title="Confirmar que a IA acertou">OK</th><th>Resposta <small>(e justificativa da IA)</small></th><th class="num" style="width:40px">n</th><th style="width:18%">Categoria principal</th><th style="width:16%">Secundária</th><th class="num" style="width:54px">Conf.</th><th style="width:19%">Comentário para a IA</th><th style="width:96px">Situação</th></tr></thead><tbody>${rows}</tbody></table>
     ${todas.length > vis.length ? `<div class="tools"><button class="btn" id="c-mais">Mostrar mais ${Math.min(POR_PAGINA, todas.length - vis.length)}</button><span class="small">${todas.length - vis.length} restantes</span></div>` : ""}
-    <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha da tabela primeiro): <kbd>↑</kbd><kbd>↓</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>C</kbd> escrever comentário · <kbd>1</kbd>–<kbd>9</kbd> trocar a categoria principal pelo código.</div>
+    <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha da tabela primeiro): <kbd>↑</kbd><kbd>↓</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>C</kbd> escrever comentário · <kbd>1</kbd>–<kbd>9</kbd> trocar a categoria principal pelo código · <kbd>S</kbd> aceitar a sugestão do auditor.</div>
     <div class="small">Mudar a categoria vale na hora (fica marcada como sua). ✓ = a IA acertou. Um comentário não muda nada sozinho: vira instrução obrigatória quando você clica em <b>Reclassificar comentadas</b>.</div>`;
 }
 function proximaLinha(tr, passo) {
@@ -548,6 +707,7 @@ function bindCodificacao() {
         if (r.revisao === "pendente") salvar({ validado: true }, "Confirmada ✓", true);
         else proximaLinha(tr, 1)?.focus();
       } else if (e.key.toLowerCase() === "c" && !com.disabled) { e.preventDefault(); com.focus(); }
+      else if (e.key.toLowerCase() === "s" && temSugestao(r)) { e.preventDefault(); aceitarSugestao(); }
       else if (/^[1-9]$/.test(e.key)) {
         const cat = catsValidas().find((c) => c.codigo === +e.key);
         if (cat && cat.codigo !== r.primaria) { e.preventDefault(); salvar({ primaria: cat.codigo }, `Categoria principal: ${cat.nome}`); }
@@ -559,6 +719,10 @@ function bindCodificacao() {
     com.onchange = () => salvar({ comentario: com.value }, com.value.trim() ? "Comentário salvo — clique em 'Reclassificar comentadas' para a IA aplicar" : "Comentário removido");
     com.addEventListener("focus", () => { com.rows = 3; }); com.addEventListener("blur", () => { com.rows = 1; });
     ok?.addEventListener("click", () => salvar({ validado: r.revisao !== "confirmada" }, r.revisao === "confirmada" ? "Confirmação desfeita" : "Confirmada ✓"));
+    // aceitar a sugestão do auditor = correção feita por você (vai para o fim, como as conferidas)
+    const aceitarSugestao = () => salvar({ primaria: r.auditoria.primaria, secundaria: r.auditoria.secundaria ?? null },
+      `Sugestão do auditor aceita: ${r.sugestao_nome || r.auditoria.primaria}`, true);
+    tr.querySelector(".c-sug")?.addEventListener("click", aceitarSugestao);
   }
 }
 
@@ -1004,7 +1168,11 @@ function desenharLinhaUso(U, J, met) {
 function usoEficiencia(U, R) {
   const tudo = U.serie_hora.reduce(usoSoma, usoZero()), Q = R ? R.perguntas : [];
   const soma = (k) => Q.reduce((a, q) => a + (q[k] || 0), 0);
-  const cod = soma("n_codificadas"), rev = soma("n_revisadas"), aprov = Q.filter((q) => q.codificacao === "aprovado").length;
+  // quem conferiu (de usage.py): pessoas separadas do aceite automático e das sugestões do auditor
+  const CF_ = Object.values(U.conferencia || {}).reduce((a, c) => { for (const [k, v] of Object.entries(c)) a[k] = (a[k] || 0) + v; return a; }, {});
+  const auto = CF_.confirmadas_auto || 0, adotadas = CF_.sugestoes_adotadas || 0, auditadas = CF_.auditadas || 0;
+  const cod = soma("n_codificadas"), aprov = Q.filter((q) => q.codificacao === "aprovado").length;
+  const rev = U.conferencia ? (CF_.confirmadas_humano || 0) + (CF_.corrigidas_humano || 0) : soma("n_revisadas");
   const aval = soma("n_avaliadas_ia"), acerto = aval ? Q.reduce((a, q) => a + (q.acerto_ia || 0) * (q.n_avaliadas_ia || 0), 0) / aval : null;
   const medalha = (v, ouro, prata, menorMelhor = false) => v == null ? null
     : (menorMelhor ? v <= ouro : v >= ouro) ? { ic: "🥇", nome: "ouro", cls: "ouro" } : (menorMelhor ? v <= prata : v >= prata) ? { ic: "🥈", nome: "prata", cls: "prata" } : { ic: "🥉", nome: "bronze", cls: "bronze" };
@@ -1016,7 +1184,8 @@ function usoEficiencia(U, R) {
     { ic: "🔤", t: "Tokens por resposta", v: tokResp == null ? "–" : fmtN(Math.round(tokResp)), d: "gastos classificando, por resposta classificada · menor é melhor", m: medalha(tokResp, 150, 400, true) },
     { ic: "💰", t: "Custo por 1.000 respostas", v: mil == null ? "–" : fmtBRL(mil), d: "custo total da IA ÷ respostas classificadas", m: null },
     { ic: "🏁", t: "Tokens por pergunta aprovada", v: aprov ? fmtCompacto(tokAprov / aprov) : "–", d: aprov ? `${aprov} pergunta${aprov > 1 ? "s" : ""} aprovada${aprov > 1 ? "s" : ""}` : "nenhuma pergunta aprovada ainda", m: null },
-    { ic: "👀", t: "Conferência humana", v: cod ? pct(rev, cod) : "–", d: `${fmtN(rev)} de ${fmtN(cod)} classificadas conferidas`, m: cod ? medalha(rev / cod, 0.3, 0.1) : null },
+    { ic: "👀", t: "Conferência humana", v: cod ? pct(rev, cod) : "–", d: `${fmtN(rev)} de ${fmtN(cod)} classificadas conferidas por pessoas (sem as automáticas)`, m: cod ? medalha(rev / cod, 0.3, 0.1) : null },
+    { ic: "⚡", t: "Supervisão por IA", v: fmtN(auto), d: `confirmadas sozinhas (confiança alta + auditor concordou) · ${fmtN(auditadas)} auditadas · ${fmtN(adotadas)} sugestões do auditor adotadas`, m: null },
   ];
   const semana = usoJanela(U, "7d").tot;
   const conquistas = [

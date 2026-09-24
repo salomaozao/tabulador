@@ -31,10 +31,12 @@ import llm
 import llm_cli
 import load
 import nuvem
+import perfil
 import progresso
 import projetos
 import report
 import resumo_geral
+import supervisao as SUP
 import usage
 import variables as V
 
@@ -87,6 +89,7 @@ def _payload_pergunta(qid: str) -> dict:
         "n_alertas": sum(1 for r in itens if r.get("alertas") and r.get("alertas") != "não codificado"),
         "n_comentarios_pendentes": sum(1 for r in itens if r.get("comentario_pendente")),
         "revisao": CD.resumo_revisao(qid) if cod else None,
+        "conferencia": SUP.conferencia(cod["itens"]) if cod else None,
     }
 
 
@@ -765,6 +768,58 @@ def api_validar(qid):
         return jsonify(out)
     except Exception as e:
         return _erro(e)
+
+
+@app.get("/api/pergunta/<qid>/perfil")
+def api_perfil(qid):
+    """Janela de aprovação: por categoria, exemplos, pendentes e o perfil de quem citou vs. a base da pergunta."""
+    try:
+        return jsonify(perfil.perfil(qid))
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/pergunta/<qid>/auto-aceitar")
+def api_auto_aceitar(qid):
+    """{limiar?: 0.85, exigir_auditoria?: true} confirma sozinho o que tem confiança alta (e auditor concordando)."""
+    try:
+        d = request.get_json(silent=True) or {}
+        with _lock:
+            r = SUP.auto_aceitar(qid, float(d.get("limiar", SUP.LIMIAR_PADRAO)), bool(d.get("exigir_auditoria", True)))
+        out = _payload_pergunta(qid)
+        out["auto"] = r
+        return jsonify(out)
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/pergunta/<qid>/desfazer-auto")
+def api_desfazer_auto(qid):
+    try:
+        with _lock:
+            n = SUP.desfazer_auto(qid)
+        out = _payload_pergunta(qid)
+        out["alterados"] = n
+        return jsonify(out)
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/pergunta/<qid>/auditar")
+def api_auditar(qid):
+    """{provedor, modelo, escopo: 'pendentes'|'todas', aceitar?: bool, limiar?} -> outra IA confere a classificação."""
+    try:
+        d = request.get_json(silent=True) or {}
+        passos = [("ia", "O auditor (outra IA) confere cada resposta classificada", 12), ("gravar", "Gravar a auditoria")]
+        with _lock, progresso.operacao(f"Auditando com outra IA · {qid}", passos):
+            r = SUP.auditar(qid, d.get("provedor") or None, d.get("modelo") or None, d.get("escopo", "pendentes"))
+            if d.get("aceitar"):
+                r["auto"] = SUP.auto_aceitar(qid, float(d.get("limiar", SUP.LIMIAR_PADRAO)))
+        out = _payload_pergunta(qid)
+        out["auditoria"] = r
+        return jsonify(out)
+    except Exception as e:
+        return _erro(e, 500)
 
 
 @app.post("/api/pergunta/<qid>/recodificar")

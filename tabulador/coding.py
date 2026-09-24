@@ -339,14 +339,14 @@ def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", c
         item["origem"] = "humano"
         item["confianca"] = 1.0
         item["revisado_em"] = agora
-        item.pop("validado", None)
+        for c in ("validado", "validado_em", "validado_por"):
+            item.pop(c, None)
     elif validado is not None:
         if validado:
-            item["validado"] = True
-            item["validado_em"] = agora
+            item["validado"], item["validado_em"], item["validado_por"] = True, agora, "humano"
         else:
-            item.pop("validado", None)
-            item.pop("validado_em", None)
+            for c in ("validado", "validado_em", "validado_por"):
+                item.pop(c, None)
     cod["status"] = "rascunho"
     CF._gravar(qid, "codificacao.json", cod)
     return item
@@ -364,11 +364,11 @@ def validar(qid: str, rids: list[int], valor: bool = True) -> int:
         if item["rid"] not in alvo or item.get("primaria") is None or item.get("origem") == "humano":
             continue
         if valor and not item.get("validado"):
-            item["validado"], item["validado_em"] = True, agora
+            item["validado"], item["validado_em"], item["validado_por"] = True, agora, "humano"
             n += 1
         elif not valor and item.get("validado"):
-            item.pop("validado", None)
-            item.pop("validado_em", None)
+            for c in ("validado", "validado_em", "validado_por"):
+                item.pop(c, None)
             n += 1
     if n:
         cod["status"] = "rascunho"
@@ -447,6 +447,11 @@ def tabela(qid: str) -> pd.DataFrame:
             "respondent_ids": r["respondent_ids"],
             "revisao": situacao_revisao(i),
             "validado_por": i.get("validado_por"),
+            # segundo codificador (auditor): sugestão quando discorda; e o que a IA tinha posto, se a sugestão foi adotada
+            "auditoria": i.get("auditoria"),
+            "sugestao_nome": nomes.get((i.get("auditoria") or {}).get("primaria")) if (i.get("auditoria") or {}).get("ok") is False else None,
+            "sugestao_sec_nome": nomes.get((i.get("auditoria") or {}).get("secundaria")) if (i.get("auditoria") or {}).get("ok") is False else None,
+            "ia_original_nome": nomes.get((i.get("ia_original") or {}).get("primaria")) if i.get("ia_original") else None,
             "corrigido_de_nome": nomes.get(i.get("corrigido_de")) if i.get("corrigido_de") is not None else None,
         })
     return pd.DataFrame(linhas)

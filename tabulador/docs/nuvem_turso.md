@@ -64,6 +64,37 @@ máquina — útil para testar sem afetar o banco de todo mundo.
 Nunca cole essas credenciais em conversa, planilha ou commit — elas dão acesso de leitura/escrita ao
 banco inteiro. Tanto o `.env` local quanto o da pasta compartilhada já ficam fora do Git.
 
+**Atenção:** o `tabulador/.env` local **vence** o da equipe. Se uma máquina tiver credenciais próprias
+no `.env` local, ela usa esse banco, não o da equipe. Para todos verem os mesmos dados, as credenciais
+do `.env` da equipe precisam ser **as mesmas** do banco que tem os dados (hoje, as do `.env` local do
+Gabriel). A outra saída é apagar as duas linhas do `.env` local de cada máquina.
+
+## 4. Subir para a nuvem um projeto que já estava em andamento no disco
+
+Se a revisão foi feita com a nuvem desligada (arquivos em `output/perguntas/`), suba uma vez
+(rode dentro da pasta `tabulador`, com o Python do ambiente do Tabulador):
+
+```
+python nuvem.py -p sesi status                 # o que o projeto tem na nuvem
+python nuvem.py -p sesi backup                 # copia a nuvem para output/_backup/nuvem_<data>.json
+python nuvem.py -p sesi subir                  # sobe output/perguntas/* e confere arquivo por arquivo
+python nuvem.py -p sesi subir --limpar-antes   # idem, apagando antes o que o projeto tinha na nuvem
+```
+
+`subir` sempre faz o backup antes. Foi assim que o SESI foi para a nuvem em 24/09 (32 arquivos, 8 perguntas).
+
+## Cuidados
+
+- **Uma pessoa por pergunta de cada vez.** Cada pergunta é um arquivo inteiro no banco, e a última
+  gravação vence. Se duas pessoas revisarem a mesma pergunta ao mesmo tempo, uma apaga o que a outra fez.
+  Perguntas diferentes ao mesmo tempo não têm problema.
+- **O que fica local:** a planilha-fonte (pelo OneDrive), `output/base/` e os resultados (planilha final,
+  codebook, cruzamentos, consumo). Na primeira vez, cada pessoa clica em **Recarregar planilha**.
+  Os resultados são gerados na máquina de quem clicar em "Atualizar".
+- **Testes e modo teste nunca usam o banco real**: com `TABULADOR_OUTPUT` definido ou no modo teste,
+  o app grava só localmente, a não ser que o endereço seja um banco local de teste (`file:...`).
+  Antes de 24/09 isso não existia, e a suíte de testes chegou a gravar dados falsos no projeto "sesi".
+
 ## Como funciona por baixo (se quiser entender ou depurar)
 
 Todo arquivo que antes ia para `output/perguntas/<pergunta>/*.json` vira uma linha da tabela `blobs`
