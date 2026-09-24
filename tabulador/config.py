@@ -59,6 +59,12 @@ for _env in ENV_EQUIPE:
         break
     if _env.exists():
         load_dotenv(_env)
+# ---- nuvem (Turso/libSQL) ---------------------------------------------------
+# Se preenchidas, os arquivos por pergunta (respostas, frame, codificação...) passam a ser lidos e
+# gravados no banco em nuvem em vez de em disco — ver docs/nuvem_turso.md para criar o banco.
+TURSO_URL = os.getenv("TABULADOR_TURSO_URL") or None
+TURSO_TOKEN = os.getenv("TABULADOR_TURSO_TOKEN") or None
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
 # provedores compatíveis com a API da OpenAI (Gemini, Groq, OpenRouter, DeepSeek...): muda só a URL

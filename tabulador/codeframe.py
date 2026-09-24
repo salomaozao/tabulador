@@ -19,6 +19,7 @@ from datetime import datetime
 import config
 import llm
 import load
+import nuvem
 import progresso
 import variables as V
 
@@ -49,12 +50,23 @@ def pasta(qid: str):
 
 
 def _ler(qid: str, nome: str) -> dict | None:
+    if nuvem.ativa():
+        return nuvem.ler(config.PROJETO, qid, nome)
     p = pasta(qid) / nome
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
 
 
 def _gravar(qid: str, nome: str, dados: dict) -> None:
+    if nuvem.ativa():
+        nuvem.gravar(config.PROJETO, qid, nome, dados)
+        return
     (pasta(qid) / nome).write_text(json.dumps(dados, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def _existe(qid: str, nome: str) -> bool:
+    if nuvem.ativa():
+        return nuvem.existe(config.PROJETO, qid, nome)
+    return (pasta(qid) / nome).exists()
 
 
 def eh_nsnr(texto: str) -> bool:
@@ -403,7 +415,7 @@ def _cat(f: dict, ref) -> dict:
 
 
 def classificacao_iniciada(qid: str) -> bool:
-    return (pasta(qid) / "codificacao.json").exists()
+    return _existe(qid, "codificacao.json")
 
 
 def _status_apos_edicao(qid: str) -> str:
