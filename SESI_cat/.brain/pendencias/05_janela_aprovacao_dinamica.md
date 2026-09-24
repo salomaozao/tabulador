@@ -23,9 +23,17 @@ Calibração (Q4, Q30, Q32, Q33, 1.223 respostas auditadas), discordância do au
 ## O que fazer
 1. Botão "Aceitar alta confiança" na pergunta (usa `supervisor.cmd_auto_aceitar`) e mostrar
    `n_confirmadas_auto` separado das conferências humanas (o `resumo_revisao` já devolve).
+   Confirmado com o Gabriel (24/09): é para manter exatamente como já aparece hoje no SESI —
+   aprovações/confirmações automáticas e correções vindas da auditoria da IA revisora contam como
+   uma forma de feedback também, não só as confirmações humanas manuais.
 2. Janela de aprovação por categoria: nome, definição, n, % e **perfil de quem citou**
    (Grupo NPS, satisfação geral, intenção de manter, escola) contra o total, mais 5 exemplos.
    Aprovar/mesclar/renomear dali mesmo.
 3. Mostrar a sugestão do auditor (`auditoria`, `ia_original`) na linha da resposta, com um atalho
    para "aceitar sugestão".
 4. Auditoria por um segundo provedor (outro modelo) direto da interface.
+5. **Novo (pedido do Gabriel, 24/09):** contabilizar na aba/API de uso (`usage.py`, `/api/usage`)
+   as confirmações automáticas (`validado_por: "auto"`) e as chamadas do auditor/segundo codificador
+   separadamente das confirmações humanas manuais — hoje `usage.py` não distingue `validado_por`,
+   então esse consumo de chamadas de IA fica misturado com o resto. Verificado em 24/09: ainda não
+   implementado.
