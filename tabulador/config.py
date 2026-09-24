@@ -55,10 +55,19 @@ ENV_EQUIPE = [
     for sub in ("V3", "CategorizadorDeRespostasAbertas1")
 ]
 for _env in ENV_EQUIPE:
-    if os.getenv("OPENAI_API_KEY"):
-        break
+    # não para no primeiro .env com OPENAI_API_KEY: outras variáveis da equipe (ex.: nuvem, abaixo)
+    # podem estar num arquivo mais adiante na lista, e load_dotenv nunca sobrescreve o que já existe.
     if _env.exists():
         load_dotenv(_env)
+# ---- nuvem (Turso/libSQL) ---------------------------------------------------
+# Mesma lógica da chave de IA acima: se a equipe colocar TABULADOR_TURSO_URL/_TOKEN no .env
+# compartilhado do SharePoint (ENV_EQUIPE), todo mundo com o atalho do OneDrive já nasce plugado
+# no banco em nuvem, sem configurar nada. .env local (gravado pela tela de configuração) tem
+# prioridade, para quem quiser um banco próprio (ex.: testes). Sem nenhum dos dois, comportamento
+# padrão: arquivo local, como sempre. Ver docs/nuvem_turso.md para criar o banco e onde colar.
+TURSO_URL = os.getenv("TABULADOR_TURSO_URL") or None
+TURSO_TOKEN = os.getenv("TABULADOR_TURSO_TOKEN") or None
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
 # provedores compatíveis com a API da OpenAI (Gemini, Groq, OpenRouter, DeepSeek...): muda só a URL

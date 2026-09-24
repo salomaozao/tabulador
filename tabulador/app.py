@@ -30,6 +30,7 @@ import exportar
 import llm
 import llm_cli
 import load
+import nuvem
 import progresso
 import projetos
 import report
@@ -79,7 +80,7 @@ def _payload_pergunta(qid: str) -> dict:
         "instrucoes": CF.instrucoes(qid),
         "respostas": {k: v for k, v in (resp or {}).items() if k != "respostas"},
         "frame": frame,
-        "pode_desfazer_refino": (CF.pasta(qid) / "frame_anterior.json").exists(),
+        "pode_desfazer_refino": CF._existe(qid, "frame_anterior.json"),
         "codificacao": {k: v for k, v in (cod or {}).items() if k != "itens"} if cod else None,
         "itens": itens,
         "contagens": {str(k): v for k, v in contagens.items()},
@@ -409,8 +410,9 @@ def api_gerar_todos():
 
 
 # ----------------------------------------------------------------------------- API: zona de perigo
-# Nada é apagado de verdade: os arquivos vão para uma lixeira dentro da pasta de resultados
-# (output/_lixeira/<data>_<o que>/), de onde podem ser recuperados copiando de volta.
+# Modo arquivo local: nada é apagado de verdade, vai para uma lixeira dentro da pasta de resultados
+# (output/_lixeira/<data>_<o que>/), de onde pode ser recuperado copiando de volta. Modo nuvem: a
+# codificação/frames apagados saem do banco na hora, sem lixeira (ver _apagar_pergunta).
 ARQ_CLASSIFICACAO = ["codificacao.json", "revisao.xlsx", "relatorio.html"]
 ARQ_CATEGORIAS = ["frame.json", "frame_proposto.json", "frame_anterior.json"]
 
@@ -431,9 +433,16 @@ def _tirar_da_base(qids: list[str]) -> None:
 
 
 def _apagar_pergunta(qid: str, o_que: str, destino: Path) -> list[str]:
+    """Os *.json (codificação, frames) são os que o modo nuvem guarda no banco — lá são apagados
+    de vez, sem lixeira (ver docs/nuvem_turso.md). revisao.xlsx/relatorio.html são sempre locais
+    (relatórios gerados) e continuam indo para a lixeira local em qualquer modo."""
     nomes = ARQ_CLASSIFICACAO + (ARQ_CATEGORIAS if o_que == "tudo" else [])
     movidos = []
     for nome in nomes:
+        if nuvem.ativa() and nome.endswith(".json"):
+            if CF._remover(qid, nome):
+                movidos.append(nome)
+            continue
         p = CF.pasta(qid) / nome
         if p.exists():
             (destino / qid).mkdir(parents=True, exist_ok=True)
