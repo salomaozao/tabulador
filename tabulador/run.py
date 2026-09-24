@@ -1,4 +1,4 @@
-"""CLI unificado do pipeline (projeto ativo; troque com --projeto sesi|assertiva antes do comando).
+"""CLI unificado do pipeline (projeto ativo; troque com --projeto sesi antes do comando).
 
   python run.py --projeto sesi status
   python run.py load [--sem-telefone]                    lê a planilha-fonte -> output/base/

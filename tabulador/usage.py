@@ -38,7 +38,7 @@ USD_BRL = float(os.getenv("TABULADOR_USD_BRL", "5.40"))
 # com frequência; confira no site do provedor e ajuste aqui se precisar). None = sem limite diário
 # fixo conhecido (cobrança por uso, como OpenAI/DeepSeek, ou provedor personalizado).
 LIMITES_DIARIOS = {
-    "gemini": 250,
+    "gemini": 20,  # plano gratuito do gemini-2.5-flash (429 visto em 24/09)
     "groq": 1000,
     "openrouter": 50,
     "deepseek": None,

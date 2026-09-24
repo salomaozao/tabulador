@@ -4,7 +4,7 @@ Cada projeto é uma pasta com um `projeto.py` (planilha-fonte, contexto para a I
 filtros, banners) ou um `projeto.json` declarativo (criado pelo assistente "Novo projeto";
 formato em novo_projeto/FORMATO.md). A lista fica em `projetos.json` (caminhos relativos a esta pasta):
 
-  {"ativo": "sesi", "projetos": {"assertiva": "projetos/assertiva", "sesi": "../SESI_cat"}}
+  {"ativo": "sesi", "projetos": {"sesi": "../SESI_cat"}}
 
 O projeto ativo é escolhido por, nesta ordem: argumento de `ativar()`, variável de ambiente
 TABULADOR_PROJETO, campo "ativo" do projetos.json, primeiro da lista.
@@ -27,7 +27,7 @@ _modulos: dict = {}
 def _registro() -> dict:
     if ARQUIVO.exists():
         return json.loads(ARQUIVO.read_text(encoding="utf-8"))
-    return {"ativo": "assertiva", "projetos": {"assertiva": "projetos/assertiva"}}
+    return {"ativo": "sesi", "projetos": {"sesi": "../SESI_cat"}}
 
 
 def pasta(slug: str) -> Path:

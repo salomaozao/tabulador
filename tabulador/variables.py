@@ -1,7 +1,7 @@
 """Mapa Canônico de Variáveis do projeto ATIVO.
 
 O conteúdo (PERGUNTAS, FILTROS, BACKCODING, DERIVADAS, BANNERS_PADRAO...) vem do `projeto.py` do
-projeto ativado em `projetos.py` (ex.: projetos/assertiva/projeto.py, SESI_cat/projeto.py). Este
+projeto ativado em `projetos.py` (ex.: SESI_cat/projeto.py). Este
 módulo só repassa esses nomes (`V.PERGUNTAS` lê o projeto ativo) e guarda os utilitários comuns.
 
 Tipos de pergunta:
