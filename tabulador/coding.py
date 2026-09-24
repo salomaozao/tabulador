@@ -394,17 +394,20 @@ def resumo_revisao(qid: str) -> dict:
     itens = {i["rid"]: i for i in cod["itens"] if i.get("primaria") is not None}
     n_unicas = len(dados["respostas"])
     confirmadas = sum(1 for i in itens.values() if situacao_revisao(i) == "confirmada")
+    # confirmadas pelo supervisor.py (alta confiança + auditoria) não medem o acerto da IA
+    auto = sum(1 for i in itens.values() if situacao_revisao(i) == "confirmada" and i.get("validado_por") == "auto")
     corrigidas = sum(1 for i in itens.values() if situacao_revisao(i) == "corrigida")
     corrigidas_ia = sum(1 for i in itens.values() if situacao_revisao(i) == "corrigida" and "corrigido_de" in i)
-    avaliadas = confirmadas + corrigidas_ia
+    avaliadas = confirmadas - auto + corrigidas_ia
     return {
         "n_unicas": n_unicas,
         "n_codificadas": len(itens),
         "n_faltantes": max(0, n_unicas - len(itens)),
         "n_confirmadas": confirmadas,
+        "n_confirmadas_auto": auto,
         "n_corrigidas": corrigidas,
         "n_revisadas": confirmadas + corrigidas,
-        "acerto_ia": round(confirmadas / avaliadas, 3) if avaliadas else None,
+        "acerto_ia": round((confirmadas - auto) / avaliadas, 3) if avaliadas else None,
         "n_avaliadas_ia": avaliadas,
     }
 

@@ -1,4 +1,3 @@
-
 Aqui tem a transcrição integral da conversa do vídeo:
 
 **Jucimara:** Aí, tipo assim, no decorrer, né, do campo, eu vou alimentando ela^^.

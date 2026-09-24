@@ -41,7 +41,7 @@ def definir_saida(pasta: Path) -> None:
 # ---- LLM -------------------------------------------------------------------
 # tabulador/.env (gravado pela tela "Configurar IA") tem prioridade; projetos podem indicar
 # um .env extra (ex.: o do categorizador legado, somente leitura) via ENV_EXTRA.
-load_dotenv(ENV_FILE)
+load_dotenv(ENV_FILE, override=True)  # o .env do Tabulador vence variáveis do sistema (ex.: OPENAI_API_KEY de outro provedor)
 # o programa se chamava Categorizador: variáveis antigas (CATEGORIZADOR_*) continuam valendo
 for _k in [k for k in os.environ if k.startswith("CATEGORIZADOR_")]:
     os.environ.setdefault("TABULADOR_" + _k[len("CATEGORIZADOR_"):], os.environ[_k])
