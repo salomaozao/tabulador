@@ -13,6 +13,13 @@ const state = { view: "painel", status: null, qid: null, P: null, filtro: filtro
 let progT, relT, busyIni = 0;
 const fmtDur = (s) => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m ? `${m}min ${String(s % 60).padStart(2, "0")}s` : `${s}s`; };
 const fmtMil = (n) => (n >= 1000 ? (n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil" : String(n));
+function fmtDataHora(iso) {
+  if (!iso) return "nunca";
+  const d = new Date(iso), hoje = new Date();
+  const mesmoDia = d.toDateString() === hoje.toDateString();
+  const hora = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  return mesmoDia ? `às ${hora}` : `${d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} às ${hora}`;
+}
 function barraBusy(pct) {
   const b = $("#busy-bar");
   b.classList.toggle("indet", pct == null);
@@ -87,9 +94,16 @@ async function carregarStatus() {
   state.status = await api("/api/status");
   const S = state.status, b = S.base;
   $("#sel-projeto").innerHTML = S.projetos.map((p) => `<option value="${esc(p.slug)}" ${p.slug === S.projeto.slug ? "selected" : ""} ${p.ok ? "" : "disabled"}>${esc(p.nome)}${p.ok ? "" : " (erro)"}</option>`).join("");
-  $("#base-status").innerHTML = b.carregada
-    ? `Base: <b>${b.n}</b> respondentes · atualizada ${b.atualizada_em} · IA: ${S.ia.tem_chave ? esc(S.ia.modelo) + (S.ia.provedor !== "openai" ? ` <small>(${esc(S.ia.provedor)})</small>` : "") : '<span class="pill warn">sem chave</span>'}`
-    : `<span class="pill warn">Base ainda não carregada</span>`;
+  $("#ia-status").innerHTML = `IA: ${S.ia.tem_chave ? esc(S.ia.modelo) + (S.ia.provedor !== "openai" ? ` <small>(${esc(S.ia.provedor)})</small>` : "") : '<span class="pill warn">sem chave</span>'}`;
+  const n = S.nuvem, ns = $("#nuvem-status");
+  const dotCls = n.conectada ? "ok" : n.ativa ? "warn" : "off";
+  const texto = n.conectada ? `sincronizado ${fmtDataHora(n.ultima_sincronizacao)}` : n.ativa ? "nuvem configurada, sem conexão" : "sem nuvem (local)";
+  const titulo = n.conectada ? "Conectado ao banco compartilhado da equipe — a revisão de todo mundo aparece aqui."
+    : n.ativa ? "TABULADOR_TURSO_URL configurado, mas não deu para conectar agora — a revisão pode estar desatualizada."
+    : "Sem TABULADOR_TURSO_URL configurado: a revisão fica só nesta máquina, não sincroniza com a equipe.";
+  ns.className = "nuvem-status muted " + dotCls;
+  ns.title = titulo;
+  ns.innerHTML = `<span class="dot ${dotCls}"></span>${esc(texto)}`;
   document.title = `${S.ia.modo_teste ? "🧪 TESTE · " : ""}Tabulador · ${S.projeto.nome}`;
   aplicarModoTeste(); medirTopo();
   renderSidebar();
@@ -149,6 +163,7 @@ function renderPainel() {
   $("#main").innerHTML = `
     <h1>${esc(S.projeto.nome)}</h1>
     <div class="small">Planilha-fonte: ${esc(b.fonte)}</div>
+    ${b.carregada ? `<div class="small">Base: <b>${b.n}</b> respondentes · atualizada ${b.atualizada_em}</div>` : ""}
     ${avisos.join("")}
     <h2>Perguntas abertas <small>${aprovadas} de ${S.perguntas.length} aprovadas</small></h2>
     <div class="cards">${cards}</div>
@@ -168,7 +183,35 @@ async function abrir(qid) {
     try { state.P = await post(`/api/pergunta/${qid}/preparar`, {}, "Lendo respostas da base…"); } catch (e) { /* base não carregada */ }
   }
   prepararItens(); render(); window.scrollTo(0, 0);
+  iniciarPresenca(qid);
 }
+
+// ---------------------------------------------------------------- presença (avisa edição simultânea)
+let presencaT = null, presencaQid = null;
+function pararPresenca() {
+  clearInterval(presencaT); presencaT = null;
+  if (presencaQid) { try { navigator.sendBeacon(`/api/pergunta/${presencaQid}/presenca/sair`); } catch (e) { /* ignora */ } }
+  presencaQid = null;
+}
+async function presencaTick(qid) {
+  try {
+    const r = await (await fetch(`/api/pergunta/${qid}/presenca`, { method: "POST" })).json();
+    if (state.qid === qid) renderPresenca(r.outros || []);
+  } catch (e) { /* heartbeat: falha em silêncio, não atrapalha a revisão */ }
+}
+function iniciarPresenca(qid) {
+  pararPresenca(); presencaQid = qid;
+  presencaTick(qid);
+  presencaT = setInterval(() => presencaTick(qid), 12000);
+}
+function renderPresenca(outros) {
+  const el = $("#presenca-banner");
+  if (!el) return;
+  el.innerHTML = outros.length
+    ? `<div class="aviso">⚠ ${outros.length === 1 ? `<b>${esc(outros[0])}</b> também está` : `<b>${outros.map(esc).join(", ")}</b> também estão`} revisando esta pergunta agora. Evitem mexer ao mesmo tempo: quem gravar por último apaga a mudança do outro.</div>`
+    : "";
+}
+window.addEventListener("beforeunload", pararPresenca);
 async function refresh(payload) {
   state.P = payload || (await api(`/api/pergunta/${state.qid}`)); prepararItens();
   manterScroll(render); carregarStatus();
@@ -228,6 +271,7 @@ function render() {
     <h1>${esc(P.rotulo)} <small>${esc(P.qid)}</small></h1>
     <div class="muted">${esc(R.enunciado || "")}</div>
     <div class="small">Quem respondeu: ${esc(R.base_descricao || "")}</div>
+    <div id="presenca-banner"></div>
     <div class="tiles">
       <div class="tile"><div class="l">Responderam</div><div class="v">${R.n_respondeu ?? "–"}</div></div>
       <div class="tile"><div class="l">Respostas únicas</div><div class="v">${R.n_unicas ?? "–"}</div></div>
@@ -1576,6 +1620,7 @@ $("#btn-novo").onclick = () => { if (location.hash === "#novo") renderNovo(); el
 // ---------------------------------------------------------------- rotas / boot
 function rota() {
   const h = decodeURIComponent(location.hash.slice(1));
+  if (state.qid && h !== state.qid) pararPresenca();
   if (h === "novo") renderNovo();
   else if (h === "usage") renderUsage();
   else if (h === "resultados") renderResultados();

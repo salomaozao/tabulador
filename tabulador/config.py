@@ -7,6 +7,7 @@ somente leitura.
 """
 from __future__ import annotations
 
+import getpass
 import os
 from pathlib import Path
 
@@ -70,6 +71,13 @@ for _env in ENV_EQUIPE:
 # padrão: arquivo local, como sempre. Ver docs/nuvem_turso.md para criar o banco e onde colar.
 TURSO_URL = os.getenv("TABULADOR_TURSO_URL") or None
 TURSO_TOKEN = os.getenv("TABULADOR_TURSO_TOKEN") or None
+
+# Quem está usando esta máquina (login do Windows, a não ser que o .env diga outro nome) — só para
+# avisar sobre edição simultânea na mesma pergunta (presença via nuvem), nunca vai para a base.
+try:
+    USUARIO = os.getenv("TABULADOR_USUARIO") or getpass.getuser()
+except Exception:
+    USUARIO = os.getenv("TABULADOR_USUARIO") or "alguém"
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")

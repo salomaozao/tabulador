@@ -29,6 +29,18 @@ CREATE TABLE IF NOT EXISTS blobs (
 )
 """
 
+_CRIAR_TABELA_PRESENCA = """
+CREATE TABLE IF NOT EXISTS presenca (
+    projeto TEXT NOT NULL,
+    qid TEXT NOT NULL,
+    usuario TEXT NOT NULL,
+    visto_em TEXT NOT NULL,
+    PRIMARY KEY (projeto, qid, usuario)
+)
+"""
+
+JANELA_PRESENCA_S = 30  # o navegador manda um heartbeat a cada 12s: folga para perder 1 batida
+
 _lock = threading.Lock()
 _cliente = None
 _tabela_pronta = False
@@ -67,6 +79,7 @@ def _obter_cliente():
             )
         if not _tabela_pronta:
             _cliente.execute(_CRIAR_TABELA)
+            _cliente.execute(_CRIAR_TABELA_PRESENCA)
             _tabela_pronta = True
     return _cliente
 
@@ -113,6 +126,36 @@ def fechar() -> None:
     if _cliente is not None:
         _cliente.close()
     _cliente, _tabela_pronta = None, False
+
+
+def status(projeto: str) -> dict:
+    """Para o topo da interface: se a nuvem está configurada, se a conexão está de pé agora e a
+    última vez que ALGUÉM (qualquer pessoa da equipe) gravou algo desse projeto."""
+    if not ativa():
+        return {"ativa": False, "conectada": False, "ultima_sincronizacao": None}
+    try:
+        rs = _obter_cliente().execute("SELECT MAX(atualizado_em) FROM blobs WHERE projeto = ?", [projeto])
+        return {"ativa": True, "conectada": True, "ultima_sincronizacao": rs.rows[0][0] if rs.rows else None}
+    except Exception:
+        return {"ativa": True, "conectada": False, "ultima_sincronizacao": None}
+
+
+def marcar_presenca(projeto: str, qid: str, usuario: str) -> list[str]:
+    """'usuario' está vendo 'qid' agora: grava o heartbeat e devolve quem MAIS (excluindo ele) está
+    ativo na mesma pergunta agora, para avisar sobre edição simultânea (a última gravação vence)."""
+    agora = datetime.now(timezone.utc)
+    c = _obter_cliente()
+    c.execute(
+        "INSERT INTO presenca (projeto, qid, usuario, visto_em) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT (projeto, qid, usuario) DO UPDATE SET visto_em = excluded.visto_em",
+        [projeto, qid, usuario, agora.isoformat()],
+    )
+    rs = c.execute("SELECT usuario, visto_em FROM presenca WHERE projeto = ? AND qid = ?", [projeto, qid])
+    return [u for u, visto in rs.rows if u != usuario and (agora - datetime.fromisoformat(visto)).total_seconds() <= JANELA_PRESENCA_S]
+
+
+def sair_presenca(projeto: str, qid: str, usuario: str) -> None:
+    _obter_cliente().execute("DELETE FROM presenca WHERE projeto = ? AND qid = ? AND usuario = ?", [projeto, qid, usuario])
 
 
 def listar(projeto: str) -> list[dict]:

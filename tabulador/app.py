@@ -170,6 +170,7 @@ def api_status():
             "projetos": projetos.listar(),
             "ia": _ia(),
             "base": _status_base(),
+            "nuvem": nuvem.status(config.PROJETO),
             "perguntas": perguntas,
             "resultados": _resultados(),
         })
@@ -858,6 +859,27 @@ def api_item(qid, rid):
                 validado=d.get("validado"),
             )
         return jsonify({"ok": True, "item": item})
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/pergunta/<qid>/presenca")
+def api_presenca(qid):
+    """Heartbeat de 'estou vendo esta pergunta agora': devolve quem mais está, para avisar sobre
+    edição simultânea (nuvem: a última gravação vence o arquivo inteiro)."""
+    try:
+        outros = nuvem.marcar_presenca(config.PROJETO, qid, config.USUARIO) if nuvem.ativa() else []
+        return jsonify({"usuario": config.USUARIO, "outros": outros})
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/pergunta/<qid>/presenca/sair")
+def api_presenca_sair(qid):
+    try:
+        if nuvem.ativa():
+            nuvem.sair_presenca(config.PROJETO, qid, config.USUARIO)
+        return jsonify({"ok": True})
     except Exception as e:
         return _erro(e)
 

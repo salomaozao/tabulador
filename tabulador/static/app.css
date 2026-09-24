@@ -10,6 +10,11 @@ a{color:inherit}
 
 .top{display:flex;align-items:center;gap:16px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:5}
 .brand{font-weight:600;font-size:15px;flex:1}
+.nuvem-status{display:flex;align-items:center;gap:6px;font-size:12px;white-space:nowrap}
+.nuvem-status .dot{width:8px;height:8px;border-radius:50%;background:var(--text-3);flex:none}
+.nuvem-status .dot.ok{background:var(--ok);box-shadow:0 0 0 3px var(--ok-bg)}
+.nuvem-status .dot.warn{background:var(--warn);box-shadow:0 0 0 3px var(--warn-bg)}
+.nuvem-status .dot.off{background:var(--text-3)}
 .layout{display:grid;grid-template-columns:280px 1fr;min-height:calc(100vh - var(--topo,49px))}
 .side{border-right:1px solid var(--border);padding:12px;background:var(--surface-2);position:sticky;top:var(--topo,49px);height:calc(100vh - var(--topo,49px));overflow:auto}
 .side-title{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin:4px 8px 8px}

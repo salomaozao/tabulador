@@ -99,6 +99,36 @@ class TestNuvem(unittest.TestCase):
         self.assertIsNone(CF._ler("Q1", "frame_anterior.json"))
         self.assertFalse(CF._remover("Q1", "frame_anterior.json"))  # já não existe: sem erro, False
 
+    def test_status_ativa_e_conectada(self):
+        nuvem.gravar("projeto_teste", "Q1", "codificacao.json", {"a": 1})
+        s = nuvem.status("projeto_teste")
+        self.assertEqual(s, {"ativa": True, "conectada": True, "ultima_sincronizacao": s["ultima_sincronizacao"]})
+        self.assertIsNotNone(s["ultima_sincronizacao"])
+
+    def test_status_sem_gravacoes_ainda(self):
+        s = nuvem.status("projeto_teste")
+        self.assertEqual(s, {"ativa": True, "conectada": True, "ultima_sincronizacao": None})
+
+    def test_status_inativa(self):
+        config.TURSO_URL = None
+        self.assertEqual(nuvem.status("projeto_teste"), {"ativa": False, "conectada": False, "ultima_sincronizacao": None})
+
+    def test_presenca_ve_outro_usuario_mas_nao_a_si_mesmo(self):
+        nuvem.marcar_presenca("projeto_teste", "Q1", "gabriel")
+        outros = nuvem.marcar_presenca("projeto_teste", "Q1", "joao")
+        self.assertEqual(outros, ["gabriel"])
+        self.assertEqual(nuvem.marcar_presenca("projeto_teste", "Q1", "gabriel"), ["joao"])
+
+    def test_presenca_nao_mistura_pergunta_nem_projeto(self):
+        nuvem.marcar_presenca("projeto_teste", "Q1", "gabriel")
+        self.assertEqual(nuvem.marcar_presenca("projeto_teste", "Q2", "joao"), [])
+        self.assertEqual(nuvem.marcar_presenca("outro_projeto", "Q1", "joao"), [])
+
+    def test_sair_presenca_remove(self):
+        nuvem.marcar_presenca("projeto_teste", "Q1", "gabriel")
+        nuvem.sair_presenca("projeto_teste", "Q1", "gabriel")
+        self.assertEqual(nuvem.marcar_presenca("projeto_teste", "Q1", "joao"), [])
+
     def test_remover_local_quando_inativa(self):
         config.TURSO_URL = None
         qid = "Q_local_remover"
