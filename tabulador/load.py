@@ -141,8 +141,12 @@ def _ler_aba(nome_aba: str):
     ws = wb[nome_aba]
     linhas = list(ws.iter_rows(values_only=True))
     wb.close()
-    h1, h2 = list(linhas[0]), list(linhas[1])
-    dados = [list(r) for r in linhas[2:] if any(v is not None and str(v).strip() != "" for v in r)]
+    # cabeçalho duplo do SurveyMonkey (pergunta / opção); às vezes há linhas extras acima dele
+    # (ex.: códigos das colunas), então procura a linha que tem 'respondent_id' nas 10 primeiras
+    i = next((k for k, r in enumerate(linhas[:10])
+              if any(str(v).strip().lower() == "respondent_id" for v in r if v is not None)), 0)
+    h1, h2 = list(linhas[i]), list(linhas[i + 1])
+    dados = [list(r) for r in linhas[i + 2:] if any(v is not None and str(v).strip() != "" for v in r)]
     return h1, h2, dados
 
 

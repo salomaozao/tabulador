@@ -49,9 +49,12 @@ for _k in [k for k in os.environ if k.startswith("CATEGORIZADOR_")]:
 # "IA - Jumppi/Categorização de Respostas Abertas", sincronizada como atalho no OneDrive
 # ...\OneDrive - INSTITUTO OLHAR - PESQUISA E INFORMACAO ESTRATEGICA LTDA: primeira pasta acima com "Shortcuts"
 _ONEDRIVE = next((p for p in BASE_DIR.parents if (p / "Shortcuts").is_dir()), BASE_DIR.parent)
+# o atalho do SharePoint aparece com nomes diferentes conforme a pessoa o adicionou: a pasta
+# "Categorização de Respostas Abertas" (com "Projeto IA" dentro) ou direto a pasta "Projeto IA"
 ENV_EQUIPE = [
-    p / "Projeto IA" / sub / ".env"
-    for p in sorted((_ONEDRIVE / "Shortcuts").glob("*Categoriza*Respostas Abertas*"))
+    base / sub / ".env"
+    for base in ([p / "Projeto IA" for p in sorted((_ONEDRIVE / "Shortcuts").glob("*Categoriza*Respostas Abertas*"))]
+                 + sorted((_ONEDRIVE / "Shortcuts").glob("*Projeto IA*")))
     for sub in ("V3", "CategorizadorDeRespostasAbertas1")
 ]
 for _env in ENV_EQUIPE:

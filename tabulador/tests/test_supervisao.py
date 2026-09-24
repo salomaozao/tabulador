@@ -150,6 +150,23 @@ class TestSupervisao(unittest.TestCase):
         for cat in P["categorias"]:
             self.assertFalse(any((itens[r].get("auditoria") or {}).get("ok") is False for r in cat["pendentes"]))
 
+    def test_7_api(self):
+        import app as A
+        c = A.app.test_client()
+        r = c.post(f"/api/pergunta/{QID}/auditar", json={"escopo": "todas"})
+        self.assertEqual(r.status_code, 200, r.get_json())
+        self.assertIn("auditoria", r.get_json())
+        r = c.post(f"/api/pergunta/{QID}/auto-aceitar", json={"limiar": 0.85}).get_json()
+        self.assertIn("aceitas", r["auto"])
+        self.assertIn("conferencia", r)
+        r = c.post(f"/api/pergunta/{QID}/desfazer-auto").get_json()
+        self.assertEqual(r["alterados"], r["auto"]["aceitas"] if "auto" in r else r["alterados"])
+        p = c.get(f"/api/pergunta/{QID}/perfil").get_json()
+        self.assertTrue(p["classificada"])
+        u = c.get("/api/usage").get_json()
+        self.assertIn(QID, u["conferencia"])
+        self.assertEqual(c.get("/api/pergunta/XXX/perfil").status_code >= 400, True)
+
     def test_6_consumo_e_troca_de_provedor(self):
         self.assertEqual(usage._operacao("audit_Q4_3"), ("auditoria", "Q4"))
         antes = (config.OPENAI_PROVEDOR, config.OPENAI_MODEL, config.OPENAI_BASE_URL, config.OPENAI_API_KEY)
