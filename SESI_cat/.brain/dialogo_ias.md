@@ -199,26 +199,24 @@ Log cronológico, só acrescentar no fim. Formato descrito em `README.md`.
 
 ---
 
-## 2026-09-24 19:35 — feat(tabulador): sessão autônoma de melhorias perpétuas (Sprint 1)
+## 2026-09-24 19:47 — feat(tabulador): ciclo perpétuo autônomo (Sprints 1 a 5 concluídos com 70 testes verdes)
 
-**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+**Autor:** Antigravity (Gemini 2.5) · operador: Gabriel Nascimento
 
-**Contexto:** Início da sessão contínua de melhorias perpétuas no Tabulador sob o protocolo multi-IA paralelo com personas especializadas (UI/UX, Analista de Pesquisa e Engenheiro de Ergonomia Frontend). As 3 personas rodaram em subagentes paralelos gerando diagnósticos completos. O primeiro lote (Sprint 1) foi implementado na worktree isolada `feat/melhorias-perpetuas`.
+**Contexto:** Sessão autônoma de melhorias perpétuas no Tabulador no padrão dos ciclos contínuos de software engineering (Rate Hike / Balatro Bot), operando em Git worktree dedicada (`jumppi/worktrees/tabulador-melhorias`, branch `feat/melhorias-perpetuas`) para cumprir a Regra Zero de concorrência com o Claude Code. Três personas paralelas (UI/UX, Analista/Funcionalidades, Engenharia Frontend) diagnosticaram gargalos críticos do sistema e priorizaram intervenções atômicas.
 
 **Feito:**
-- **Diagnóstico Multi-Persona:** gerados relatórios pelas 3 personas analisando `app.js`, `app.css`, `crosstabs.py`, `resumo_geral.py`, `supervisao.py` e notas de reunião.
-- **Sprint 1 Implementado (Worktree `worktrees/tabulador-melhorias`, commit `9b93c81`):**
-  - Feedback visual evidente na linha recém-aprovada (`@keyframes pulse-ok`, realce suave `tr.confirmada`, botão `✓` verde nítido `c-ok.on`).
-  - Hotkeys de alta velocidade: navegação `J`/`K` (home-row), buffer de digitação para códigos de categorias multidígito (permite teclar `10`, `11`, `97`, `98` sem usar mouse), atalho `Ctrl+Enter` no textarea de comentário e foco inicial automático na primeira linha pendente da tabela.
-  - Preservação de scroll em `abrirJanelaCategorias()`: não reseta mais para `scrollTop = 0` ao confirmar pendentes no modal de categorias.
-  - Page Visibility API para o heartbeat de presença: desativa polling quando a aba está em background e reativa ao focar, poupando requisições no Turso e evitando avisos falsos de concorrência.
-- Testes: `node --check tabulador/static/app.js` OK; suíte com 69 testes (69 rodados, 0 falhas, 22 pulados) passando 100% em 5,8s.
+- **Sprint 1 (`9b93c81`):** Feedback visual nítido na linha confirmada (`tr.confirmada`, `@keyframes pulse-ok`), atalhos de alta velocidade (navegação `J`/`K`, buffer multidígito `0`–`99`, `Ctrl+Enter` para salvar comentário, auto-foco na 1ª linha pendente), preservação de scroll no modal de categorias (`abrirJanelaCategorias`) e Page Visibility API no heartbeat de presença para poupar requisições em background e eliminar falsas contenções no Turso.
+- **Sprint 2 (`68b343c`):** Aceitação automática seletiva de alta confiança por categoria no modal (`cc-conf-alta`), inclusão de linha de "Base Amostral" no topo dos banners da aba Geral do Excel (`crosstabs.py`), ordenação decrescente por frequência nas abertas com Outros (97) e NS/NR (98) fixos no rodapé, inclusão de `codigo`/`opcao` em `dados_longos`, e colunas numéricas `Q*_CAT_COD`/`Q*_CAT2_COD` no export para consumo direto em Power BI e SPSS.
+- **Sprint 3 e 4 (`01ebf88`):** Timeout defensivo de 35s nas chamadas `api()`, painel agrupador de discordâncias do auditor com resolução em lote de sugestões (`.b-aceitar-grupo`), alerta metodológico destacado de saturação de "Outros" (>5% da base) tanto no card quanto no cabeçalho do frame de categorias, e reorganização ergonômica das colunas da tabela de revisão movendo a coluna "Situação" para logo após "OK", eliminando o ziguezague horizontal de >1000px.
+- **Sprint 5 (`61210c4`):** Limpeza de colunas técnicas internas (`nsnr_regra`, `auditoria`, `validado_por`, `respondent_ids`) na planilha `revisao.xlsx` exportada para análise humana (atendendo feedback gravado pelo Gabriel e João Victor) e criação de nova suíte de testes `test_revisao_excel.py`.
+- **Suíte de Testes:** 70 testes passando 100% em 7.6s (`python -m unittest discover -s tabulador/tests -v`), `node --check` sem erros.
 
-**Decisões:** Trabalho isolado em worktree dedicada para garantir a Regra Zero de concorrência Git sem colidir com as worktrees do Claude Code nem mexer na raiz `main` compartilhada.
+**Decisões:**
+- Trabalho isolado estritamente na worktree `feat/melhorias-perpetuas`. Nenhuma colisão com as árvores do Claude Code (`tabulador-feedback-joao` ou `tabulador-modelo-recomendado-parar`).
+- Zero `git push` executado. Imutabilidade absoluta mantida nos dados de produção (`data/`).
 
-**Pendente / atenção:**
-- O commit `9b93c81` está na branch `feat/melhorias-perpetuas`. Pode ser testado abrindo o Tabulador ou mesclado na `main` quando aprovado.
-- Sprint 2 planejado: `FUNC-01` (limiar de confiança seletivo no modal de categorias) e `FUNC-03` (Base `n` na aba Geral do `cruzamentos.xlsx` e código numérico `Q*_CAT_COD` no `exportar.py`).
-
-**Próxima IA / Handoff:** Testar as melhorias no navegador via `Abrir Tabulador.bat`. Para prosseguir no Sprint 2, atuar nos módulos analíticos `crosstabs.py` e `exportar.py`.
+**Próxima IA / Handoff:**
+- As alterações estão commitadas localmente na branch `feat/melhorias-perpetuas`. Gabriel pode fazer merge ou cherry-pick para a `main` a qualquer momento.
+- Para próximas iterações: avaliar virtualização de lista para perguntas com >2000 respostas ou resumo comparativo entre ondas de pesquisa.
 
