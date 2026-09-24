@@ -75,9 +75,13 @@ function toast(msg, err = false) {
 }
 async function api(path, opts = {}, msg, progresso = false) {
   if (msg) busy(msg, progresso);
+  const timeoutMs = opts.timeout || 35000;
+  const signal = opts.signal || (AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined);
   try {
-    const r = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts }).catch(() => {
-      // "Failed to fetch": o servidor não respondeu (janela do programa fechada ou reiniciada)
+    const r = await fetch(path, { headers: { "Content-Type": "application/json" }, signal, ...opts }).catch((err) => {
+      if (err?.name === "TimeoutError") {
+        throw new Error(`o servidor demorou mais de ${timeoutMs / 1000}s para responder.`);
+      }
       throw new Error("o Tabulador não respondeu — a janela do programa foi fechada ou reiniciada. Abra-o de novo pelo atalho e recarregue a página.");
     });
     const j = await r.json().catch(() => ({ erro: r.statusText }));
@@ -482,10 +486,13 @@ function cardCategoria(c, D, podeEditar, catsOpc) {
     const t = typeof e === "string" ? e : e.texto, curto = t.length > 140 ? t.slice(0, 140) + "…" : t;
     return `<li title="${esc(t)}">${esc(curto)}${e.n > 1 ? ` <small>×${e.n}</small>` : ""}</li>`;
   }).join("");
+  const isOutros = (c.codigo === 97 || String(c.codigo) === "97" || (c.nome || "").toLowerCase().includes("outros"));
+  const satOutros = isOutros && D.classificada && (c.pct || 0) > 5.0 ? `<span class="pill warn" style="font-weight:600" title="Metodologia: 'Outros' acima de 5% da base requer avaliação e desmembramento">⚠️ Saturação: ${fmt1(c.pct)}% (>5%)</span>` : "";
   const pend = (c.pendentes || []).length;
   return `<div class="card-cat" data-cod="${c.codigo}">
     <div class="cc-cab"><span class="cc-cod">${c.codigo}</span>
       ${podeEditar && !c.fixa ? `<input class="inline cc-nome" value="${esc(c.nome)}">` : `<b>${esc(c.nome)}</b>`}
+      ${satOutros}
       ${D.classificada ? `<span class="cc-n"><b>${fmtN(c.n || 0)}</b> <small>${c.pct != null ? fmt1(c.pct) + "%" : ""}</small></span>` : ""}</div>
     ${podeEditar && !c.fixa ? `<textarea class="inline cc-def" rows="2">${esc(c.definicao)}</textarea>` : `<div class="small">${esc(c.definicao)}</div>`}
     ${exemplos ? `<ul class="cc-ex">${exemplos}</ul>` : ""}
@@ -507,12 +514,25 @@ async function abrirJanelaCategorias() {
   const catsOpc = (excl) => catsValidas().filter((c) => !c.fixa && c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
   const b = D.base || {};
   const cats = D.classificada ? [...D.categorias].sort((x, y) => (y.n || 0) - (x.n || 0)) : D.categorias;
+  const catOutros = D.classificada ? cats.find((c) => (c.codigo === 97 || String(c.codigo) === "97" || (c.nome || "").toLowerCase().includes("outros")) && (c.pct || 0) > 5.0) : null;
+  const alertaOutros = catOutros ? `
+    <div class="box-instr" style="background:var(--warn-bg);border:1px solid var(--warn);margin-bottom:12px">
+      ⚠️ <b>Atenção Metodológica:</b> A categoria "<b>${esc(catOutros.nome)}</b>" (código ${catOutros.codigo}) concentra <b>${fmt1(catOutros.pct)}%</b> das menções (${catOutros.n} respostas). O padrão analítico recomenda desmembrar categorias residuais que superam 5% da base. Avalie os exemplos abaixo para criar novas categorias antes de aprovar.
+    </div>` : "";
   abrirJanela(`Categorias · ${qid}`, `
+    ${alertaOutros}
     ${D.classificada ? `<div class="small cc-base">Perfil comparado com <b>todos que responderam ${esc(qid)}</b> (n=${fmtN(b.n)}${b.nps ? `; NPS ${fmt1(b.nps.nps, 0)}` : ""}${b.satisfacao != null ? `; satisfação ${fmt1(b.satisfacao, 2)}` : ""}) — não com o total da pesquisa. ▲▼ = acima/abaixo da base.</div>`
       : `<div class="info">Ainda não há respostas classificadas: aqui aparecem a definição e os exemplos que a IA propôs. Depois de classificar uma amostra, esta janela mostra também o <b>perfil de quem citou</b> cada categoria.</div>`}
     <div class="cards-cat">${cats.map((c) => cardCategoria(c, D, podeEditar, catsOpc)).join("")}</div>
     ${F && !frameOk ? `<div class="dlg-acoes"><button class="btn ok" type="button" id="jc-aprovar">✓ Aprovar categorias</button></div>` : ""}`);
-  const depois = async (payload, msg) => { if (payload) refresh(payload); if (msg) toast(msg); await abrirJanelaCategorias(); };
+  const depois = async (payload, msg) => {
+    const scrollSalvo = $("#jan-corpo")?.scrollTop || 0;
+    if (payload) refresh(payload);
+    if (msg) toast(msg);
+    await abrirJanelaCategorias();
+    const novoCorpo = $("#jan-corpo");
+    if (novoCorpo && scrollSalvo) novoCorpo.scrollTop = scrollSalvo;
+  };
   document.querySelectorAll(".card-cat").forEach((card) => {
     const cod = card.dataset.cod, c = D.categorias.find((x) => String(x.codigo) === cod);
     card.querySelector(".cc-nome")?.addEventListener("change", async (e) => depois(await post(`/api/pergunta/${qid}/frame/categoria`, { codigo: cod, nome: e.target.value }), "Categoria renomeada"));
@@ -645,6 +665,34 @@ function renderCodificacao() {
       `<button type="button" class="chip-cat${String(c.codigo) === f.cat ? " on" : ""}" data-cat="${c.codigo}">${esc(c.nome)} <b>${conta.get(c.codigo)}</b></button>`).join("");
     return chips ? `<div class="subfiltro">Refinar por categoria: ${chips}${f.cat ? `<button type="button" class="chip-cat limpar" id="c-cat-limpar">✕ limpar</button>` : ""}</div>` : "";
   })();
+  const painelDiscordancias = (() => {
+    if (f.situacao !== "discorda") return "";
+    const disc = P.itens.filter(temSugestao);
+    if (!disc.length) return "";
+    const grupos = new Map();
+    for (const r of disc) {
+      const chave = `${r.primaria}->${r.auditoria.primaria}`;
+      if (!grupos.has(chave)) {
+        grupos.set(chave, {
+          deCod: r.primaria,
+          paraCod: r.auditoria.primaria,
+          deNome: nomeCat(r.primaria) || String(r.primaria),
+          paraNome: nomeCat(r.auditoria.primaria) || String(r.auditoria.primaria),
+          rids: []
+        });
+      }
+      grupos.get(chave).rids.push(r.rid);
+    }
+    const cards = [...grupos.values()].map((g) => `
+      <div class="card-sug-grupo" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;background:var(--surface-2);border-radius:8px;margin-bottom:6px;font-size:13px">
+        <div>
+          De: <b>${g.deCod}. ${esc(g.deNome)}</b> ➔ Sugestão: <b style="color:var(--accent)">${g.paraCod}. ${esc(g.paraNome)}</b>
+          <span class="small muted">(${g.rids.length} resposta${g.rids.length > 1 ? "s" : ""})</span>
+        </div>
+        <button type="button" class="btn sm ok b-aceitar-grupo" data-paracod="${g.paraCod}" data-rids="${g.rids.join(',')}">✓ Aceitar todas (${g.rids.length})</button>
+      </div>`).join("");
+    return `<div class="box-instr" style="margin:10px 0"><b>Discordâncias do auditor agrupadas</b><div style="margin-top:8px">${cards}</div></div>`;
+  })();
   const rows = vis.map((r) => {
     const nc = r.primaria == null;
     const cls = [r.alertas && !nc ? "alerta" : "", r.revisao === "corrigida" ? "humano" : "", r.revisao === "confirmada" ? "confirmada" : "", r.comentario_pendente ? "pendente" : "", nc ? "naocod" : ""].join(" ");
@@ -658,13 +706,13 @@ function renderCodificacao() {
     const btnOk = nc || locked || r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
     return `<tr class="${cls}" data-rid="${r.rid}" tabindex="0">
       <td>${btnOk}</td>
+      <td>${origem}</td>
       <td><div class="txt-resp${r.texto.length > 280 ? " longa" : ""}" title="${r.texto.length > 280 ? "clique para ver a resposta inteira" : ""}">${esc(r.texto)}</div>${just}${sugestao}${r.alertas && !nc ? `<br><span class="pill warn">${esc(r.alertas)}</span>` : ""}${r.corrigido_de_nome ? `<br><small>a IA tinha posto: ${esc(r.corrigido_de_nome)}</small>` : ""}</td>
       <td class="num">${r.n}</td>
       <td><select class="cat c-prim">${nc ? `<option value="" selected>— escolha —</option>` : ""}${optCat(r.primaria, null)}</select></td>
       <td><select class="cat c-sec" ${nc ? "disabled" : ""}>${optCat(r.secundaria, "— nenhuma —")}</select></td>
       <td class="num">${r.confianca == null || nc ? "" : Number(r.confianca).toFixed(2)}</td>
       <td><textarea class="inline c-com" rows="1" ${nc ? "disabled" : ""} placeholder="O que está errado? (a IA reclassifica)">${esc(r.comentario || "")}</textarea>${r.comentario && !r.comentario_pendente ? `<small>já aplicado</small>` : ""}</td>
-      <td>${origem}</td>
     </tr>`;
   }).join("");
   const pendVis = vis.filter((r) => r.revisao === "pendente").length;
@@ -690,9 +738,10 @@ function renderCodificacao() {
       ${!locked && pendVis ? `<button class="btn sm" id="c-ok-todas" title="Confirma as respostas 'a conferir' mostradas nesta página">✓ Confirmar as ${pendVis} mostradas</button>` : ""}
     </div>
     ${chipsCat}
-    <table id="tab-cod"><thead><tr><th style="width:44px" title="Confirmar que a IA acertou">OK</th><th>Resposta <small>(e justificativa da IA)</small></th><th class="num" style="width:40px">n</th><th style="width:18%">Categoria principal</th><th style="width:16%">Secundária</th><th class="num" style="width:54px">Conf.</th><th style="width:19%">Comentário para a IA</th><th style="width:96px">Situação</th></tr></thead><tbody>${rows}</tbody></table>
+    ${painelDiscordancias}
+    <table id="tab-cod"><thead><tr><th style="width:44px" title="Confirmar que a IA acertou">OK</th><th style="width:96px">Situação</th><th>Resposta <small>(e justificativa da IA)</small></th><th class="num" style="width:40px">n</th><th style="width:18%">Categoria principal</th><th style="width:16%">Secundária</th><th class="num" style="width:54px">Conf.</th><th style="width:19%">Comentário para a IA</th></tr></thead><tbody>${rows}</tbody></table>
     ${todas.length > vis.length ? `<div class="tools"><button class="btn" id="c-mais">Mostrar mais ${Math.min(POR_PAGINA, todas.length - vis.length)}</button><span class="small">${todas.length - vis.length} restantes</span></div>` : ""}
-    <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha da tabela primeiro): <kbd>↑</kbd><kbd>↓</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>C</kbd> escrever comentário · <kbd>1</kbd>–<kbd>9</kbd> trocar a categoria principal pelo código · <kbd>S</kbd> aceitar a sugestão do auditor.</div>
+    <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha primeiro): <kbd>↑</kbd>/<kbd>↓</kbd> ou <kbd>J</kbd>/<kbd>K</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>0</kbd>–<kbd>99</kbd> código da categoria · <kbd>C</kbd> comentar (<kbd>Ctrl+Enter</kbd> salva) · <kbd>S</kbd> aceitar sugestão do auditor.</div>
     <div class="small">Mudar a categoria vale na hora (fica marcada como sua). ✓ = a IA acertou. Um comentário não muda nada sozinho: vira instrução obrigatória quando você clica em <b>Reclassificar comentadas</b>.</div>`;
 }
 function proximaLinha(tr, passo) {
@@ -728,13 +777,35 @@ function bindCodificacao() {
     const r = await post(`/api/pergunta/${P.qid}/validar`, { rids, valor: true }, "Confirmando…");
     toast(`${r.alterados} resposta(s) confirmada(s)`); refresh(r);
   });
+  document.querySelectorAll(".b-aceitar-grupo").forEach((btn) => {
+    btn.onclick = async () => {
+      const rids = btn.dataset.rids.split(",").map(Number);
+      const paraCod = +btn.dataset.paracod;
+      btn.disabled = true;
+      btn.textContent = "Gravando…";
+      for (const rid of rids) {
+        const item = state.P.itens.find((i) => i.rid === rid);
+        const res = await post(`/api/pergunta/${P.qid}/item/${rid}`, {
+          primaria: paraCod,
+          secundaria: item?.auditoria?.secundaria ?? null,
+          validado: true
+        });
+        aplicarItem(item, res.item);
+      }
+      recalcular();
+      toast(`${rids.length} sugestão(ões) aceita(s) em lote`);
+      manterScroll(render);
+    };
+  });
   const locked = P.codificacao.status === "aprovado";
+  let numBuf = "", numTimer = null;
   for (const tr of $("#tab-cod tbody").rows) {
     const rid = +tr.dataset.rid, r = state.P.itens.find((i) => i.rid === rid);
     const prim = tr.querySelector(".c-prim"), sec = tr.querySelector(".c-sec"), com = tr.querySelector(".c-com"), ok = tr.querySelector(".c-ok");
     if (locked) { prim.disabled = sec.disabled = com.disabled = true; continue; }
     const salvar = async (body, msg, proxima = false) => {
       const antes = r.revisao, seguinte = proximaLinha(tr, 1)?.dataset.rid;
+      tr.classList.add("just-confirmed");
       const res = await post(`/api/pergunta/${P.qid}/item/${rid}`, body);
       aplicarItem(r, res.item); recalcular();
       // recém-confirmada vai para o fim e a seguinte sobe para o lugar dela (o mouse não precisa se mexer)
@@ -751,19 +822,36 @@ function bindCodificacao() {
     };
     tr.onkeydown = (e) => {
       if (e.target !== tr) return;  // digitando num campo: não interfere
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); proximaLinha(tr, e.key === "ArrowDown" ? 1 : -1)?.focus(); }
+      const keyLow = e.key.toLowerCase();
+      if (e.key === "ArrowDown" || keyLow === "j") { e.preventDefault(); proximaLinha(tr, 1)?.focus(); }
+      else if (e.key === "ArrowUp" || keyLow === "k") { e.preventDefault(); proximaLinha(tr, -1)?.focus(); }
       else if (e.key === "Enter" && r.primaria != null) {
         e.preventDefault();
         if (r.revisao === "pendente") salvar({ validado: true }, "Confirmada ✓", true);
         else proximaLinha(tr, 1)?.focus();
-      } else if (e.key.toLowerCase() === "c" && !com.disabled) { e.preventDefault(); com.focus(); }
-      else if (e.key.toLowerCase() === "s" && temSugestao(r)) { e.preventDefault(); aceitarSugestao(); }
-      else if (/^[1-9]$/.test(e.key)) {
-        const cat = catsValidas().find((c) => c.codigo === +e.key);
-        if (cat && cat.codigo !== r.primaria) { e.preventDefault(); salvar({ primaria: cat.codigo }, `Categoria principal: ${cat.nome}`); }
+      } else if (keyLow === "c" && !com.disabled) { e.preventDefault(); com.focus(); }
+      else if (keyLow === "s" && temSugestao(r)) { e.preventDefault(); aceitarSugestao(); }
+      else if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        clearTimeout(numTimer);
+        numBuf += e.key;
+        numTimer = setTimeout(() => {
+          const cod = +numBuf;
+          numBuf = "";
+          const cat = catsValidas().find((c) => c.codigo === cod);
+          if (cat && cat.codigo !== r.primaria) { salvar({ primaria: cat.codigo }, `Categoria principal: ${cat.codigo} · ${cat.nome}`); }
+          else if (!cat) { toast(`Categoria ${cod} não encontrada`, true); }
+        }, 360);
       }
     };
-    com.addEventListener("keydown", (e) => { if (e.key === "Escape") { com.blur(); tr.focus(); } });
+    com.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { com.blur(); tr.focus(); }
+      else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault(); com.blur();
+        salvar({ comentario: com.value }, com.value.trim() ? "Comentário salvo" : "Comentário removido");
+        tr.focus();
+      }
+    });
     prim.onchange = () => prim.value && salvar({ primaria: prim.value }, "Categoria principal alterada");
     sec.onchange = () => salvar({ secundaria: sec.value || null }, "Categoria secundária alterada");
     com.onchange = () => salvar({ comentario: com.value }, com.value.trim() ? "Comentário salvo — clique em 'Reclassificar comentadas' para a IA aplicar" : "Comentário removido");
@@ -773,6 +861,11 @@ function bindCodificacao() {
     const aceitarSugestao = () => salvar({ primaria: r.auditoria.primaria, secundaria: r.auditoria.secundaria ?? null },
       `Sugestão do auditor aceita: ${r.sugestao_nome || r.auditoria.primaria}`, true);
     tr.querySelector(".c-sug")?.addEventListener("click", aceitarSugestao);
+  }
+  // Auto-foco na primeira linha pendente se nenhuma estiver focada
+  if (!document.activeElement || document.activeElement === document.body) {
+    const pend = document.querySelector("#tab-cod tbody tr:not(.confirmada):not(.hid)");
+    if (pend) pend.focus({ preventScroll: true });
   }
 }
 
