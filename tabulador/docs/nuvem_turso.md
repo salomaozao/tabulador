@@ -37,21 +37,32 @@ turso db show tabulador-jumppi --url
 turso db tokens create tabulador-jumppi
 ```
 
-## 3. Colocar no Tabulador
+## 3. Colocar no lugar certo (uma vez só, para todo mundo)
 
-Abra (ou crie a partir de `.env.example`) o arquivo `tabulador/.env` e adicione:
+O Tabulador já sabe achar sozinho a chave da IA da equipe: existe um `.env` compartilhado na pasta
+do SharePoint **"IA - Jumppi/Categorização de Respostas Abertas" → `Projeto IA/V3/.env`**, sincronizada
+como atalho no OneDrive de todo mundo (pasta `Shortcuts`). Quem abre o Tabulador nem sabe que esse
+arquivo existe — ele só funciona.
+
+Colar as duas variáveis **nesse mesmo arquivo** (em vez de no `tabulador/.env` de cada pessoa) faz a
+nuvem funcionar do mesmo jeito plug-and-play: quem já tem o atalho do OneDrive passa a usar o banco
+compartilhado sem tocar em nada, e continua só configurando a chave da IA (se quiser trocar de
+provedor) pela tela "Configurar IA" do próprio app.
 
 ```
 TABULADOR_TURSO_URL=libsql://tabulador-jumppi-<sua-org>.turso.io
 TABULADOR_TURSO_TOKEN=<o token que você copiou>
 ```
 
-Salve, fecha e abre o Tabulador de novo (`Abrir Tabulador.bat`). Pronto — a partir daí a revisão
-daquele projeto lê e grava na nuvem. **Cada pessoa que for usar o mesmo projeto precisa ter as duas
-mesmas variáveis no `.env` dela**, com o mesmo URL e token (é assim que todo mundo cai no mesmo banco).
+Depois de salvar esse arquivo, cada pessoa só precisa fechar e abrir o Tabulador de novo
+(`Abrir Tabulador.bat`) — não precisa reinstalar nem configurar nada localmente.
+
+**Alternativa (banco separado, só para uma máquina/teste):** colar as mesmas duas variáveis no
+`tabulador/.env` local (criado a partir de `.env.example`) sobrepõe o valor da equipe só naquela
+máquina — útil para testar sem afetar o banco de todo mundo.
 
 Nunca cole essas credenciais em conversa, planilha ou commit — elas dão acesso de leitura/escrita ao
-banco inteiro. O `.env` já está no `.gitignore` do Tabulador.
+banco inteiro. Tanto o `.env` local quanto o da pasta compartilhada já ficam fora do Git.
 
 ## Como funciona por baixo (se quiser entender ou depurar)
 
