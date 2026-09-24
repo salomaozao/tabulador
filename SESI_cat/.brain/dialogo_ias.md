@@ -74,3 +74,36 @@ Log cronológico, só acrescentar no fim. Formato descrito em `README.md`.
 - Sem push: a `main` está 3 commits à frente do `origin`, e o ramo remoto `worktree-apresentacao-16h` ainda existe.
 
 **Próxima IA / Handoff:** Perguntar ao Gabriel onde está o script de conversa entre IAs, adaptar o `llm_cli` se preciso, commitar o agy e reiniciar o app. Atualizar a lista de modelos do Gemini, testando cada um com `max_tokens` pequeno. Push só com autorização. As pendências de negócio continuam: PEND-01 (campo até 25/09), PEND-02 (Q30) e PEND-03 (entrega em 28/09).
+
+---
+
+## 2026-09-24 — feat(tabulador): feedbacks do teste de UI com o João + junção das worktrees concorrentes
+
+**Autor:** Claude Sonnet 5 (Claude Code) · operador: Gabriel Nascimento
+
+**Contexto:** Gabriel pediu para ler `.brain/docs/reunioes/23_09_teste_ui_joao.md` junto com uma lista de 7 feedbacks dele sobre o teste de UI (cruzamento de variáveis, botão de aprovar, ordenação/subfiltros, seção "O que as respostas dizem"). Ao mesmo tempo, avisou que outras 2 IAs mexiam no repositório: uma editando `.brain/pendencias/{02,04,05}...md` ao vivo (era o próprio Gabriel, confirmado depois) e outra numa worktree separada (`worktree-turso-db-poc`, prova de conceito de armazenamento em nuvem via Turso/libSQL).
+
+**Feito:**
+- Abri uma worktree isolada (`worktree-tabulador-feedback-joao`) para não colidir com os outros trabalhos em andamento, e um `jumppi/COMUNICACAO_IAS.md` (gitignorado pela allowlist da raiz — fica só local, mas serve de aviso a quem está no mesmo working dir).
+- Implementei 5 dos 7 feedbacks (commit `e25f816`, mesclado em `4da2fec`):
+  - aba **"Geral"** no `cruzamentos.xlsx` (todas as variáveis numa tabela só: Variável | Opção | Total | banners) + seletor de variáveis de cruzamento na aba Resultados (`/api/variaveis-cruzamento`);
+  - botão **"Aprovar e gravar nos resultados"** movido para o fim da tabela de revisão;
+  - ordenar por confiança agora desempata por categoria, mais chips de sub-filtro por categoria nesse modo;
+  - **"Visão geral do projeto"** substitui "O que as respostas dizem": resumo narrativo por IA sob demanda (cache em `resumo_geral.json`, módulo novo `resumo_geral.py`) + temas agregados de todas as perguntas + trechos reais, sem repetir pergunta a pergunta.
+  - Os outros 2 feedbacks (recategorizar só não-validadas; corrigidas por humano irem para o fim junto das confirmadas) já funcionavam — confirmado lendo `coding.py`/`app.js`, sem precisar mudar código.
+- Resolvi PEND-02 e PEND-04 (Gabriel já tinha escrito a resolução inline nos arquivos; só formalizei status/frontmatter) e esclareci o item 1 de PEND-05, acrescentando um item 5 novo (contabilizar na `usage` as confirmações automáticas e as chamadas do auditor — ainda não implementado) — commit `ed1e5c4`.
+- Depois do aviso "já vamos encerrar a outra IA, junte tudo": mesclei `worktree-tabulador-feedback-joao` (`4da2fec`) e `worktree-turso-db-poc` (`5e9ac64`) na `main`, nessa ordem. Ambos os merges foram automáticos, sem conflito (`app.py` e `config.py` foram tocados pelas duas branches, mas em trechos diferentes). Apaguei as duas branches depois do merge.
+- Rodei `python -m py_compile` em todos os módulos tocados pelos dois merges (`app.py`, `crosstabs.py`, `resumo_geral.py`, `config.py`, `codeframe.py`, `nuvem.py`) — OK.
+
+**Decisões:**
+- Não toquei em `coding.py`/`config.py` durante a implementação dos feedbacks (eram os arquivos que a outra IA vinha mexendo antes do commit `726e057`), para reduzir risco de colisão — só entraram na `main` via o merge do `turso-db-poc`.
+- "Visão geral do projeto" não separa mais por pergunta (pedido explícito do Gabriel); o link por pergunta continua existindo na página de cada pergunta (`/relatorio/<qid>`), só saiu da aba Resultados.
+
+**Pendente / atenção:**
+- **Limpeza manual:** `git worktree remove` falhou com "Permission denied" nas duas pastas (`jumppi/.claude/worktrees/turso-db-poc` e `.../tabulador-feedback-joao`), provável lock do OneDrive. Já removi o registro do git (`git worktree list` está limpo) e apaguei `tabulador-feedback-joao` do disco; `turso-db-poc` ficou "Device or resource busy" — precisa fechar o que estiver com um handle aberto nela (ex.: terminal/editor apontando pra lá) e apagar a pasta manualmente.
+- **Suíte de testes:** rodei `python -m unittest discover -s tests -v` depois dos merges e o processo não terminou em 180 s (sem output, possivelmente `test_cli.py` esperando um programa CLI que não está instalado nesta máquina). Não travei a mesclagem por causa disso, já que os `py_compile` e um smoke test isolado da aba "Geral" passaram, mas vale conferir o resultado da suíte antes de confiar cegamente no merge do Turso.
+- Não rodei o app fim a fim (Flask) com a base real do SESI para os 5 feedbacks novos — recomendo abrir o Tabulador e clicar nas telas (Resultados → variáveis de cruzamento e visão geral; tela de revisão → botão de aprovar embaixo e chips de subfiltro) antes de considerar fechado.
+- PEND-05 segue aberta (itens 2, 3, 4 e o novo item 5 de contabilização na usage).
+- Não fiz `git push` (a `main` está à frente do `origin`; só empurro com autorização explícita).
+
+**Próxima IA / Handoff:** conferir o resultado da suíte de testes (`python -m unittest discover -s tests -v`) e investigar por que travou; apagar manualmente a pasta órfã `turso-db-poc` quando não estiver mais em uso; testar as 5 telas novas do Tabulador com a base real do SESI; seguir com os itens 2-5 de PEND-05 quando o Gabriel priorizar.
