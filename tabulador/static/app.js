@@ -212,6 +212,13 @@ function renderPresenca(outros) {
     : "";
 }
 window.addEventListener("beforeunload", pararPresenca);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    pararPresenca();
+  } else if (state.view === "pergunta" && state.qid) {
+    iniciarPresenca(state.qid);
+  }
+});
 async function refresh(payload) {
   state.P = payload || (await api(`/api/pergunta/${state.qid}`)); prepararItens();
   manterScroll(render); carregarStatus();
@@ -511,7 +518,14 @@ async function abrirJanelaCategorias() {
       : `<div class="info">Ainda não há respostas classificadas: aqui aparecem a definição e os exemplos que a IA propôs. Depois de classificar uma amostra, esta janela mostra também o <b>perfil de quem citou</b> cada categoria.</div>`}
     <div class="cards-cat">${cats.map((c) => cardCategoria(c, D, podeEditar, catsOpc)).join("")}</div>
     ${F && !frameOk ? `<div class="dlg-acoes"><button class="btn ok" type="button" id="jc-aprovar">✓ Aprovar categorias</button></div>` : ""}`);
-  const depois = async (payload, msg) => { if (payload) refresh(payload); if (msg) toast(msg); await abrirJanelaCategorias(); };
+  const depois = async (payload, msg) => {
+    const scrollSalvo = $("#jan-corpo")?.scrollTop || 0;
+    if (payload) refresh(payload);
+    if (msg) toast(msg);
+    await abrirJanelaCategorias();
+    const novoCorpo = $("#jan-corpo");
+    if (novoCorpo && scrollSalvo) novoCorpo.scrollTop = scrollSalvo;
+  };
   document.querySelectorAll(".card-cat").forEach((card) => {
     const cod = card.dataset.cod, c = D.categorias.find((x) => String(x.codigo) === cod);
     card.querySelector(".cc-nome")?.addEventListener("change", async (e) => depois(await post(`/api/pergunta/${qid}/frame/categoria`, { codigo: cod, nome: e.target.value }), "Categoria renomeada"));
@@ -686,7 +700,7 @@ function renderCodificacao() {
     ${chipsCat}
     <table id="tab-cod"><thead><tr><th style="width:44px" title="Confirmar que a IA acertou">OK</th><th>Resposta <small>(e justificativa da IA)</small></th><th class="num" style="width:40px">n</th><th style="width:18%">Categoria principal</th><th style="width:16%">Secundária</th><th class="num" style="width:54px">Conf.</th><th style="width:19%">Comentário para a IA</th><th style="width:96px">Situação</th></tr></thead><tbody>${rows}</tbody></table>
     ${todas.length > vis.length ? `<div class="tools"><button class="btn" id="c-mais">Mostrar mais ${Math.min(POR_PAGINA, todas.length - vis.length)}</button><span class="small">${todas.length - vis.length} restantes</span></div>` : ""}
-    <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha da tabela primeiro): <kbd>↑</kbd><kbd>↓</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>C</kbd> escrever comentário · <kbd>1</kbd>–<kbd>9</kbd> trocar a categoria principal pelo código · <kbd>S</kbd> aceitar a sugestão do auditor.</div>
+    <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha primeiro): <kbd>↑</kbd>/<kbd>↓</kbd> ou <kbd>J</kbd>/<kbd>K</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>0</kbd>–<kbd>99</kbd> código da categoria · <kbd>C</kbd> comentar (<kbd>Ctrl+Enter</kbd> salva) · <kbd>S</kbd> aceitar sugestão do auditor.</div>
     <div class="small">Mudar a categoria vale na hora (fica marcada como sua). ✓ = a IA acertou. Um comentário não muda nada sozinho: vira instrução obrigatória quando você clica em <b>Reclassificar comentadas</b>.</div>`;
 }
 function proximaLinha(tr, passo) {
@@ -723,12 +737,14 @@ function bindCodificacao() {
     toast(`${r.alterados} resposta(s) confirmada(s)`); refresh(r);
   });
   const locked = P.codificacao.status === "aprovado";
+  let numBuf = "", numTimer = null;
   for (const tr of $("#tab-cod tbody").rows) {
     const rid = +tr.dataset.rid, r = state.P.itens.find((i) => i.rid === rid);
     const prim = tr.querySelector(".c-prim"), sec = tr.querySelector(".c-sec"), com = tr.querySelector(".c-com"), ok = tr.querySelector(".c-ok");
     if (locked) { prim.disabled = sec.disabled = com.disabled = true; continue; }
     const salvar = async (body, msg, proxima = false) => {
       const antes = r.revisao, seguinte = proximaLinha(tr, 1)?.dataset.rid;
+      tr.classList.add("just-confirmed");
       const res = await post(`/api/pergunta/${P.qid}/item/${rid}`, body);
       aplicarItem(r, res.item); recalcular();
       // recém-confirmada vai para o fim e a seguinte sobe para o lugar dela (o mouse não precisa se mexer)
@@ -745,19 +761,36 @@ function bindCodificacao() {
     };
     tr.onkeydown = (e) => {
       if (e.target !== tr) return;  // digitando num campo: não interfere
-      if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); proximaLinha(tr, e.key === "ArrowDown" ? 1 : -1)?.focus(); }
+      const keyLow = e.key.toLowerCase();
+      if (e.key === "ArrowDown" || keyLow === "j") { e.preventDefault(); proximaLinha(tr, 1)?.focus(); }
+      else if (e.key === "ArrowUp" || keyLow === "k") { e.preventDefault(); proximaLinha(tr, -1)?.focus(); }
       else if (e.key === "Enter" && r.primaria != null) {
         e.preventDefault();
         if (r.revisao === "pendente") salvar({ validado: true }, "Confirmada ✓", true);
         else proximaLinha(tr, 1)?.focus();
-      } else if (e.key.toLowerCase() === "c" && !com.disabled) { e.preventDefault(); com.focus(); }
-      else if (e.key.toLowerCase() === "s" && temSugestao(r)) { e.preventDefault(); aceitarSugestao(); }
-      else if (/^[1-9]$/.test(e.key)) {
-        const cat = catsValidas().find((c) => c.codigo === +e.key);
-        if (cat && cat.codigo !== r.primaria) { e.preventDefault(); salvar({ primaria: cat.codigo }, `Categoria principal: ${cat.nome}`); }
+      } else if (keyLow === "c" && !com.disabled) { e.preventDefault(); com.focus(); }
+      else if (keyLow === "s" && temSugestao(r)) { e.preventDefault(); aceitarSugestao(); }
+      else if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        clearTimeout(numTimer);
+        numBuf += e.key;
+        numTimer = setTimeout(() => {
+          const cod = +numBuf;
+          numBuf = "";
+          const cat = catsValidas().find((c) => c.codigo === cod);
+          if (cat && cat.codigo !== r.primaria) { salvar({ primaria: cat.codigo }, `Categoria principal: ${cat.codigo} · ${cat.nome}`); }
+          else if (!cat) { toast(`Categoria ${cod} não encontrada`, true); }
+        }, 360);
       }
     };
-    com.addEventListener("keydown", (e) => { if (e.key === "Escape") { com.blur(); tr.focus(); } });
+    com.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { com.blur(); tr.focus(); }
+      else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault(); com.blur();
+        salvar({ comentario: com.value }, com.value.trim() ? "Comentário salvo" : "Comentário removido");
+        tr.focus();
+      }
+    });
     prim.onchange = () => prim.value && salvar({ primaria: prim.value }, "Categoria principal alterada");
     sec.onchange = () => salvar({ secundaria: sec.value || null }, "Categoria secundária alterada");
     com.onchange = () => salvar({ comentario: com.value }, com.value.trim() ? "Comentário salvo — clique em 'Reclassificar comentadas' para a IA aplicar" : "Comentário removido");
@@ -768,7 +801,13 @@ function bindCodificacao() {
       `Sugestão do auditor aceita: ${r.sugestao_nome || r.auditoria.primaria}`, true);
     tr.querySelector(".c-sug")?.addEventListener("click", aceitarSugestao);
   }
+  // Auto-foco na primeira linha pendente se nenhuma estiver focada
+  if (!document.activeElement || document.activeElement === document.body) {
+    const pend = document.querySelector("#tab-cod tbody tr:not(.confirmada):not(.hid)");
+    if (pend) pend.focus({ preventScroll: true });
+  }
 }
+
 
 
 // ---------------------------------------------------------------- resultados
