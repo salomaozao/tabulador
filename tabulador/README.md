@@ -12,8 +12,28 @@ as categorias e classifica as respostas; o pesquisador valida tudo pela interfac
    - O navegador abre sozinho em `http://127.0.0.1:5000`. Deixe a janela preta aberta enquanto usa;
      para encerrar, feche-a. Dar dois cliques de novo só reabre o navegador.
 2. Na primeira vez, clique em **⚙ Configurar IA** e cole a chave da OpenAI (fica gravada só neste
-   computador, em `.env`).
+   computador, em `.env`). **Quem já tem o atalho do OneDrive da equipe** (ver "🔑 Chaves" abaixo)
+   pode pular este passo: a chave da equipe é achada sozinha.
 3. No **Painel geral**, clique em "Ler a planilha agora" (se pedir) e escolha uma pergunta.
+
+### 🔑 Chaves (sempre no mesmo lugar)
+
+Toda chave — da IA ou do banco de nuvem — mora num arquivo `.env`. Tem dois níveis, e o Tabulador
+lê os dois (o local vence o da equipe):
+
+- **`.env` da equipe** (SharePoint **"IA - Jumppi/Categorização de Respostas Abertas" →
+  `Projeto IA/V3/.env`**, sincronizado como atalho no OneDrive de todo mundo, pasta `Shortcuts`).
+  É aqui que uma chave **sempre** deve ir quando é para todo mundo usar sem configurar nada: a chave
+  de IA da equipe e as credenciais do banco de nuvem (`TABULADOR_TURSO_URL`/`_TOKEN`, ver "☁ Nuvem"
+  abaixo) vivem juntas nesse mesmo arquivo. Quem tem o atalho não precisa colar chave nenhuma —
+  só abre o Tabulador.
+- **`tabulador/.env` local** (gravado pela tela **⚙ Configurar IA**, ou criado à mão a partir de
+  `.env.example`). Serve para uma chave **só daquela máquina** — testar um provedor de IA diferente,
+  ou (com cuidado) um banco de nuvem separado só para teste. Uma variável no `.env` local sobrepõe a
+  mesma variável do `.env` da equipe **só naquele computador**.
+
+Regra prática: se a chave é para o grupo todo usar do mesmo jeito, vai no `.env` da equipe (uma vez
+só, por quem administra); se é uma chave pessoal ou um teste isolado, vai no `.env` local.
 
 ### O loop de validação (por pergunta)
 
@@ -106,9 +126,12 @@ registrada em `output/base/versoes.json`.
 ### ☁ Nuvem (revisão compartilhada)
 
 Com `TABULADOR_TURSO_URL`/`_TOKEN` configurados, a revisão fica num banco compartilhado, e todos veem
-os mesmos dados. **Uma pessoa por pergunta de cada vez**, porque a última gravação vence. Ver
-[`docs/nuvem_turso.md`](docs/nuvem_turso.md), inclusive como subir um projeto que estava só no disco
-(`python nuvem.py -p sesi subir`).
+os mesmos dados. Na prática, isso já é **comunitário por padrão**: as duas variáveis vivem no `.env`
+da equipe (ver "🔑 Chaves" acima), então quem tem o atalho do OneDrive já usa o banco compartilhado
+sem configurar nada — é o mesmo mecanismo da chave de IA da equipe. **Uma pessoa por pergunta de cada
+vez**, porque a última gravação vence. Ver [`docs/nuvem_turso.md`](docs/nuvem_turso.md), inclusive
+como subir um projeto que estava só no disco (`python nuvem.py -p sesi subir`) e o que uma credencial
+compartilhada dá de acesso (seção "Cuidados").
 
 ### 🧪 Modo teste (sem IA)
 

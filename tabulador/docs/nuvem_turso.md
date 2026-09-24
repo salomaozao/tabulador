@@ -85,6 +85,17 @@ python nuvem.py -p sesi subir --limpar-antes   # idem, apagando antes o que o pr
 
 ## Cuidados
 
+- **A credencial é comunitária de propósito — mas é uma chave de admin do banco inteiro, não por
+  projeto.** É assim que o Tabulador já funciona hoje (mesmo mecanismo do `.env` da equipe usado
+  para a chave de IA): um token só, no `.env` compartilhado, dá o mesmo acesso a todo mundo com o
+  atalho, sem cada pessoa gerar a sua. A troca é que esse token vale para **todos os projetos** do
+  banco (SESI, Assertiva, futuros — ver "Como funciona por baixo"), não só para o que a pessoa está
+  usando: quem tem o token pode ler/escrever a revisão de qualquer projeto, não só do seu. Para o
+  tamanho da equipe hoje isso compensa a simplicidade (zero configuração por pessoa); se algum
+  projeto precisar de um banco isolado de verdade (ex.: cliente pedir segregação), a saída é criar
+  um banco Turso separado só para ele e apontar o `.env` daquele contexto para lá, em vez de tentar
+  segregar por token dentro do mesmo banco. Se um token vazar (colado em chat, planilha, commit),
+  revogue-o no site do Turso e gere outro — ele não expira sozinho.
 - **Uma pessoa por pergunta de cada vez.** Cada pergunta é um arquivo inteiro no banco, e a última
   gravação vence. Se duas pessoas revisarem a mesma pergunta ao mesmo tempo, uma apaga o que a outra fez.
   Perguntas diferentes ao mesmo tempo não têm problema.
