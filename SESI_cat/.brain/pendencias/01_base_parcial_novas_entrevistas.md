@@ -19,3 +19,9 @@ resumo: "A base recebida (3.743 respostas, ~70%) não é a final; devem entrar ~
 ## Ação necessária
 - Ao receber cada nova `base_processamento.xlsx`, trocar o arquivo em `data/` e conferir se o app preserva as categorizações e validações já feitas (casar por `respondent_id`), classificando só as respostas novas.
 - Registrar em `dialogo_ias.md` a data e o N de cada versão da base.
+
+## Atualização (24/09): o app já está pronto para a base nova
+- Achado e corrigido (DEC-03): o rid mudava com a base nova e as classificações cairiam em respostas erradas. Agora cada resposta é identificada pelo texto.
+- Para usar a base nova: troque `data/base_processamento.xlsx` e clique em **Recarregar planilha**. O app mostra, por pergunta, os respondentes novos, as respostas novas sem classificação e as removidas, e registra a versão em `output/base/versoes.json`.
+- Depois, em cada pergunta, clique em **Classificar as restantes**, confira e aprove de novo as que voltaram para revisão.
+- A pendência continua aberta até a base final chegar (fim do campo em 25/09).

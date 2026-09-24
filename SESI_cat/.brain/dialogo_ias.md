@@ -107,3 +107,49 @@ Log cronológico, só acrescentar no fim. Formato descrito em `README.md`.
 - Não fiz `git push` (a `main` está à frente do `origin`; só empurro com autorização explícita).
 
 **Próxima IA / Handoff:** conferir o resultado da suíte de testes (`python -m unittest discover -s tests -v`) e investigar por que travou; apagar manualmente a pasta órfã `turso-db-poc` quando não estiver mais em uso; testar as 5 telas novas do Tabulador com a base real do SESI; seguir com os itens 2-5 de PEND-05 quando o Gabriel priorizar.
+
+---
+
+## 2026-09-24 16:40 — feat(tabulador): rid estável, supervisão na interface, nuvem com dados reais, PEND-01/05/06
+
+**Autor:** Claude Opus 5.5 (Claude Code) · operador: Gabriel Nascimento
+
+**Contexto:** o Gabriel pediu para matar todas as pendências (a PEND-05 era a prioridade), depois commitar, analisar a cobertura de testes e deixar tudo pronto para os colegas usarem ("todos com os mesmos dados; o usuário só executa o Tabulador").
+
+**Feito:**
+- `318074e` **PEND-01, rid estável** (DEC-03). O rid era a posição numa lista ordenada por frequência: uma base nova embaralharia as classificações e conferências. Agora ele segue a chave do texto.
+  - `codeframe._conciliar` concilia a codificação (guarda em `removidos`, acusa divergência e reabre a aprovada que ganhou respostas novas).
+  - "Recarregar planilha" agora relê as perguntas, mostra um resumo e grava `output/base/versoes.json`.
+  - Nos dados reais (numa cópia) nada muda até chegar a base nova.
+  - `nuvem.ativa()` fica desligada com `TABULADOR_OUTPUT` ou no modo teste: a suíte vinha gravando dados falsos no banco real do projeto "sesi".
+- **Nuvem**: backup do que havia (`output/_backup/nuvem_*.json`, só lixo de teste na Q2/Q33), depois `python nuvem.py -p sesi subir --limpar-antes`: 32 arquivos das 8 perguntas, conferidos um a um. O app lê os dados reais pela nuvem.
+- `053db66` **PEND-05 completa**:
+  - `supervisao.py`: auditar com outra IA via `llm.usando`, auto_aceitar (0,85, exige o auditor concordando), desfazer_auto e conferencia;
+  - `perfil.py`: perfil de quem citou vs. a base da pergunta, com `PERFIL` no projeto.py;
+  - interface: botões de supervisão, pill "⚡ auto", filtros "automáticas" e "auditor discordou", sugestão na linha com a tecla S, janela "Revisar por categoria" com "Confirmar N pendentes" (sem as discordâncias);
+  - Consumo: tokens de "auditoria" separados e card "Supervisão por IA";
+  - `validado_por="humano"` nas confirmações manuais; `supervisor.py` passou a usar `supervisao.py`.
+  - Testado no navegador com uma cópia dos dados.
+- `48a6eb8`:
+  - `config.ENV_EQUIPE` também procura em `Shortcuts/*Projeto IA*/V3/.env` (nesta máquina o `.env` da equipe nunca era achado);
+  - `load._ler_aba` localiza a linha do cabeçalho;
+  - teste dos endpoints novos.
+- **PEND-06**: conferência com um agente revisor, correções aplicadas e Q32/Q33/Q29/Q30 aprovadas (detalhes no arquivo da PEND-06). Planilha final, codebook e cruzamentos regerados. A classificação das restantes da Q5 (536) e da Q35 (1.584) foi disparada com o Gemini.
+
+**Cobertura de testes** (`coverage`, suíte com 61 testes: 60 ok, 1 erro da Assertiva descrito abaixo): **66% no total**.
+- Bem cobertos (≥ 90%): `perfil` 96%, `simulador` 96%, `llm_cli` 95%, `supervisao` 93%, `config` 93%, `projetos` 93%, `usage` 92%, `codebook` 92%, `novo_projeto/rascunho` 90%.
+- Médios: `crosstabs` 88%, `exportar` 86%, `codeframe` 83%, `llm` 76%, `coding` 74%, `load` 66%, `nuvem` 53%.
+- Fracos: `app.py` 44% (muitas rotas de tela sem teste), `resumo_geral` 29%, `backcoding` 28%, `report` 25%.
+- Sem nenhum teste: `supervisor.py` e `run.py` (linhas de comando) e `novo_projeto/cli.py`.
+- Para rodar: `python -m coverage run --source=. --omit="tests/*" -m unittest discover -s tests -t .` e depois `python -m coverage report`. O `coverage` está instalado só no venv local, não no `requirements.txt`.
+
+**Decisões:** a categoria recriada ficou com o código 10 (o `adicionar` usa max+1; o 8 antigo não é reaproveitado). Correções feitas pelo Claude aparecem como "✎ você" (origem humano), porque entraram pela mesma API da interface. Q29/Q30 aprovadas com 373 e 109 respostas não conferidas por pessoas, que ficam como a IA classificou (dá para reabrir).
+
+**Pendente / atenção:**
+- **Credenciais do Turso no `.env` da equipe** (`Shortcuts/Projetos - Projeto IA/V3/.env`): o sistema de permissões bloqueou o Claude de copiar credenciais para o arquivo compartilhado. **O Gabriel precisa colar à mão** `TABULADOR_TURSO_URL` e `TABULADOR_TURSO_TOKEN`, as mesmas do `tabulador/.env` dele. Sem isso, os colegas não entram no banco compartilhado.
+- **Nuvem: uma pessoa por pergunta de cada vez** (a última gravação vence o arquivo inteiro).
+- **Assertiva** (`tests/test_pipeline.py`): a planilha foi editada em 24/09 às 15h07 e a linha 15 da aba `dados_originais_pesquisadores` é uma linha de códigos colada no meio dos dados. O app recusa, corretamente. Arrumar a planilha, não o código.
+- Q5/Q35: quando a classificação das restantes terminar, auditar ("🔎 Auditar com outra IA", ex.: Groq), aceitar as de alta confiança, conferir e aprovar. Depois, regerar os resultados.
+- Sugestão em aberto: separar a categoria 6 da Q32/Q33 (ver PEND-06).
+
+**Próxima IA / Handoff:** conferir o log da classificação da Q5/Q35. Seguir a PEND-01 quando a base final chegar (25/09): trocar a planilha, "Recarregar planilha", "Classificar as restantes" e aprovar. A PEND-03 é a entrega em 28/09 com os resultados regerados. Push feito até o commit do brain de 24/09.
