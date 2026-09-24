@@ -196,3 +196,29 @@ Log cronológico, só acrescentar no fim. Formato descrito em `README.md`.
 - Presença marcada só pelo heartbeat do navegador: uma IA mexendo direto nos arquivos via CLI não aparece — mencionado na PEND-09.
 
 **Próxima IA / Handoff:** testar as duas telas novas no navegador (bolinha de sincronização, aviso de presença com duas abas); ao retomar a PEND-09, desenhar a extensão de `nuvem.marcar_presenca` para o projeto inteiro (não só por `qid`) antes de montar a sidebar.
+
+---
+
+## 2026-09-24 19:35 — feat(tabulador): sessão autônoma de melhorias perpétuas (Sprint 1)
+
+**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+
+**Contexto:** Início da sessão contínua de melhorias perpétuas no Tabulador sob o protocolo multi-IA paralelo com personas especializadas (UI/UX, Analista de Pesquisa e Engenheiro de Ergonomia Frontend). As 3 personas rodaram em subagentes paralelos gerando diagnósticos completos. O primeiro lote (Sprint 1) foi implementado na worktree isolada `feat/melhorias-perpetuas`.
+
+**Feito:**
+- **Diagnóstico Multi-Persona:** gerados relatórios pelas 3 personas analisando `app.js`, `app.css`, `crosstabs.py`, `resumo_geral.py`, `supervisao.py` e notas de reunião.
+- **Sprint 1 Implementado (Worktree `worktrees/tabulador-melhorias`, commit `9b93c81`):**
+  - Feedback visual evidente na linha recém-aprovada (`@keyframes pulse-ok`, realce suave `tr.confirmada`, botão `✓` verde nítido `c-ok.on`).
+  - Hotkeys de alta velocidade: navegação `J`/`K` (home-row), buffer de digitação para códigos de categorias multidígito (permite teclar `10`, `11`, `97`, `98` sem usar mouse), atalho `Ctrl+Enter` no textarea de comentário e foco inicial automático na primeira linha pendente da tabela.
+  - Preservação de scroll em `abrirJanelaCategorias()`: não reseta mais para `scrollTop = 0` ao confirmar pendentes no modal de categorias.
+  - Page Visibility API para o heartbeat de presença: desativa polling quando a aba está em background e reativa ao focar, poupando requisições no Turso e evitando avisos falsos de concorrência.
+- Testes: `node --check tabulador/static/app.js` OK; suíte com 69 testes (69 rodados, 0 falhas, 22 pulados) passando 100% em 5,8s.
+
+**Decisões:** Trabalho isolado em worktree dedicada para garantir a Regra Zero de concorrência Git sem colidir com as worktrees do Claude Code nem mexer na raiz `main` compartilhada.
+
+**Pendente / atenção:**
+- O commit `9b93c81` está na branch `feat/melhorias-perpetuas`. Pode ser testado abrindo o Tabulador ou mesclado na `main` quando aprovado.
+- Sprint 2 planejado: `FUNC-01` (limiar de confiança seletivo no modal de categorias) e `FUNC-03` (Base `n` na aba Geral do `cruzamentos.xlsx` e código numérico `Q*_CAT_COD` no `exportar.py`).
+
+**Próxima IA / Handoff:** Testar as melhorias no navegador via `Abrir Tabulador.bat`. Para prosseguir no Sprint 2, atuar nos módulos analíticos `crosstabs.py` e `exportar.py`.
+
