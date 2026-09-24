@@ -1,0 +1,7 @@
+# arquivos binarios: nunca converter fim de linha (CRLF) nem tratar como texto
+*.pdf binary
+*.xlsx binary
+*.xls binary
+*.png binary
+*.jpg binary
+*.ico binary
