@@ -20,6 +20,20 @@ import config  # noqa: E402
 import nuvem  # noqa: E402
 
 
+class TestUrlHttp(unittest.TestCase):
+    """O painel do Turso entrega libsql://..., mas o handshake de websocket falha nesta rede
+    (erro 400) — só HTTP puro funciona (visto testando contra um banco real). Trava essa conversão."""
+
+    def test_converte_esquemas(self):
+        self.assertEqual(nuvem._url_http("libsql://x.turso.io"), "https://x.turso.io")
+        self.assertEqual(nuvem._url_http("wss://x.turso.io"), "https://x.turso.io")
+        self.assertEqual(nuvem._url_http("ws://x.turso.io"), "http://x.turso.io")
+
+    def test_mantem_outros_esquemas(self):
+        self.assertEqual(nuvem._url_http("https://x.turso.io"), "https://x.turso.io")
+        self.assertEqual(nuvem._url_http("file:teste.db"), "file:teste.db")
+
+
 class TestNuvem(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.mkdtemp(prefix="tabulador_nuvem_")
@@ -73,6 +87,27 @@ class TestNuvem(unittest.TestCase):
             CF._gravar(qid, "codificacao.json", {"status": "rascunho"})
             self.assertTrue(CF.classificacao_iniciada(qid))
             self.assertEqual(CF._ler(qid, "codificacao.json"), {"status": "rascunho"})
+        finally:
+            import shutil
+            shutil.rmtree(CF.pasta(qid), ignore_errors=True)
+
+    def test_remover_nuvem(self):
+        CF._gravar("Q1", "frame_anterior.json", {"v": "antigo"})
+        self.assertTrue(CF._existe("Q1", "frame_anterior.json"))
+        self.assertTrue(CF._remover("Q1", "frame_anterior.json"))
+        self.assertFalse(CF._existe("Q1", "frame_anterior.json"))
+        self.assertIsNone(CF._ler("Q1", "frame_anterior.json"))
+        self.assertFalse(CF._remover("Q1", "frame_anterior.json"))  # já não existe: sem erro, False
+
+    def test_remover_local_quando_inativa(self):
+        config.TURSO_URL = None
+        qid = "Q_local_remover"
+        try:
+            CF._gravar(qid, "frame_anterior.json", {"v": 1})
+            self.assertTrue(CF._existe(qid, "frame_anterior.json"))
+            self.assertTrue(CF._remover(qid, "frame_anterior.json"))
+            self.assertFalse(CF._existe(qid, "frame_anterior.json"))
+            self.assertFalse(CF._remover(qid, "frame_anterior.json"))
         finally:
             import shutil
             shutil.rmtree(CF.pasta(qid), ignore_errors=True)

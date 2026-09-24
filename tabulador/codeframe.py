@@ -69,6 +69,18 @@ def _existe(qid: str, nome: str) -> bool:
     return (pasta(qid) / nome).exists()
 
 
+def _remover(qid: str, nome: str) -> bool:
+    """Apaga de verdade (True se havia algo para apagar) — sem lixeira, nem localmente. Para telas
+    que precisam de lixeira (recuperar depois), ver `app.py` `_apagar_pergunta`, que só chama isto
+    do lado da nuvem e move o arquivo à mão do lado local."""
+    if nuvem.ativa():
+        return nuvem.remover(config.PROJETO, qid, nome)
+    p = pasta(qid) / nome
+    existia = p.exists()
+    p.unlink(missing_ok=True)
+    return existia
+
+
 def eh_nsnr(texto: str) -> bool:
     return bool(_NSNR_RE.match(V.norm(texto)))
 
@@ -241,7 +253,7 @@ def induzir(qid: str, min_cat: int = 6, max_cat: int = 15, forcar: bool = False)
     }
     _gravar(qid, "frame_proposto.json", frame)
     _gravar(qid, "frame.json", frame)
-    (pasta(qid) / "frame_anterior.json").unlink(missing_ok=True)
+    _remover(qid, "frame_anterior.json")
     return frame
 
 
@@ -361,7 +373,7 @@ def desfazer_refino(qid: str) -> dict:
     anterior["status"] = _status_apos_edicao(qid)
     _registrar(anterior, "desfazer_refino")
     _gravar(qid, "frame.json", anterior)
-    (pasta(qid) / "frame_anterior.json").unlink()
+    _remover(qid, "frame_anterior.json")
     validos = {c["codigo"] for c in anterior["categorias"]}
     cod = _ler(qid, "codificacao.json")
     if cod:

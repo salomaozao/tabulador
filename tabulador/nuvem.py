@@ -37,6 +37,16 @@ def ativa() -> bool:
     return bool(config.TURSO_URL)
 
 
+def _url_http(url: str) -> str:
+    """O painel do Turso entrega a URL como libsql://... (websocket). Nesta rede o handshake de
+    websocket falha (erro 400 no aperto de mão) mas HTTP simples funciona, então troca o esquema
+    para não depender de cada pessoa descobrir isso na mão."""
+    for esquema, troca in (("libsql://", "https://"), ("wss://", "https://"), ("ws://", "http://")):
+        if url.startswith(esquema):
+            return troca + url[len(esquema):]
+    return url
+
+
 def _obter_cliente():
     global _cliente, _tabela_pronta
     if _cliente is not None:
@@ -46,7 +56,7 @@ def _obter_cliente():
             import libsql_client  # importado aqui: só é obrigatório quando a nuvem está ativa
 
             _cliente = libsql_client.create_client_sync(
-                url=config.TURSO_URL,
+                url=_url_http(config.TURSO_URL),
                 auth_token=config.TURSO_TOKEN or None,
             )
         if not _tabela_pronta:
@@ -71,6 +81,15 @@ def existe(projeto: str, qid: str, arquivo: str) -> bool:
         [projeto, qid, arquivo],
     )
     return bool(rs.rows)
+
+
+def remover(projeto: str, qid: str, arquivo: str) -> bool:
+    """Apaga de verdade (não tem lixeira na nuvem — diferente do modo arquivo local)."""
+    rs = _obter_cliente().execute(
+        "DELETE FROM blobs WHERE projeto = ? AND qid = ? AND arquivo = ?",
+        [projeto, qid, arquivo],
+    )
+    return bool(rs.rows_affected)
 
 
 def gravar(projeto: str, qid: str, arquivo: str, dados: dict) -> None:
