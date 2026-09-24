@@ -153,3 +153,46 @@ Log cronológico, só acrescentar no fim. Formato descrito em `README.md`.
 - Sugestão em aberto: separar a categoria 6 da Q32/Q33 (ver PEND-06).
 
 **Próxima IA / Handoff:** conferir o log da classificação da Q5/Q35. Seguir a PEND-01 quando a base final chegar (25/09): trocar a planilha, "Recarregar planilha", "Classificar as restantes" e aprovar. A PEND-03 é a entrega em 28/09 com os resultados regerados. Push feito até o commit do brain de 24/09.
+
+---
+
+## 2026-09-24 15:30 — brain(SESI): PEND-07 e PEND-08 abertas (base na nuvem; João sem sincronizar)
+
+**Autor:** Claude Sonnet 5 (Claude Code) · operador: Gabriel Nascimento
+
+**Contexto:** sessão sobre o app do tabulador em geral (não específica do campo). Duas coisas surgiram: (1) o Gabriel propôs subir a base inteira (não só a revisão) para o Turso, para bastar rodar o `tabulador` sem outra pasta de projeto local; (2) o João baixou o `tabulador` do GitHub e as respostas antigas da revisão não sincronizaram para ele.
+
+**Feito:** criadas `PEND-07` (avaliar base inteira na nuvem — ideia, não decisão) e `PEND-08` (João sem sincronizar — falta `.env`/credenciais da nuvem, porque o clone via GitHub não traz `.env` nem `SESI_cat/data`, gitignorados de propósito).
+
+**Decisões:** nenhuma — PEND-07 é só registro da ideia para avaliar depois; não implementar sem decisão explícita.
+
+**Pendente / atenção:**
+- PEND-08 relembra um ponto já registrado antes (24/09, mais cedo): as credenciais `TABULADOR_TURSO_URL`/`TABULADOR_TURSO_TOKEN` precisam estar coladas no `.env` compartilhado da equipe (`Shortcuts/.../Projeto IA/V3/.env`) para qualquer pessoa nova (como o João) entrar no banco automaticamente. Conferir se isso já foi feito; se não, é a causa mais provável do João não sincronizar.
+- PEND-07 depende de desenhar uma forma declarativa para os filtros do `projeto.py` (hoje são lambdas Python) antes de fazer sentido subir a base para o Turso.
+
+**Próxima IA / Handoff:** ao retomar, primeiro checar se as credenciais do Turso já estão no `.env` da equipe (resolveria a PEND-08 rápido); só depois avaliar a PEND-07 com calma, sem pressa, já que é melhoria de arquitetura e não bloqueio de entrega.
+
+---
+
+## 2026-09-24 17:15 — feat(tabulador): status de sincronização no header, aviso de edição simultânea por pergunta, PEND-09
+
+**Autor:** Claude Sonnet 5 (Claude Code) · operador: Gabriel Nascimento
+
+**Contexto:** mesma sessão da PEND-08 (João sem sincronizar). O Gabriel pediu (1) tirar "Base: N respondentes · atualizada DATA" do header e colocar uma bolinha online/offline + "sincronizado às..." no lugar, com a linha de base indo para o Painel geral; (2) avisar quando outra pessoa está mexendo na mesma pergunta ao mesmo tempo (a nuvem já era "uma pessoa por pergunta, a última gravação vence" — ver `docs/nuvem_turso.md`).
+
+**Feito:**
+- `nuvem.status(projeto)`: `{ativa, conectada, ultima_sincronizacao}` — tenta `SELECT MAX(atualizado_em)` da tabela `blobs`; se der erro de conexão, `conectada=False` sem derrubar `/api/status`.
+- `nuvem.marcar_presenca`/`sair_presenca`: tabela nova `presenca` (projeto, qid, usuario, visto_em); heartbeat do navegador a cada 12s enquanto a pergunta está aberta, janela de 30s para considerar "ativo agora".
+- `config.USUARIO`: login do Windows (`getpass.getuser()`), ou `TABULADOR_USUARIO` no `.env` — só para a presença, nunca vai para a base.
+- `app.py`: `/api/status` ganhou `"nuvem"`; endpoints novos `POST /api/pergunta/<qid>/presenca` e `.../presenca/sair`.
+- `app.js`/`index.html`/`app.css`: header trocou `#base-status` (agora só a IA) por `#ia-status` + `#nuvem-status` (bolinha + texto); "Base: N respondentes..." foi para o Painel geral; aviso `.aviso` na tela da pergunta quando `outros.length > 0`.
+- Testes novos em `tests/test_nuvem.py` (status e presença) — suíte de nuvem com 15 testes, `test_sesi.py::test_4_app_api` OK.
+
+**Decisões:** identidade da presença é o login do Windows (sem tela de login); registrado como limitação na PEND-09, não implementar identificação/sidebar agora.
+
+**Pendente / atenção:**
+- `PEND-09` criada: identificação explícita (pessoa/IA) na tela inicial + sidebar à direita mostrando onde cada um está no projeto inteiro (hoje o aviso é só dentro da pergunta aberta). Ideia registrada pelo Gabriel, não desenhada.
+- Não testado no navegador com a base real (só suíte automatizada) — antes de considerar fechado, abrir o Tabulador e conferir a bolinha (online/offline) e o aviso de presença com duas abas na mesma pergunta.
+- Presença marcada só pelo heartbeat do navegador: uma IA mexendo direto nos arquivos via CLI não aparece — mencionado na PEND-09.
+
+**Próxima IA / Handoff:** testar as duas telas novas no navegador (bolinha de sincronização, aviso de presença com duas abas); ao retomar a PEND-09, desenhar a extensão de `nuvem.marcar_presenca` para o projeto inteiro (não só por `qid`) antes de montar a sidebar.
