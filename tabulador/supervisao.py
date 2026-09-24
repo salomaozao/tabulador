@@ -34,14 +34,17 @@ def _agora() -> str:
 
 
 # ----------------------------------------------------------------------------- aceite automático
-def auto_aceitar(qid: str, limiar: float = LIMIAR_PADRAO, exigir_auditoria: bool = True) -> dict:
+def auto_aceitar(qid: str, limiar: float = LIMIAR_PADRAO, exigir_auditoria: bool = True, categoria: int | None = None) -> dict:
     """Confirma sozinho o que tem confiança >= limiar (e auditoria concordando, se exigido).
+    Se categoria for informada, restringe a essa categoria.
     Nunca mexe no que uma pessoa já conferiu/corrigiu. Retorna a contagem por motivo."""
     cod = CD.codificacao(qid)
     if not cod:
         raise RuntimeError(f"{qid}: ainda não há classificação")
     agora, n = _agora(), Counter()
     for i in cod["itens"]:
+        if categoria is not None and i.get("primaria") != categoria:
+            continue
         if i.get("primaria") is None or i.get("validado") or i.get("origem") == "humano":
             continue
         motivo = None
@@ -61,7 +64,7 @@ def auto_aceitar(qid: str, limiar: float = LIMIAR_PADRAO, exigir_auditoria: bool
     if n["aceitas"]:
         cod["status"] = "rascunho"
         CF._gravar(qid, "codificacao.json", cod)
-    return {"aceitas": n.pop("aceitas", 0), "ficaram": dict(n), "limiar": limiar, "exigir_auditoria": exigir_auditoria}
+    return {"aceitas": n.pop("aceitas", 0), "ficaram": dict(n), "limiar": limiar, "exigir_auditoria": exigir_auditoria, "categoria": categoria}
 
 
 def desfazer_auto(qid: str) -> int:

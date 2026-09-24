@@ -123,10 +123,18 @@ def tabular(df: pd.DataFrame, bloco: dict, banners: list[str]) -> dict:
         c2 = c1.replace("_COD1", "_COD2")
         valido = base_masc & df[c1].notna()
         bases = [int((valido & m).sum()) for _, _, m in cols]
-        for cat in bloco["frame"]:
+        # Ordena categorias por frequência total (% Total decrescente), fixando Outros (97) e NS/NR (98) no rodapé
+        cats_ordenadas = sorted(
+            bloco["frame"],
+            key=lambda cat: (
+                cat["codigo"] in (97, 98) or V.norm(cat["nome"]).startswith("outr") or "ns/nr" in V.norm(cat["nome"]),
+                -int((valido & (df[c1].eq(cat["codigo"]) | df[c2].eq(cat["codigo"]))).sum())
+            )
+        )
+        for cat in cats_ordenadas:
             k = cat["codigo"]
             _linha(f"{k}. {cat['nome']}", df[c1].eq(k) | df[c2].eq(k), valido, bases)
-        extra["nota"] = "Aberta codificada: menções (primária + secundária) sobre a base; a soma pode passar de 100%."
+        extra["nota"] = "Aberta codificada: menções (primária + secundária) sobre a base em ordem decrescente de frequência; a soma pode passar de 100%."
     elif tipo == "numerica":
         s = pd.to_numeric(df[bloco["var"]], errors="coerce")
         valido = base_masc & s.notna()
@@ -255,6 +263,17 @@ def _escrever_aba_geral(ws, blocos_tabs: list[tuple[dict, dict]], banners: list[
         cel = ws.cell(row=r0 + 1, column=col, value=rotulo)
         cel.font, cel.fill = _NEG, _CAB
     linha = r0 + 2
+    # Linha de Base (n) do segmento em cada coluna de banner
+    ws.cell(row=linha, column=1, value="Base Amostral").font = _NEG
+    ws.cell(row=linha, column=2, value="Total de respondentes").font = _NEG
+    ws.cell(row=linha, column=1).border = _BORDA
+    ws.cell(row=linha, column=2).border = _BORDA
+    base_geral = next((t["base"] for b, t in blocos_tabs if b.get("base") == "todos"), blocos_tabs[0][1]["base"] if blocos_tabs else [])
+    for k, b in enumerate(base_geral):
+        cel = ws.cell(row=linha, column=c + k, value=b)
+        cel.border = _BORDA
+        cel.font = Font(bold=True, color="B00020") if 0 < b < MIN_BASE else _NEG
+    linha += 1
     for bloco, tab in blocos_tabs:
         linhas_valor = tab.get("linhas_valor", set())
         for rot, pcts in zip(tab["linhas"], tab["pct"]):
@@ -299,8 +318,13 @@ def gerar(banners: list[str] | None = None, verbose: bool = True):
             usados.add(nome)
             _escrever_aba(xw.book.create_sheet(nome), b, tab)
             for rot, ns, pcts in zip(tab["linhas"], tab["n"], tab["pct"]):
+                cod_num = None
+                rot_clean = rot
+                if "." in rot and rot.split(".")[0].strip().isdigit():
+                    cod_num = int(rot.split(".", 1)[0].strip())
+                    rot_clean = rot.split(".", 1)[1].strip()
                 for (bn, niv), base, n, pc in zip(tab["colunas"], tab["base"], ns, pcts):
-                    longo.append({"pergunta": b["qid"], "tipo": b["tipo"], "linha": rot, "banner": bn, "nivel": niv,
+                    longo.append({"pergunta": b["qid"], "tipo": b["tipo"], "codigo": cod_num, "opcao": rot_clean, "linha": rot, "banner": bn, "nivel": niv,
                                   "base": base, "n": n, "valor": None if _nan(pc) else float(pc)})
         _escrever_aba_geral(xw.book.create_sheet("Geral", 1), blocos_tabs, banners)
         pd.DataFrame(longo).to_excel(xw, sheet_name="dados_longos", index=False)
