@@ -184,7 +184,7 @@ function nomeCat(c) { const x = catsValidas().find((k) => k.codigo === +c); retu
 // recalcula contagens e números da revisão no navegador (sem recarregar tudo a cada clique)
 function recalcular() {
   const P = state.P, cont = {};
-  let cod = 0, conf = 0, corr = 0, corrIA = 0;
+  let cod = 0, conf = 0, confAuto = 0, corr = 0, corrIA = 0;
   for (const r of P.itens) {
     for (const [k, campo] of [[r.primaria, "primaria"], [r.secundaria, "secundaria"]]) {
       if (k == null) continue;
@@ -192,20 +192,22 @@ function recalcular() {
     }
     if (r.primaria == null) continue;
     cod++;
-    if (r.revisao === "confirmada") conf++;
+    if (r.revisao === "confirmada") { conf++; if (r.validado_por === "auto") confAuto++; }
     if (r.revisao === "corrigida") { corr++; if (r.corrigido_de_nome != null) corrIA++; }
   }
   P.contagens = cont;
   P.n_alertas = P.itens.filter((r) => r.alertas && r.alertas !== "não codificado").length;
   P.n_comentarios_pendentes = P.itens.filter((r) => r.comentario_pendente).length;
-  const aval = conf + corrIA, tot = P.itens.length;
-  P.revisao = { n_unicas: tot, n_codificadas: cod, n_faltantes: tot - cod, n_confirmadas: conf, n_corrigidas: corr, n_revisadas: conf + corr, acerto_ia: aval ? conf / aval : null, n_avaliadas_ia: aval };
+  // confirmadas pelo supervisor.py (auto) não medem o acerto da IA — mesma regra de coding.resumo_revisao
+  const aval = conf - confAuto + corrIA, tot = P.itens.length;
+  P.revisao = { n_unicas: tot, n_codificadas: cod, n_faltantes: tot - cod, n_confirmadas: conf, n_corrigidas: corr, n_revisadas: conf + corr, acerto_ia: aval ? (conf - confAuto) / aval : null, n_avaliadas_ia: aval };
 }
 function aplicarItem(r, it) {
   Object.assign(r, {
     primaria: it.primaria, secundaria: it.secundaria, origem: it.origem, confianca: it.confianca,
     comentario: it.comentario || null, comentario_pendente: !!it.comentario && !it.comentario_aplicado_em,
     revisao: it.primaria == null ? null : it.origem === "humano" ? "corrigida" : it.validado ? "confirmada" : "pendente",
+    validado_por: it.validado_por ?? null,
     corrigido_de_nome: it.corrigido_de != null ? nomeCat(it.corrigido_de) : null,
   });
   r.primaria_nome = nomeCat(r.primaria); r.secundaria_nome = nomeCat(r.secundaria);
@@ -708,10 +710,27 @@ async function renderGerenciar() {
 }
 
 // ---------------------------------------------------------------- topo: projeto, IA, planilha
+// janela grande reaproveitável (resumo da base nova, aprovação por categoria…)
+function abrirJanela(titulo, html) {
+  const dlg = $("#dlg-janela");
+  $("#jan-titulo").textContent = titulo; $("#jan-corpo").innerHTML = html;
+  if (!dlg.open) dlg.showModal();
+  return dlg;
+}
 async function recarregarPlanilha() {
-  if (!confirm("Reler a planilha-fonte e reconstruir a base? As classificações aprovadas são reaplicadas automaticamente.")) return;
-  const r = await post("/api/load", {}, "Lendo a planilha…"); toast(`Base carregada: ${r.n} respondentes`);
+  if (!confirm("Reler a planilha-fonte (por exemplo, uma versão nova da base)?\n\nO que já foi classificado e conferido continua valendo para as mesmas respostas. Respostas novas ficam para classificar, e perguntas aprovadas que ganharem respostas novas voltam para revisão.")) return;
+  const r = await post("/api/load", {}, "Lendo a planilha…");
   await carregarStatus(); rota();
+  const Q = Object.entries(r.perguntas || {});
+  const dif = r.n_anterior == null ? "" : ` (antes: ${fmtN(r.n_anterior)}; ${r.n - r.n_anterior >= 0 ? "+" : ""}${fmtN(r.n - r.n_anterior)})`;
+  const linhas = Q.map(([qid, m]) => `<tr><td><b>${esc(qid)}</b></td><td class="num">${fmtN(m.respondentes_novos)}</td><td class="num">${fmtN(m.unicas_novas)}</td>
+    <td class="num">${m.sem_classificacao ? `<b>${fmtN(m.sem_classificacao)}</b>` : "0"}</td><td class="num">${fmtN(m.unicas_removidas)}</td>
+    <td>${m.reaberta ? '<span class="pill warn">voltou para revisão</span>' : m.sem_classificacao ? '<span class="pill">classificar as novas</span>' : '<span class="pill ok">em dia</span>'}</td></tr>`).join("");
+  abrirJanela("Base atualizada", `
+    <p><b>${fmtN(r.n)} respondentes</b> na planilha${dif}. O que já tinha sido classificado e conferido continua nas mesmas respostas;
+    respostas iguais a textos já classificados herdam a categoria sozinhas.</p>
+    ${Q.length ? `<table class="mudancas"><thead><tr><th>Pergunta</th><th class="num">Respondentes novos</th><th class="num">Respostas diferentes novas</th><th class="num">Sem classificação</th><th class="num">Removidas</th><th></th></tr></thead><tbody>${linhas}</tbody></table>
+    <p class="small">Para classificar as novas, abra a pergunta e use <b>Classificar as restantes</b>. Respostas removidas da base saem da classificação (ficam guardadas no arquivo, em "removidos").</p>` : ""}`);
 }
 // ---- modal "Configurar IA" (provedores compatíveis com a API da OpenAI)
 function preencherProvedor(prov, inicial) {

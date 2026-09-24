@@ -12,6 +12,7 @@ Ver instruções para criar o banco e pegar as credenciais em `docs/nuvem_turso.
 from __future__ import annotations
 
 import json
+import os
 import threading
 from datetime import datetime, timezone
 
@@ -34,7 +35,12 @@ _tabela_pronta = False
 
 
 def ativa() -> bool:
-    return bool(config.TURSO_URL)
+    if not config.TURSO_URL:
+        return False
+    # testes automáticos, validação de projeto novo e modo teste gravam numa pasta temporária/separada:
+    # nunca podem ler nem gravar no banco de verdade (só num banco local de teste, 'file:...')
+    temporario = bool(os.getenv("TABULADOR_OUTPUT")) or config.modo_teste()
+    return not temporario or config.TURSO_URL.startswith("file:")
 
 
 def _url_http(url: str) -> str:
@@ -49,7 +55,7 @@ def _url_http(url: str) -> str:
 
 def _obter_cliente():
     global _cliente, _tabela_pronta
-    if _cliente is not None:
+    if _cliente is not None and _tabela_pronta:
         return _cliente
     with _lock:
         if _cliente is None:

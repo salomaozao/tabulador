@@ -116,13 +116,21 @@ def preparar(qid: str) -> dict:
         if texto is None or (isinstance(texto, float)) or str(texto).strip() == "":
             continue
         texto = str(texto).strip()
-        chave = re.sub(r"[\s.!,;:]+$", "", V.norm(texto))
+        chave = chave_texto(texto)
         g = grupos.setdefault(chave, {"texto": texto, "n": 0, "respondent_ids": []})
         g["n"] += 1
         g["respondent_ids"].append(int(rid_resp))
+    # o rid é ESTÁVEL: a mesma resposta (mesma chave) mantém o rid de antes, mesmo que a base nova
+    # mude as frequências; respostas novas ganham rids novos. A classificação casa itens por rid.
+    anterior = _ler(qid, "respostas.json")
+    rid_de = {(r.get("chave") or chave_texto(r["texto"])): r["rid"] for r in (anterior or {}).get("respostas", [])}
+    proximo = max(rid_de.values(), default=0) + 1
     respostas = []
-    for i, g in enumerate(sorted(grupos.values(), key=lambda g: (-g["n"], V.norm(g["texto"]))), start=1):
-        respostas.append({"rid": i, "texto": g["texto"], "n": g["n"], "respondent_ids": g["respondent_ids"], "nsnr": eh_nsnr(g["texto"])})
+    for chave, g in sorted(grupos.items(), key=lambda kv: (-kv[1]["n"], V.norm(kv[1]["texto"]))):
+        rid = rid_de.get(chave)
+        if rid is None:
+            rid, proximo = proximo, proximo + 1
+        respostas.append({"rid": rid, "chave": chave, "texto": g["texto"], "n": g["n"], "respondent_ids": g["respondent_ids"], "nsnr": eh_nsnr(g["texto"])})
     dados = {
         "pergunta": qid,
         "rotulo": spec.get("rotulo"),
@@ -137,7 +145,51 @@ def preparar(qid: str) -> dict:
         "respostas": respostas,
     }
     _gravar(qid, "respostas.json", dados)
+    dados["_mudancas"] = _conciliar(qid, anterior, dados)
     return dados
+
+
+def chave_texto(texto: str) -> str:
+    """Chave que agrupa respostas iguais (sem acento/caixa e sem pontuação no fim)."""
+    return re.sub(r"[\s.!,;:]+$", "", V.norm(str(texto).strip()))
+
+
+def _conciliar(qid: str, anterior: dict | None, novo: dict) -> dict:
+    """Depois de reler a base: tira da classificação as respostas que sumiram (guardadas em
+    'removidos', nada se perde), grava a chave em cada item e reabre a classificação aprovada
+    que ganhou respostas novas sem categoria. Devolve o resumo das mudanças."""
+    ids_antes = {i for r in (anterior or {}).get("respostas", []) for i in r["respondent_ids"]}
+    ids_agora = {i for r in novo["respostas"] for i in r["respondent_ids"]}
+    por_rid = {r["rid"]: r for r in novo["respostas"]}
+    rids_antes = {r["rid"] for r in (anterior or {}).get("respostas", [])}
+    mud = {"respondentes_novos": len(ids_agora - ids_antes) if anterior else 0,
+           "respondentes_removidos": len(ids_antes - ids_agora),
+           "unicas_novas": len(set(por_rid) - rids_antes) if anterior else 0,
+           "unicas_removidas": len(rids_antes - set(por_rid)),
+           "sem_classificacao": 0, "reaberta": False}
+    cod = _ler(qid, "codificacao.json")
+    if not cod:
+        return mud
+    itens, removidos = [], []
+    for it in cod["itens"]:
+        r = por_rid.get(it["rid"])
+        if r is None:
+            removidos.append(it)
+            continue
+        if it.get("chave") and it["chave"] != r["chave"]:
+            raise RuntimeError(f"{qid}: a resposta {it['rid']} não bate com a classificação gravada "
+                               f"({it['chave']!r} x {r['chave']!r}). Nada foi alterado; chame o suporte.")
+        it["chave"] = r["chave"]
+        itens.append(it)
+    classificados = {i["rid"] for i in itens}
+    mud["sem_classificacao"] = sum(1 for rid in por_rid if rid not in classificados)
+    cod["itens"] = itens
+    if removidos:
+        cod.setdefault("removidos", []).extend(dict(i, removido_em=datetime.now().isoformat(timespec="seconds")) for i in removidos)
+    if cod.get("status") == "aprovado" and mud["sem_classificacao"]:
+        cod["status"], mud["reaberta"] = "rascunho", True
+    _gravar(qid, "codificacao.json", cod)
+    return mud
 
 
 def respostas(qid: str) -> dict:

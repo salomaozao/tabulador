@@ -354,13 +354,11 @@ def api_abrir_pasta():
 @app.post("/api/load")
 def api_load():
     try:
-        with _lock, progresso.operacao("Lendo a planilha-fonte", [("ler", "Ler a planilha e montar a base", 3), ("aplicar", "Reaplicar as classificações aprovadas")]):
+        with _lock, progresso.operacao("Lendo a planilha-fonte", [("ler", "Ler a planilha, casar com o que já foi classificado e reaplicar as aprovadas", 3)]):
             incluir_tel = bool((request.get_json(silent=True) or {}).get("telefone", True))
             progresso.etapa("ler", str(config.FONTE_XLSX.name))
-            df, _ = load.executar(incluir_telefone=incluir_tel, verbose=False)
-            progresso.etapa("aplicar", f"{len(df)} respondentes lidos")
-            CD.aplicar_na_base(verbose=False)  # reaplica codificações aprovadas na base nova
-        return jsonify({"ok": True, "n": int(len(df))})
+            r = CD.recarregar_base(incluir_telefone=incluir_tel)
+        return jsonify({"ok": True, **r})
     except Exception as e:
         return _erro(e, 500)
 

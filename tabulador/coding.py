@@ -446,6 +446,7 @@ def tabela(qid: str) -> pd.DataFrame:
             "alertas": "; ".join(alertas_item(i, frame)) if i["primaria"] is not None else "não codificado",
             "respondent_ids": r["respondent_ids"],
             "revisao": situacao_revisao(i),
+            "validado_por": i.get("validado_por"),
             "corrigido_de_nome": nomes.get(i.get("corrigido_de")) if i.get("corrigido_de") is not None else None,
         })
     return pd.DataFrame(linhas)
@@ -546,6 +547,26 @@ def mapa_respondentes(qid: str) -> dict[int, dict]:
         for rid_resp in r["respondent_ids"]:
             saida[int(rid_resp)] = {"primaria": i["primaria"], "secundaria": i["secundaria"]}
     return saida
+
+
+def recarregar_base(incluir_telefone: bool = True) -> dict:
+    """Relê a planilha-fonte (versão nova da base) SEM perder o trabalho feito: cada pergunta já
+    preparada é relida com rids estáveis (a mesma resposta continua com a mesma classificação e
+    conferência), respostas novas ficam para classificar e as aprovadas que ganharam respostas
+    novas voltam para revisão. Registra a versão da base em base/versoes.json."""
+    df, _ = load.executar(incluir_telefone=incluir_telefone, verbose=False)
+    perguntas = {}
+    for qid in V.perguntas_codificaveis():
+        if CF._existe(qid, "respostas.json"):
+            perguntas[qid] = CF.preparar(qid)["_mudancas"]
+    aplicar_na_base(verbose=False)
+    arq = config.BASE_OUT / "versoes.json"
+    versoes = json.loads(arq.read_text(encoding="utf-8")) if arq.exists() else []
+    versoes.append({"quando": datetime.now().isoformat(timespec="seconds"), "arquivo": config.FONTE_XLSX.name,
+                    "n_respondentes": int(len(df)), "perguntas": perguntas})
+    arq.write_text(json.dumps(versoes, ensure_ascii=False, indent=1), encoding="utf-8")
+    anterior = versoes[-2]["n_respondentes"] if len(versoes) > 1 else None
+    return {"n": int(len(df)), "n_anterior": anterior, "perguntas": perguntas}
 
 
 def aplicar_na_base(somente_aprovadas: bool = True, verbose: bool = True) -> list[str]:

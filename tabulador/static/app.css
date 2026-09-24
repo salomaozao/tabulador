@@ -118,6 +118,10 @@ tr.naocod td{color:var(--text-3)}
 .btn.c-ok{min-width:30px;color:var(--text-3)}.btn.c-ok:hover{color:var(--ok);border-color:var(--ok)}.btn.c-ok.on{background:var(--ok);border-color:var(--ok);color:#fff}
 dialog{border:1px solid var(--border);border-radius:12px;padding:20px 22px;background:var(--surface);color:var(--text);width:min(520px,92vw)}
 dialog::backdrop{background:rgba(0,0,0,.35)}
+dialog.larga{width:min(1100px,96vw);max-height:92vh;padding:0}dialog.larga form{display:flex;flex-direction:column;max-height:92vh}
+.jan-cab{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--surface);z-index:2}
+.jan-cab h2{margin:0}#jan-corpo{padding:16px 20px;overflow:auto}
+table.mudancas td,table.mudancas th{padding:5px 8px}
 .campo{display:flex;flex-direction:column;gap:4px;margin:10px 0;font-size:13px;color:var(--text-2)}.campo input{width:100%}
 .dlg-acoes{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
 

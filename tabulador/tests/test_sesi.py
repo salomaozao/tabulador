@@ -59,6 +59,7 @@ def _llm_fake(system: str, user: str, schema: dict) -> dict:
 class TestSesi(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        os.environ["TABULADOR_OUTPUT"] = _TMP  # outros módulos de teste trocam a pasta ao serem importados
         projetos.ativar("sesi")
         llm.set_cliente(_llm_fake)
         cls.df, cls.registro = load.executar(verbose=False)
@@ -68,6 +69,7 @@ class TestSesi(unittest.TestCase):
         llm.set_cliente(None)
 
     def setUp(self):
+        os.environ["TABULADOR_OUTPUT"] = _TMP
         projetos.ativar("sesi")
 
     def test_1_load_plano(self):
