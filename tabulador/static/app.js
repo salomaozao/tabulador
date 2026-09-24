@@ -190,7 +190,7 @@ function recalcular() {
       if (k == null) continue;
       cont[k] = cont[k] || { primaria: 0, secundaria: 0 }; cont[k][campo] += r.n;
     }
-    if (r.primaria == null) continue;
+    if (r.primaria == null || r.origem === "erro") continue;  // erro na chamada = ainda falta classificar
     cod++;
     if (r.revisao === "confirmada") { conf++; if (r.validado_por === "auto") confAuto++; }
     if (r.revisao === "corrigida") { corr++; if (r.corrigido_de_nome != null) corrIA++; }

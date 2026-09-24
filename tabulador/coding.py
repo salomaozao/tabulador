@@ -223,7 +223,8 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
     pendentes = []
     for r in dados["respostas"]:
         ant = anteriores.get(r["rid"])
-        if ant and somente_faltantes and ant.get("primaria") in codigos_validos:
+        # "restantes" inclui as que deram erro na chamada (ex.: cota da IA esgotada no meio): são refeitas
+        if ant and somente_faltantes and ant.get("primaria") in codigos_validos and ant.get("origem") != "erro":
             itens[r["rid"]] = ant
         elif ant and preservar_humano and _protegido(ant, codigos_validos):
             itens[r["rid"]] = ant
@@ -391,7 +392,9 @@ def resumo_revisao(qid: str) -> dict:
     (confirmadas / (confirmadas + corrigidas depois de classificadas pela IA))."""
     dados = CF._ler(qid, "respostas.json") or {"respostas": []}
     cod = codificacao(qid) or {"itens": []}
-    itens = {i["rid"]: i for i in cod["itens"] if i.get("primaria") is not None}
+    # resposta com erro na chamada à IA não está classificada: conta como faltante (e impede aprovar)
+    erros = sum(1 for i in cod["itens"] if i.get("origem") == "erro")
+    itens = {i["rid"]: i for i in cod["itens"] if i.get("primaria") is not None and i.get("origem") != "erro"}
     n_unicas = len(dados["respostas"])
     confirmadas = sum(1 for i in itens.values() if situacao_revisao(i) == "confirmada")
     # confirmadas pelo supervisor.py (alta confiança + auditoria) não medem o acerto da IA
@@ -403,6 +406,7 @@ def resumo_revisao(qid: str) -> dict:
         "n_unicas": n_unicas,
         "n_codificadas": len(itens),
         "n_faltantes": max(0, n_unicas - len(itens)),
+        "n_erros": erros,
         "n_confirmadas": confirmadas,
         "n_confirmadas_auto": auto,
         "n_corrigidas": corrigidas,

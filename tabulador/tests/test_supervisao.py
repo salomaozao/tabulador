@@ -167,6 +167,21 @@ class TestSupervisao(unittest.TestCase):
         self.assertIn(QID, u["conferencia"])
         self.assertEqual(c.get("/api/pergunta/XXX/perfil").status_code >= 400, True)
 
+    def test_8_erro_conta_como_faltante(self):
+        cod = CD.codificacao(QID)
+        alvo = [i for i in cod["itens"] if not i.get("validado") and i.get("origem") == "llm"][:3]
+        for i in alvo:  # simula lotes que falharam por cota esgotada
+            i.update(primaria=CF.CODIGO_OUTROS, origem="erro", confianca=0.0)
+        CF._gravar(QID, "codificacao.json", cod)
+        r = CD.resumo_revisao(QID)
+        self.assertEqual(r["n_erros"], 3)
+        self.assertGreaterEqual(r["n_faltantes"], 3)
+        with self.assertRaises(RuntimeError):
+            CD.aprovar(QID)
+        CD.codificar(QID, somente_faltantes=True)  # "Classificar as restantes" refaz as com erro
+        r = CD.resumo_revisao(QID)
+        self.assertEqual((r["n_erros"], r["n_faltantes"]), (0, 0))
+
     def test_6_consumo_e_troca_de_provedor(self):
         self.assertEqual(usage._operacao("audit_Q4_3"), ("auditoria", "Q4"))
         antes = (config.OPENAI_PROVEDOR, config.OPENAI_MODEL, config.OPENAI_BASE_URL, config.OPENAI_API_KEY)
