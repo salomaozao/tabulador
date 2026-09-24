@@ -263,6 +263,7 @@ function render() {
     ${!frameOk ? `<div class="info">Aprove as categorias para liberar a classificação.</div>` : ""}
     ${frameOk && !codOk ? renderAcoesCod() : ""}
     ${C ? renderCodificacao() : ""}
+    ${frameOk && !codOk ? renderAprovarBar() : ""}
   `;
   $("#instr").onblur = async (e) => { if (e.target.value !== P.instrucoes) { await post(`/api/pergunta/${P.qid}/instrucoes`, { texto: e.target.value }); P.instrucoes = e.target.value; toast("Instruções salvas"); } };
   $("#b-induzir")?.addEventListener("click", async () => {
@@ -271,7 +272,7 @@ function render() {
   });
   $("#b-aprovar-frame")?.addEventListener("click", async () => refresh(await post(`/api/pergunta/${P.qid}/frame/aprovar`, {}, "Aprovando…")));
   $("#b-reabrir")?.addEventListener("click", async () => refresh(await post(`/api/pergunta/${P.qid}/reabrir`, {}, "Reabrindo…")));
-  bindFrame(); bindAcoesCod(); bindCodificacao();
+  bindFrame(); bindAcoesCod(); bindCodificacao(); bindAprovarBar();
 }
 
 // ---------------------------------------------------------------- frame
@@ -358,8 +359,6 @@ function renderAcoesCod() {
         <button class="btn primary" id="b-recod-com" ${P.n_comentarios_pendentes ? "" : "disabled"}>✨ Reclassificar comentadas (${P.n_comentarios_pendentes})</button>
         <button class="btn" id="b-recod-tudo" title="Refaz com a IA tudo que você ainda não conferiu">↻ Reclassificar tudo</button>
         ${V.n_faltantes ? `<span class="sep"></span><button class="btn" id="b-mais">+ Classificar mais ${tam}</button><button class="btn primary" id="b-restantes">Classificar as restantes (${V.n_faltantes})</button>` : ""}
-        <span class="sep"></span>
-        <button class="btn ok" id="b-aprovar-cod" ${V.n_faltantes ? `disabled title="Classifique as restantes antes de aprovar"` : ""}>✓ Aprovar e gravar nos resultados</button>
       </div>
     </div>`;
 }
@@ -376,6 +375,18 @@ function bindAcoesCod() {
     if (!confirm("Reclassificar com a IA tudo o que você ainda não conferiu? O que você corrigiu ou confirmou é mantido.")) return;
     refresh(await post(`/api/pergunta/${P.qid}/recodificar`, { apenas_comentados: false }, "Reclassificando…", true));
   });
+}
+// botão de aprovar fica no fim da tabela (depois de revisar tudo), não no topo — ver renderCodificacao
+function renderAprovarBar() {
+  const P = state.P, C = P.codificacao, V = P.revisao;
+  if (!C) return "";
+  return `
+    <div class="tools aprovar-bar">
+      <button class="btn ok" id="b-aprovar-cod" ${V.n_faltantes ? `disabled title="Classifique as restantes antes de aprovar"` : ""}>✓ Aprovar e gravar nos resultados</button>
+    </div>`;
+}
+function bindAprovarBar() {
+  const P = state.P; if (!P.codificacao) return;
   $("#b-aprovar-cod")?.addEventListener("click", async () => {
     const V = P.revisao, naoConf = V.n_codificadas - V.n_revisadas;
     if (!confirm(`Aprovar a classificação?${P.n_alertas ? `\n• ${P.n_alertas} resposta(s) com alerta` : ""}${naoConf ? `\n• ${naoConf} resposta(s) não conferidas por você (ficam como a IA classificou)` : ""}`)) return;
@@ -400,9 +411,13 @@ function filtrarItens() {
     (!f.comentarios || r.comentario) &&
     (!f.situacao || (f.situacao === "nao" ? r.primaria == null : r.revisao === f.situacao)));
   const conf = (r) => (r.primaria == null ? 9 : r.revisao !== "pendente" ? 2 + (r.confianca ?? 0) : r.confianca ?? 0);
+  const faixaConf = (r) => Math.floor(conf(r) * 10);  // agrupa em faixas de 10% para poder desempatar por categoria
   const k = f.ordem;
   const conferida = (r) => (r.revisao === "confirmada" || r.revisao === "corrigida" ? 1 : 0);  // conferidas sempre no fim
-  rows.sort((a, b) => conferida(a) - conferida(b) || (k === "conf" ? conf(a) - conf(b) || b.n - a.n : k === "n" ? b.n - a.n : (a.primaria ?? 999) - (b.primaria ?? 999) || b.n - a.n));
+  rows.sort((a, b) => conferida(a) - conferida(b) ||
+    (k === "conf" ? faixaConf(a) - faixaConf(b) || (a.primaria ?? 999) - (b.primaria ?? 999) || conf(a) - conf(b) || b.n - a.n
+    : k === "n" ? b.n - a.n
+    : (a.primaria ?? 999) - (b.primaria ?? 999) || b.n - a.n));
   state.ordemFixa = rows.map((r) => r.rid);
   return rows;
 }
@@ -413,6 +428,21 @@ function renderCodificacao() {
   const chart = ordem.map(({ c, m }) => `<div class="row"><div class="n" title="${esc(c.nome)}">${esc(c.nome)}</div><div class="bar"><i style="width:${(100 * m) / maxm}%"></i><span>${m} · ${pct(m, n)}</span></div></div>`).join("");
   const optCat = (sel, vazio) => (vazio ? `<option value="">${esc(vazio)}</option>` : "") + cats.map((c) => `<option value="${c.codigo}" ${c.codigo === sel ? "selected" : ""}>${c.codigo} · ${esc(c.nome)}</option>`).join("");
   const todas = filtrarItens(), vis = todas.slice(0, state.mostrar);
+  // sub-filtro por categoria (visível ao ordenar por confiança): conta ignorando o filtro de categoria em si
+  const chipsCat = (() => {
+    if (f.ordem !== "conf") return "";
+    const q = f.q.toLowerCase(), conta = new Map();
+    P.itens.forEach((r) => {
+      if (q && !(r.texto + " " + (r.justificativa || "")).toLowerCase().includes(q)) return;
+      if (f.alertas && !(r.alertas && r.alertas !== "não codificado")) return;
+      if (f.comentarios && !r.comentario) return;
+      if (f.situacao && !(f.situacao === "nao" ? r.primaria == null : r.revisao === f.situacao)) return;
+      if (r.primaria != null) conta.set(r.primaria, (conta.get(r.primaria) || 0) + 1);
+    });
+    const chips = cats.filter((c) => conta.get(c.codigo)).map((c) =>
+      `<button type="button" class="chip-cat${String(c.codigo) === f.cat ? " on" : ""}" data-cat="${c.codigo}">${esc(c.nome)} <b>${conta.get(c.codigo)}</b></button>`).join("");
+    return chips ? `<div class="subfiltro">Refinar por categoria: ${chips}${f.cat ? `<button type="button" class="chip-cat limpar" id="c-cat-limpar">✕ limpar</button>` : ""}</div>` : "";
+  })();
   const rows = vis.map((r) => {
     const nc = r.primaria == null;
     const cls = [r.alertas && !nc ? "alerta" : "", r.revisao === "corrigida" ? "humano" : "", r.revisao === "confirmada" ? "confirmada" : "", r.comentario_pendente ? "pendente" : "", nc ? "naocod" : ""].join(" ");
@@ -448,6 +478,7 @@ function renderCodificacao() {
       <span class="small">${vis.length} de ${todas.length} respostas${todas.length !== P.itens.length ? ` (filtradas de ${P.itens.length})` : ""}</span>
       ${!locked && pendVis ? `<button class="btn sm" id="c-ok-todas" title="Confirma as respostas 'a conferir' mostradas nesta página">✓ Confirmar as ${pendVis} mostradas</button>` : ""}
     </div>
+    ${chipsCat}
     <table id="tab-cod"><thead><tr><th style="width:44px" title="Confirmar que a IA acertou">OK</th><th>Resposta <small>(e justificativa da IA)</small></th><th class="num" style="width:40px">n</th><th style="width:18%">Categoria principal</th><th style="width:16%">Secundária</th><th class="num" style="width:54px">Conf.</th><th style="width:19%">Comentário para a IA</th><th style="width:96px">Situação</th></tr></thead><tbody>${rows}</tbody></table>
     ${todas.length > vis.length ? `<div class="tools"><button class="btn" id="c-mais">Mostrar mais ${Math.min(POR_PAGINA, todas.length - vis.length)}</button><span class="small">${todas.length - vis.length} restantes</span></div>` : ""}
     <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha da tabela primeiro): <kbd>↑</kbd><kbd>↓</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>C</kbd> escrever comentário · <kbd>1</kbd>–<kbd>9</kbd> trocar a categoria principal pelo código.</div>
@@ -478,6 +509,8 @@ function bindCodificacao() {
   $("#c-al").onchange = (e) => mudaFiltro("alertas", e.target.checked);
   $("#c-com").onchange = (e) => mudaFiltro("comentarios", e.target.checked);
   $("#c-ord").onchange = (e) => mudaFiltro("ordem", e.target.value);
+  document.querySelectorAll(".chip-cat[data-cat]").forEach((b) => (b.onclick = () => mudaFiltro("cat", state.filtro.cat === b.dataset.cat ? "" : b.dataset.cat)));
+  $("#c-cat-limpar")?.addEventListener("click", () => mudaFiltro("cat", ""));
   $("#c-mais")?.addEventListener("click", () => { state.mostrar += POR_PAGINA; state.congelar = true; rerender(); });
   $("#c-ok-todas")?.addEventListener("click", async () => {
     const rids = [...document.querySelectorAll("#tab-cod tbody tr")].map((tr) => +tr.dataset.rid).filter((rid) => state.P.itens.find((i) => i.rid === rid)?.revisao === "pendente");
@@ -534,24 +567,37 @@ const linhaArquivo = (R, tipo, titulo, desc) => {
   return `<tr><td><b>${titulo}</b><br><small>${desc}</small></td><td>${r.existe ? `atualizado ${esc(r.atualizado_em)}` : '<span class="small">ainda não gerado</span>'}</td>
     <td class="acoes">${tipo !== "base" ? `<button class="btn sm" data-gerar="${tipo}">${r.existe ? "↻ Atualizar" : "Gerar"}</button>` : ""} ${r.existe ? `<a class="btn sm primary" href="/arquivo/${tipo}">⬇ Baixar</a>` : ""}</td></tr>`;
 };
+function painelCruzamento(D) {
+  const vars = D.variaveis || [];
+  if (state.cruzSelecionadas == null) state.cruzSelecionadas = new Set(D.padrao || []);
+  const chips = vars.map((v) =>
+    `<label><input type="checkbox" class="cruz-var" value="${esc(v.chave)}" ${state.cruzSelecionadas.has(v.chave) ? "checked" : ""}> ${esc(v.rotulo)}</label>`).join("");
+  return `<div class="box-instr" id="cruz-picker">
+    <b>Variáveis de cruzamento</b> <span class="small">— o que entra nas tabelas de "Cruzamentos" (aba Geral e uma aba por pergunta)</span>
+    <div class="tools">${chips || '<span class="small">nenhuma variável de cruzamento configurada neste projeto</span>'}</div>
+  </div>`;
+}
+function painelGeral(G) {
+  const temas = G.temas || [], trechos = G.trechos || [];
+  const max = Math.max(1, ...temas.map((t) => t.mencoes));
+  const narrativa = G.narrativa
+    ? `<p>${esc(G.narrativa)}</p><div class="small">Resumo gerado em ${esc(G.narrativa_gerada_em || "")} · <button class="btn sm" id="g-atualizar">↻ Atualizar resumo</button></div>`
+    : `<div class="info">Ainda não há um resumo geral do projeto. <button class="btn primary sm" id="g-gerar">✨ Gerar resumo com IA</button></div>`;
+  const chart = temas.length ? `<div class="legenda"><span><i></i>menções, somando todas as perguntas abertas aprovadas</span></div><div class="chart">${temas.map((t) =>
+    `<div class="row"><div class="n" title="${esc(t.pergunta)}">${esc(t.nome)} <small>(${esc(t.pergunta)})</small></div><div class="bar"><i style="width:${(100 * t.mencoes) / max}%"></i><span>${t.mencoes}</span></div></div>`).join("")}</div>` : "";
+  const listaTrechos = trechos.length ? `<div class="small" style="margin-top:8px"><b>O que as pessoas escreveram:</b></div>${trechos.map((t) =>
+    `<div class="small">"${esc(t.texto)}" <i>— ${esc(t.pergunta)}</i></div>`).join("")}` : "";
+  return `<div class="res-q">${narrativa}${chart}${listaTrechos}</div>`;
+}
 async function renderResultados() {
   state.view = "resultados"; state.qid = null; state.P = null; renderSidebar();
   $("#main").innerHTML = `<div class="empty">Carregando resultados…</div>`;
-  const D = await api("/api/resultados"), R = D.arquivos, Q = D.perguntas;
+  const [D, VC, G] = await Promise.all([api("/api/resultados"), api("/api/variaveis-cruzamento"), api("/api/resumo-geral")]);
+  const R = D.arquivos, Q = D.perguntas;
   const aprov = Q.filter((q) => q.codificacao === "aprovado");
   const soma = (k) => Q.reduce((a, q) => a + (q[k] || 0), 0);
   const aval = Q.filter((q) => q.acerto_ia != null && q.n_avaliadas_ia);
   const acertoMedio = aval.length ? aval.reduce((a, q) => a + q.acerto_ia * q.n_avaliadas_ia, 0) / aval.reduce((a, q) => a + q.n_avaliadas_ia, 0) : null;
-  const blocoQ = (q) => {
-    const n = q.respondeu || 0, cats = q.categorias, max = Math.max(1, ...cats.map((c) => c.mencoes));
-    const pill = q.codificacao === "aprovado" ? '<span class="pill ok">aprovada · entra nos arquivos</span>' : q.codificacao ? '<span class="pill warn">em revisão · ainda não entra nos arquivos</span>' : '<span class="pill">ainda não classificada</span>';
-    const chart = cats.length ? `<div class="legenda"><span><i></i>% de quem respondeu que citou a categoria (principal ou secundária)</span></div><div class="chart">${cats.map((c) =>
-      `<div class="row"><div class="n" title="${esc(c.definicao)}">${esc(c.nome)}</div><div class="bar"><i style="width:${(100 * c.mencoes) / max}%"></i><span>${pct(c.mencoes, n)} · ${c.mencoes}</span></div></div>`).join("")}</div>` : "";
-    return `<div class="res-q"><h3>${esc(q.rotulo)} <small>${esc(q.qid)}</small> ${pill}
-      <span class="acoes">${q.relatorio ? `<a class="btn sm ghost" href="/relatorio/${esc(q.qid)}" target="_blank">Relatório ↗</a>` : ""}${q.codificacao ? `<a class="btn sm ghost" href="/revisao/${esc(q.qid)}.xlsx">Excel da revisão</a>` : ""}<a class="btn sm" href="#${esc(q.qid)}">Abrir</a></span></h3>
-      <div class="small">${n ? `${n} responderam · ${q.respostas} respostas diferentes` : "respostas ainda não lidas"}${q.n_categorias ? ` · ${q.n_categorias} categorias` : ""}${q.n_codificadas ? ` · ${q.n_revisadas} conferidas por pessoas` : ""}${q.acerto_ia != null ? ` · a IA acertou <b>${Math.round(100 * q.acerto_ia)}%</b> das conferidas` : ""}</div>
-      ${chart}</div>`;
-  };
   $("#main").innerHTML = `
     <h1>Resultados <small>${esc(D.projeto)}</small></h1>
     <div class="tiles">
@@ -562,19 +608,29 @@ async function renderResultados() {
     </div>
     <h2>Arquivos para baixar <span class="acoes"><button class="btn primary" id="r-todos">↻ Atualizar todos</button><button class="btn" data-acao="pasta">📂 Abrir pasta</button></span></h2>
     <div class="info">Os arquivos usam apenas as perguntas <b>aprovadas</b>. Depois de aprovar ou corrigir algo, clique em “Atualizar todos”.</div>
+    ${painelCruzamento(VC)}
     <table class="res"><tbody>
       ${linhaArquivo(R, "planilha", "Planilha final categorizada", "a planilha original com as colunas de categoria preenchidas (e a secundária ao lado)")}
       ${linhaArquivo(R, "codebook", "Codebook", "todas as variáveis, valores e as categorias de cada pergunta aberta")}
-      ${linhaArquivo(R, "cruzamentos", "Cruzamentos (tabelas)", "% de cada pergunta por perfil (banners), uma aba por pergunta")}
+      ${linhaArquivo(R, "cruzamentos", "Cruzamentos (tabelas)", "aba Geral com todas as variáveis + uma aba por pergunta, cruzadas com as variáveis escolhidas acima")}
       ${linhaArquivo(R, "base", "Base processada", "uma linha por respondente, com os códigos das categorias")}
     </tbody></table>
-    <h2>O que as respostas dizem</h2>
-    ${Q.map(blocoQ).join("")}`;
+    <h2>Visão geral do projeto</h2>
+    ${painelGeral(G)}`;
   document.querySelector("[data-acao=pasta]").onclick = () => post("/api/abrir-pasta");
   $("#r-todos").onclick = async () => { await post("/api/gerar-todos", {}, "Gerando todos os resultados…"); toast("Arquivos atualizados — clique em Baixar."); renderResultados(); carregarStatus(); };
-  document.querySelectorAll("[data-gerar]").forEach((btn) => (btn.onclick = async () => {
-    await post(`/api/gerar/${btn.dataset.gerar}`, {}, "Gerando o arquivo…"); toast("Pronto! Clique em Baixar."); renderResultados();
+  document.querySelectorAll(".cruz-var").forEach((cb) => (cb.onchange = () => {
+    if (cb.checked) state.cruzSelecionadas.add(cb.value); else state.cruzSelecionadas.delete(cb.value);
   }));
+  document.querySelectorAll("[data-gerar]").forEach((btn) => (btn.onclick = async () => {
+    const body = btn.dataset.gerar === "cruzamentos" ? { banners: [...state.cruzSelecionadas] } : {};
+    await post(`/api/gerar/${btn.dataset.gerar}`, body, "Gerando o arquivo…"); toast("Pronto! Clique em Baixar."); renderResultados();
+  }));
+  $("#g-gerar")?.addEventListener("click", async () => { await post("/api/resumo-geral/gerar", {}, "Gerando resumo com IA…"); toast("Resumo gerado"); renderResultados(); });
+  $("#g-atualizar")?.addEventListener("click", async () => {
+    if (!confirm("Gerar um novo resumo? O atual será substituído.")) return;
+    await post("/api/resumo-geral/gerar", {}, "Atualizando resumo…"); toast("Resumo atualizado"); renderResultados();
+  });
 }
 
 // ---------------------------------------------------------------- gerenciar projeto (zona de perigo)

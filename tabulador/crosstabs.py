@@ -5,6 +5,10 @@ categorias (ou itens, para múltiplas; ou categorias do frame, para abertas codi
 distribuição/média, para numéricas). Percentuais sempre sobre a BASE da coluna (respondentes
 válidos para a pergunta naquele segmento). Múltiplas e codificadas com secundária podem somar >100%.
 
+Além das abas por pergunta, a aba "Geral" junta todas as variáveis numa única tabela (Variável |
+Opção de resposta | Total | bandas dos banners) — ver `_escrever_aba_geral`. Os banners usados são
+V.BANNERS_PADRAO por padrão, mas `gerar(banners=[...])` aceita uma lista escolhida na interface.
+
 Saída: output/cruzamentos/cruzamentos.xlsx
 """
 from __future__ import annotations
@@ -223,6 +227,51 @@ def _escrever_aba(ws, bloco: dict, tab: dict) -> None:
     ws.freeze_panes = ws.cell(row=r0 + 2, column=2)
 
 
+def _escrever_aba_geral(ws, blocos_tabs: list[tuple[dict, dict]], banners: list[str]) -> None:
+    """Uma única tabela com todas as variáveis: Variável | Opção de resposta | Total | bandas dos banners."""
+    ws["A1"] = "Cruzamento geral — todas as variáveis"
+    ws["A1"].font = Font(bold=True, size=12)
+    ws["A2"] = f"Banners: {', '.join(_rotulo_banner(b) for b in banners)}"
+    ws["A2"].font = _CINZA
+    colunas = blocos_tabs[0][1]["colunas"] if blocos_tabs else []
+    r0, c = 4, 3
+    i = 0
+    while i < len(colunas):  # cabeçalho: banner (mesclado) / nível, a partir da coluna C
+        b = colunas[i][0]
+        j = i
+        while j < len(colunas) and colunas[j][0] == b:
+            j += 1
+        cel = ws.cell(row=r0, column=c + i, value=_rotulo_banner(b) if b != "Total" else "Total")
+        cel.font = _NEG
+        cel.alignment = Alignment(horizontal="center", wrap_text=True)
+        if j - i > 1:
+            ws.merge_cells(start_row=r0, start_column=c + i, end_row=r0, end_column=c + j - 1)
+        for k in range(i, j):
+            cel = ws.cell(row=r0 + 1, column=c + k, value=colunas[k][1])
+            cel.font, cel.fill, cel.border = _NEG, _CAB, _BORDA
+            cel.alignment = Alignment(horizontal="center", wrap_text=True, vertical="top")
+        i = j
+    for col, rotulo in ((1, "Variável"), (2, "Opção de resposta")):
+        cel = ws.cell(row=r0 + 1, column=col, value=rotulo)
+        cel.font, cel.fill = _NEG, _CAB
+    linha = r0 + 2
+    for bloco, tab in blocos_tabs:
+        linhas_valor = tab.get("linhas_valor", set())
+        for rot, pcts in zip(tab["linhas"], tab["pct"]):
+            ws.cell(row=linha, column=1, value=bloco["rotulo"]).border = _BORDA
+            ws.cell(row=linha, column=2, value=rot).border = _BORDA
+            for k, v in enumerate(pcts):
+                cel = ws.cell(row=linha, column=c + k, value=None if _nan(v) else float(v))
+                cel.border = _BORDA
+                cel.number_format = "0.0" if rot in linhas_valor else "0%"
+            linha += 1
+    ws.column_dimensions["A"].width = 30
+    ws.column_dimensions["B"].width = 42
+    for k in range(len(colunas)):
+        ws.column_dimensions[get_column_letter(c + k)].width = 13
+    ws.freeze_panes = ws.cell(row=r0 + 2, column=3)
+
+
 def gerar(banners: list[str] | None = None, verbose: bool = True):
     banners = banners or V.BANNERS_PADRAO
     df, registro = load.carregar_base()
@@ -230,6 +279,7 @@ def gerar(banners: list[str] | None = None, verbose: bool = True):
     config.garantir_pastas()
     p = config.CRUZAMENTOS_OUT / "cruzamentos.xlsx"
     longo = []
+    blocos_tabs = []
     with pd.ExcelWriter(p, engine="openpyxl") as xw:
         idx = pd.DataFrame([{"aba": b["qid"][:31], "pergunta": b["qid"], "tipo": b["tipo"], "rotulo": b["rotulo"],
                              "base": V.FILTROS_DESCRICAO.get(b["base"], b["base"])} for b in blocos])
@@ -242,6 +292,7 @@ def gerar(banners: list[str] | None = None, verbose: bool = True):
         usados = set()
         for b in blocos:
             tab = tabular(df, b, banners)
+            blocos_tabs.append((b, tab))
             nome = b["qid"][:31]
             while nome in usados:
                 nome = nome[:29] + "_2"
@@ -251,6 +302,7 @@ def gerar(banners: list[str] | None = None, verbose: bool = True):
                 for (bn, niv), base, n, pc in zip(tab["colunas"], tab["base"], ns, pcts):
                     longo.append({"pergunta": b["qid"], "tipo": b["tipo"], "linha": rot, "banner": bn, "nivel": niv,
                                   "base": base, "n": n, "valor": None if _nan(pc) else float(pc)})
+        _escrever_aba_geral(xw.book.create_sheet("Geral", 1), blocos_tabs, banners)
         pd.DataFrame(longo).to_excel(xw, sheet_name="dados_longos", index=False)
     if verbose:
         print(f"  {len(blocos)} tabelas em {p}")

@@ -33,6 +33,7 @@ import load
 import progresso
 import projetos
 import report
+import resumo_geral
 import usage
 import variables as V
 
@@ -286,10 +287,43 @@ def api_gerar(tipo):
         abort(404)
     try:
         nomes = {"codebook": "Gerando o codebook", "cruzamentos": "Gerando os cruzamentos (tabelas)", "planilha": "Gerando a planilha final categorizada"}
+        kwargs = {}
+        if tipo == "cruzamentos":
+            banners = (request.get_json(silent=True) or {}).get("banners")
+            if banners:
+                kwargs["banners"] = [b for b in banners if b in V.DERIVADAS]
         with _lock, progresso.operacao(nomes[tipo], [("gerar", "Montar o arquivo com as perguntas aprovadas", 3)]):
             progresso.etapa("gerar", f"projeto {config.NOME_PROJETO}")
-            geradores[tipo](verbose=False)
+            geradores[tipo](verbose=False, **kwargs)
         return jsonify({"ok": True, "url": f"/arquivo/{tipo}", "resultados": _resultados()})
+    except Exception as e:
+        return _erro(e, 500)
+
+
+@app.get("/api/variaveis-cruzamento")
+def api_variaveis_cruzamento():
+    """Variáveis (banners) disponíveis para escolher no cruzamento geral, e as que vêm marcadas por padrão."""
+    return jsonify({
+        "variaveis": [{"chave": k, "rotulo": v.get("rotulo", k)} for k, v in V.DERIVADAS.items()],
+        "padrao": V.BANNERS_PADRAO,
+    })
+
+
+@app.get("/api/resumo-geral")
+def api_resumo_geral():
+    try:
+        return jsonify(resumo_geral.resumo())
+    except Exception as e:
+        return _erro(e, 500)
+
+
+@app.post("/api/resumo-geral/gerar")
+def api_resumo_geral_gerar():
+    try:
+        with _lock, progresso.operacao("Gerando o resumo geral", [("gerar", "Juntar os temas e pedir um resumo à IA", 2)]):
+            progresso.etapa("gerar", f"projeto {config.NOME_PROJETO}")
+            dados = resumo_geral.gerar_narrativa()
+        return jsonify(dados)
     except Exception as e:
         return _erro(e, 500)
 
