@@ -35,6 +35,10 @@
     </ul>
     <div class="side-title">Perguntas abertas</div>
     <ul id="lista-perguntas"></ul>
+    <div id="bloco-presenca-projeto" class="hidden">
+      <div class="side-title">Quem está no projeto agora <span id="presenca-eu" class="small muted"></span></div>
+      <ul id="lista-presenca-projeto" class="lista-presenca"></ul>
+    </div>
     <div class="side-help">
       <b>Como funciona</b>
       <ol>
@@ -89,6 +93,16 @@
       <input id="pg-input" autocomplete="off">
     </label>
     <div class="dlg-acoes"><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn perigo" id="pg-ok" value="ok" disabled>Apagar</button></div>
+  </form>
+</dialog>
+<dialog id="dlg-identificacao">
+  <form method="dialog" id="form-identificacao">
+    <h2 style="margin-top:0">Como você quer aparecer?</h2>
+    <p class="small">Outras pessoas (e IAs) trabalhando neste projeto ao mesmo tempo vão ver esse nome na lista de presença, para saber quem está mexendo em quê agora.</p>
+    <label class="campo">Nome (ou "IA: Claude", "IA: Codex"…)
+      <input id="ident-nome" autocomplete="off" required maxlength="40" placeholder="Seu nome">
+    </label>
+    <div class="dlg-acoes"><button class="btn primary" value="ok">Entrar</button></div>
   </form>
 </dialog>
 <dialog id="dlg-janela" class="larga">
