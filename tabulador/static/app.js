@@ -216,6 +216,59 @@ function renderPresenca(outros) {
     : "";
 }
 window.addEventListener("beforeunload", pararPresenca);
+
+// ---------------------------------------------------------------- presença do PROJETO INTEIRO (PEND-09)
+// Não confundir com a de cima (por pergunta, avisa edição simultânea). Esta é a sidebar "quem está
+// aqui agora" pro projeto todo. sessao_id é por ABA (memória, nunca salvo), nome_exibicao é
+// autodeclarado uma vez e fica no localStorage (assim não pergunta de novo em cada aba nova).
+const SESSAO_ID = (crypto.randomUUID ? crypto.randomUUID() : `sessao-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+let presencaProjT = null;
+function nomeExibicao() { return localStorage.getItem("tabulador_nome") || ""; }
+function localizacaoAtual() {
+  if (state.view === "pergunta" && state.qid) return `Pergunta ${state.qid}`;
+  const nomes = { painel: "Painel geral", resultados: "Resultados", usage: "Consumo da IA", gerenciar: "Gerenciar projeto", novo: "Criando projeto novo" };
+  return nomes[state.view] || state.view || "—";
+}
+async function presencaProjTick() {
+  const nome = nomeExibicao();
+  if (!nome) return;
+  try {
+    const r = await (await fetch("/api/presenca", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessao_id: SESSAO_ID, nome_exibicao: nome, localizacao: localizacaoAtual() }),
+    })).json();
+    renderPresencaProjeto(r.outros || []);
+  } catch (e) { /* heartbeat: falha em silêncio */ }
+}
+function renderPresencaProjeto(outros) {
+  const bloco = $("#bloco-presenca-projeto"), lista = $("#lista-presenca-projeto");
+  if (!bloco || !lista) return;
+  bloco.classList.toggle("hidden", outros.length === 0);
+  lista.innerHTML = outros.map((o) => `<li><b>${esc(o.nome_exibicao)}</b><span class="small muted"> · ${esc(o.localizacao)}</span></li>`).join("");
+}
+function pararPresencaProjeto() {
+  clearInterval(presencaProjT); presencaProjT = null;
+  try { navigator.sendBeacon("/api/presenca/sair", new Blob([JSON.stringify({ sessao_id: SESSAO_ID })], { type: "application/json" })); } catch (e) { /* ignora */ }
+}
+window.addEventListener("beforeunload", pararPresencaProjeto);
+async function garantirIdentificacao() {
+  if (nomeExibicao()) return;
+  const dlg = $("#dlg-identificacao");
+  await new Promise((resolve) => {
+    dlg.addEventListener("close", function onClose() {
+      dlg.removeEventListener("close", onClose);
+      const nome = $("#ident-nome").value.trim();
+      if (nome) localStorage.setItem("tabulador_nome", nome);
+      resolve();
+    });
+    dlg.showModal();
+  });
+}
+function iniciarPresencaProjeto() {
+  $("#presenca-eu").textContent = nomeExibicao() ? `(você: ${nomeExibicao()})` : "";
+  presencaProjTick();
+  presencaProjT = setInterval(presencaProjTick, 12000);
+}
 async function refresh(payload) {
   state.P = payload || (await api(`/api/pergunta/${state.qid}`)); prepararItens();
   manterScroll(render); carregarStatus();
@@ -1752,4 +1805,6 @@ fetch("/api/versao").then((r) => r.json()).then((j) => (versaoPagina = j.versao)
   }
   if (pedido) history.replaceState(null, "", "/" + location.hash);
   rota();
+  await garantirIdentificacao();
+  iniciarPresencaProjeto();
 })();

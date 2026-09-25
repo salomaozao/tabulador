@@ -143,6 +143,30 @@ class TestNuvem(unittest.TestCase):
             import shutil
             shutil.rmtree(CF.pasta(qid), ignore_errors=True)
 
+    def test_presenca_projeto_ve_outra_sessao_mas_nao_a_si_mesma(self):
+        nuvem.marcar_presenca_projeto("projeto_teste", "sessao-a", "Gabriel", "painel")
+        outros = nuvem.marcar_presenca_projeto("projeto_teste", "sessao-b", "João", "Q1")
+        self.assertEqual(outros, [{"nome_exibicao": "Gabriel", "origem": "browser", "localizacao": "painel"}])
+        self.assertEqual(
+            nuvem.marcar_presenca_projeto("projeto_teste", "sessao-a", "Gabriel", "resultados"),
+            [{"nome_exibicao": "João", "origem": "browser", "localizacao": "Q1"}],
+        )
+
+    def test_presenca_projeto_atualiza_localizacao_da_mesma_sessao(self):
+        nuvem.marcar_presenca_projeto("projeto_teste", "sessao-a", "Gabriel", "painel")
+        nuvem.marcar_presenca_projeto("projeto_teste", "sessao-a", "Gabriel", "Q5")
+        outros = nuvem.marcar_presenca_projeto("projeto_teste", "sessao-b", "João", "painel")
+        self.assertEqual(outros, [{"nome_exibicao": "Gabriel", "origem": "browser", "localizacao": "Q5"}])
+
+    def test_presenca_projeto_nao_mistura_projeto(self):
+        nuvem.marcar_presenca_projeto("projeto_teste", "sessao-a", "Gabriel", "painel")
+        self.assertEqual(nuvem.marcar_presenca_projeto("outro_projeto", "sessao-b", "João", "painel"), [])
+
+    def test_sair_presenca_projeto_remove(self):
+        nuvem.marcar_presenca_projeto("projeto_teste", "sessao-a", "Gabriel", "painel")
+        nuvem.sair_presenca_projeto("projeto_teste", "sessao-a")
+        self.assertEqual(nuvem.marcar_presenca_projeto("projeto_teste", "sessao-b", "João", "painel"), [])
+
 
 if __name__ == "__main__":
     unittest.main()

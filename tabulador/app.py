@@ -890,6 +890,33 @@ def api_presenca_sair(qid):
         return _erro(e)
 
 
+@app.post("/api/presenca")
+def api_presenca_projeto():
+    """Heartbeat de presença do PROJETO INTEIRO (PEND-09, não confundir com o de cima, por pergunta):
+    {sessao_id, nome_exibicao, localizacao} -> quem mais está no projeto agora e onde."""
+    try:
+        d = request.get_json() or {}
+        sessao_id, nome = (d.get("sessao_id") or "").strip(), (d.get("nome_exibicao") or "").strip()
+        localizacao = (d.get("localizacao") or "").strip() or "painel"
+        if not sessao_id or not nome:
+            return jsonify({"outros": []})
+        outros = nuvem.marcar_presenca_projeto(config.PROJETO, sessao_id, nome, localizacao) if nuvem.ativa() else []
+        return jsonify({"outros": outros})
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/presenca/sair")
+def api_presenca_projeto_sair():
+    try:
+        sessao_id = (request.get_json(silent=True) or {}).get("sessao_id") or ""
+        if nuvem.ativa() and sessao_id:
+            nuvem.sair_presenca_projeto(config.PROJETO, sessao_id)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return _erro(e)
+
+
 @app.post("/api/pergunta/<qid>/aprovar")
 def api_aprovar(qid):
     try:

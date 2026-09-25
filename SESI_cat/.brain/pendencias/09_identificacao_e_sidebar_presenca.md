@@ -3,10 +3,11 @@ id: PEND-09
 titulo: Identificação de quem está logado (pessoa ou IA) e sidebar mostrando onde cada um está no projeto
 modulo_afetado: [tabulador, app.py, app.js, nuvem.py, config.py]
 criticidade: baixa
-status: aberto
+status: resolvido
 responsavel: Gabriel Nascimento
 data_abertura: 2026-09-24
-resumo: "Ideia do Gabriel: hoje o Tabulador identifica quem está usando a máquina pelo login do Windows (config.USUARIO, usado só para avisar de edição simultânea numa mesma pergunta — ver a presença por pergunta implementada em 2026-09-24). Falta: (1) uma identificação explícita na tela inicial — a pessoa se apresenta (ou diz que é uma IA, ex. 'Claude', 'Codex') em vez de confiar só no login do SO; (2) uma sidebar à direita mostrando, para todo o projeto, onde cada pessoa/IA está agora (em qual pergunta, ou no painel/resultados), não só um aviso dentro da pergunta aberta."
+data_resolucao: 2026-09-25
+resumo: "Ideia do Gabriel: hoje o Tabulador identifica quem está usando a máquina pelo login do Windows (config.USUARIO, usado só para avisar de edição simultânea numa mesma pergunta — ver a presença por pergunta implementada em 2026-09-24). Faltava: (1) identificação explícita na tela inicial; (2) uma sidebar mostrando, para todo o projeto, onde cada pessoa/IA está agora. Desenhado pelo conselho de IAs e implementado em 25/09: nome autodeclarado + sessão por aba + lista de presença no painel lateral esquerdo (não direito — ver nota de escopo); presença de IA via CLI ficou deliberadamente fora, é gambiarra sem heartbeat real de processo."
 ---
 
 # PEND-09: Identificação de sessão + sidebar de presença do projeto inteiro
@@ -44,3 +45,32 @@ parcial fora deste escopo de produto: `jumppi/COMUNICACAO_IAS.md` agora é um lo
 com `tabulador/.claude/scripts/coordenacao_ias.py` cruzando isso com `git worktree`/`git status` reais.
 Isso resolve coordenação entre IAs mexendo em código, mas continua sem tela/sidebar dentro do próprio
 Tabulador para quem usa o navegador — itens 1 e 2 desta pendência continuam em aberto.
+
+## Resolução (2026-09-25) — implementado (menor passo viável)
+Rodei o conselho de IAs (Arquiteto/Crítico/Pragmático/Rubber Duck, 2 rodadas — transcrição completa em
+`jumppi/_general/conselho/rodadas/20260925_154901_pend-09-desenhar-sem-implementar-ainda-identificacao-explici.md`).
+O Crítico achou dois furos reais na primeira proposta (sessão fixa por CLI colidindo entre operadores
+diferentes; `sessao_id` só em `localStorage` "teleportando" entre abas do mesmo navegador) que o
+Pragmático incorporou sem inchar o escopo. Desenho final, implementado como está:
+
+- **Tabela nova** `presenca_projeto` em `nuvem.py` (`sessao_id, nome_exibicao, origem, localizacao,
+  atualizado_em`) — **aditiva**, não mexe na tabela `presenca` (por pergunta) que já está em produção
+  durante o campo; decisão de segurança minha, não do conselho, por causa do momento (PEND-01/03).
+- **Identificação**: modal de 1 campo ("Como você quer aparecer?"), sem dropdown de tipo/modelo — pede
+  uma vez, guarda em `localStorage`. Uma IA rodando pelo navegador digita "IA: Claude" etc.
+- **`sessao_id`**: gerado em memória (`crypto.randomUUID()`) a cada carregamento de página — por ABA,
+  nunca persistido — resolve o teleporte entre abas que o Crítico apontou.
+- **Sidebar**: virou um bloco na nav lateral **esquerda** já existente (`#bloco-presenca-projeto`),
+  não uma coluna nova à direita como o pedido original imaginava — layout novo de coluna ficaria fora
+  do "menor passo", registrado aqui como desvio consciente do pedido original.
+- **IA via CLI**: fora do escopo funcional, como o Pragmático cortou — o schema já tem `origem`
+  (`browser`|`cli`) pronto pra quando alguém desenhar heartbeat de processo de verdade (zumbi/crash
+  cleanup, que o Crítico apontou como não-trivial); hoje só "browser" é populado.
+- Sem detector de ociosidade (mouse/teclado) — cortado pelo Pragmático como over-engineering; mesmo
+  comportamento "solta em 30s sem heartbeat" que já existia na presença por pergunta.
+
+Código: `tabulador/src/nuvem.py` (tabela + `marcar_presenca_projeto`/`sair_presenca_projeto`),
+`tabulador/app.py` (`POST /api/presenca`, `POST /api/presenca/sair`), `tabulador/static/app.js`
+(`SESSAO_ID`, `garantirIdentificacao`, `iniciarPresencaProjeto`), `tabulador/templates/index.html`
+(`#dlg-identificacao`, `#bloco-presenca-projeto`). Testado com `tests/test_nuvem.py` (4 testes novos)
+e suíte completa.

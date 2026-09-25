@@ -23,6 +23,8 @@ a{color:inherit}
 .side li:hover{background:var(--surface-3)}.side li.ativa{background:var(--accent);color:#fff}
 .side li.ativa .muted,.side li.ativa .small{color:rgba(255,255,255,.8)}
 .side li .t{font-weight:500;font-size:13px}.side li .b{display:flex;gap:6px;flex-wrap:wrap}
+.lista-presenca li{cursor:default;padding:5px 10px;font-size:12px}
+.lista-presenca li:hover{background:none}
 .side-help{margin:18px 8px;font-size:12px;color:var(--text-2)}.side-help ol{padding-left:18px;margin:6px 0}
 main{padding:20px 24px 80px;max-width:1300px}
 .empty{color:var(--text-3);padding:40px}

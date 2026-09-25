@@ -39,6 +39,23 @@ CREATE TABLE IF NOT EXISTS presenca (
 )
 """
 
+# Presença do projeto inteiro (PEND-09), separada da `presenca` por pergunta acima de propósito:
+# tabela nova em vez de generalizar a existente, para não arriscar a que já está em produção durante
+# o campo. `sessao_id` é por aba (gerado em memória no navegador, não persiste), `nome_exibicao` é
+# autodeclarado (sem login). `origem` já existe no schema para a IA por CLI se anunciar no futuro, mas
+# hoje só "browser" é populado — ver decisão do conselho de IAs em PEND-09.
+_CRIAR_TABELA_PRESENCA_PROJETO = """
+CREATE TABLE IF NOT EXISTS presenca_projeto (
+    projeto TEXT NOT NULL,
+    sessao_id TEXT NOT NULL,
+    nome_exibicao TEXT NOT NULL,
+    origem TEXT NOT NULL,
+    localizacao TEXT NOT NULL,
+    atualizado_em TEXT NOT NULL,
+    PRIMARY KEY (projeto, sessao_id)
+)
+"""
+
 JANELA_PRESENCA_S = 30  # o navegador manda um heartbeat a cada 12s: folga para perder 1 batida
 
 _lock = threading.Lock()
@@ -80,6 +97,7 @@ def _obter_cliente():
         if not _tabela_pronta:
             _cliente.execute(_CRIAR_TABELA)
             _cliente.execute(_CRIAR_TABELA_PRESENCA)
+            _cliente.execute(_CRIAR_TABELA_PRESENCA_PROJETO)
             _tabela_pronta = True
     return _cliente
 
@@ -156,6 +174,31 @@ def marcar_presenca(projeto: str, qid: str, usuario: str) -> list[str]:
 
 def sair_presenca(projeto: str, qid: str, usuario: str) -> None:
     _obter_cliente().execute("DELETE FROM presenca WHERE projeto = ? AND qid = ? AND usuario = ?", [projeto, qid, usuario])
+
+
+def marcar_presenca_projeto(projeto: str, sessao_id: str, nome_exibicao: str, localizacao: str, origem: str = "browser") -> list[dict]:
+    """'sessao_id' (uma aba) está em 'localizacao' (qid:<id> | painel | resultados | usage | gerenciar)
+    agora: grava o heartbeat e devolve as OUTRAS sessões ativas no projeto inteiro (sidebar de
+    presença, PEND-09) — não confundir com `marcar_presenca` (por pergunta, mais antiga)."""
+    agora = datetime.now(timezone.utc)
+    c = _obter_cliente()
+    c.execute(
+        "INSERT INTO presenca_projeto (projeto, sessao_id, nome_exibicao, origem, localizacao, atualizado_em) "
+        "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (projeto, sessao_id) DO UPDATE SET "
+        "nome_exibicao = excluded.nome_exibicao, origem = excluded.origem, localizacao = excluded.localizacao, "
+        "atualizado_em = excluded.atualizado_em",
+        [projeto, sessao_id, nome_exibicao, origem, localizacao, agora.isoformat()],
+    )
+    rs = c.execute("SELECT sessao_id, nome_exibicao, origem, localizacao, atualizado_em FROM presenca_projeto WHERE projeto = ?", [projeto])
+    return [
+        {"nome_exibicao": nome, "origem": org, "localizacao": loc}
+        for sid, nome, org, loc, visto in rs.rows
+        if sid != sessao_id and (agora - datetime.fromisoformat(visto)).total_seconds() <= JANELA_PRESENCA_S
+    ]
+
+
+def sair_presenca_projeto(projeto: str, sessao_id: str) -> None:
+    _obter_cliente().execute("DELETE FROM presenca_projeto WHERE projeto = ? AND sessao_id = ?", [projeto, sessao_id])
 
 
 def listar(projeto: str) -> list[dict]:
