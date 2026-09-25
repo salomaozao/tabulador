@@ -155,7 +155,8 @@ function renderPainel() {
       <div>${pillStatus(s)} ${s.alertas ? `<span class="pill warn">${s.alertas} alertas</span>` : ""}</div>
       ${s.codificacao ? `
         <div class="kv"><span>Classificadas</span><span>${cod} de ${tot}</span></div>${barra(cod, tot)}
-        <div class="kv"><span>Revisadas por você</span><span>${s.n_revisadas} (${pct(s.n_revisadas, cod)})</span></div>${barra(s.n_revisadas, cod, "hum")}
+        <div class="kv"><span>Revisadas</span><span>${s.n_revisadas} (${pct(s.n_revisadas, cod)})</span></div>${barra(s.n_revisadas, cod, "hum")}
+        ${s.n_revisadas ? `<div class="small dist-status">✓ ${s.n_confirmadas - (s.n_confirmadas_auto || 0)} manual${s.n_confirmadas_auto ? ` · ⚡ ${s.n_confirmadas_auto} automática${s.n_confirmadas_auto === 1 ? "" : "s"}` : ""}${s.n_corrigidas ? ` · ✎ ${s.n_corrigidas} corrigida${s.n_corrigidas === 1 ? "" : "s"}` : ""}</div>` : ""}
         <div class="kv"><span>Acerto da IA</span><span>${s.acerto_ia == null ? "–" : Math.round(100 * s.acerto_ia) + "%"} <small>${s.n_avaliadas_ia ? `(${s.n_avaliadas_ia} conferidas)` : ""}</small></span></div>
         ${s.top && s.top.length ? `<div class="small top">Mais citadas: ${s.top.slice(0, 3).map((t) => esc(t.nome)).join(" · ")}</div>` : ""}` : ""}
       <button class="btn sm ${s.codificacao === "aprovado" ? "" : "primary"}">${s.codificacao === "aprovado" ? "Ver" : s.frame ? "Continuar" : "Começar"}</button>
@@ -370,6 +371,7 @@ function render() {
       </span>
     </h2>
     ${!frameOk ? `<div class="info">Aprove as categorias para liberar a classificação.</div>` : ""}
+    ${C ? renderRevbar() : ""}
     ${frameOk && !codOk ? renderAcoesCod() : ""}
     ${C ? renderCodificacao() : ""}
     ${frameOk && !codOk ? renderAprovarBar() : ""}
@@ -445,14 +447,13 @@ function bindFrame() {
 }
 
 // ---------------------------------------------------------------- ações de classificação (amostra / restantes / aprovar)
-function renderAcoesCod() {
-  const P = state.P, C = P.codificacao, V = P.revisao, R = P.respostas || {};
-  const tam = `<select id="tam-amostra">${[30, 50, 100, 200].map((n) => `<option ${n === state.amostra ? "selected" : ""}>${n}</option>`).join("")}</select>`;
-  if (!C) return `
-    <div class="passo">
-      <div><b>Comece por uma amostra.</b> A IA classifica ${tam} respostas; você confere, corrige e ajusta as instruções/categorias. Quando a taxa de acerto estiver boa, classifique o restante.</div>
-      <div class="tools"><button class="btn primary" id="b-amostra">✨ Classificar amostra</button><button class="btn" id="b-codificar">Classificar todas as ${R.n_unicas || ""} de uma vez</button></div>
-    </div>`;
+function renderRevbar() {
+  // distribuição de status das respostas (conferidas por pessoa, automáticas, corrigidas...).
+  // Mostrado sempre que existe codificação, mesmo depois de aprovada — antes sumia junto com o
+  // resto de renderAcoesCod() assim que a pergunta era aprovada, escondendo justamente o resumo que
+  // faz mais sentido olhar depois de concluído.
+  const P = state.P, V = P.revisao;
+  if (!V) return "";
   const acerto = V.acerto_ia == null ? null : Math.round(100 * V.acerto_ia);
   const nPendentes = V.n_codificadas - V.n_revisadas;
   return `
@@ -466,6 +467,18 @@ function renderAcoesCod() {
         <div class="prog pilha" title="${V.n_revisadas} conferidas · ${V.n_codificadas - V.n_revisadas} classificadas a conferir · ${V.n_faltantes} ainda não classificadas">
           <i class="conf" style="width:${V.n_unicas ? (100 * V.n_revisadas) / V.n_unicas : 0}%"></i><i class="ia" style="width:${V.n_unicas ? (100 * (V.n_codificadas - V.n_revisadas)) / V.n_unicas : 0}%"></i></div>
       </div>
+    </div>`;
+}
+function renderAcoesCod() {
+  const P = state.P, C = P.codificacao, V = P.revisao, R = P.respostas || {};
+  const tam = `<select id="tam-amostra">${[30, 50, 100, 200].map((n) => `<option ${n === state.amostra ? "selected" : ""}>${n}</option>`).join("")}</select>`;
+  if (!C) return `
+    <div class="passo">
+      <div><b>Comece por uma amostra.</b> A IA classifica ${tam} respostas; você confere, corrige e ajusta as instruções/categorias. Quando a taxa de acerto estiver boa, classifique o restante.</div>
+      <div class="tools"><button class="btn primary" id="b-amostra">✨ Classificar amostra</button><button class="btn" id="b-codificar">Classificar todas as ${R.n_unicas || ""} de uma vez</button></div>
+    </div>`;
+  return `
+    <div class="passo">
       <div class="small">Loop: confirme ✓ o que está certo · corrija na hora pelo menu · ou escreva um comentário e clique em <b>Reclassificar comentadas</b>. Se o erro se repete, ajuste as <b>instruções</b> ou as <b>categorias</b> e clique em <b>Reclassificar tudo</b> (o que você corrigiu/confirmou é mantido).</div>
       <div class="tools">
         <button class="btn primary" id="b-recod-com" ${P.n_comentarios_pendentes ? "" : "disabled"}>✨ Reclassificar comentadas (${P.n_comentarios_pendentes})</button>

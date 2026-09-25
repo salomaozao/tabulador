@@ -44,6 +44,7 @@ class TestNuvem(unittest.TestCase):
         config.PERGUNTAS_OUT = Path(self._tmp) / "perguntas"  # isola de qualquer output real
         nuvem._cliente = None
         nuvem._tabela_pronta = False
+        nuvem._cache.clear()
 
     def tearDown(self):
         if nuvem._cliente is not None:
@@ -51,6 +52,7 @@ class TestNuvem(unittest.TestCase):
         config.TURSO_URL, config.TURSO_TOKEN, config.PROJETO, config.PERGUNTAS_OUT = self._url_antes
         nuvem._cliente = None
         nuvem._tabela_pronta = False
+        nuvem._cache.clear()
 
     def test_ler_gravar_existe(self):
         self.assertIsNone(nuvem.ler("projeto_teste", "Q1", "codificacao.json"))
@@ -63,6 +65,38 @@ class TestNuvem(unittest.TestCase):
         nuvem.gravar("projeto_teste", "Q1", "frame.json", {"v": 1})
         nuvem.gravar("projeto_teste", "Q1", "frame.json", {"v": 2})
         self.assertEqual(nuvem.ler("projeto_teste", "Q1", "frame.json"), {"v": 2})
+
+    def test_ler_repetido_nao_bate_de_novo_na_rede(self):
+        nuvem.gravar("projeto_teste", "Q1", "frame.json", {"v": 1})
+        cliente = nuvem._obter_cliente()
+        chamadas = []
+        original = cliente.execute
+        cliente.execute = lambda *a, **k: (chamadas.append(1), original(*a, **k))[1]
+        try:
+            for _ in range(3):
+                self.assertEqual(nuvem.ler("projeto_teste", "Q1", "frame.json"), {"v": 1})
+            self.assertEqual(len(chamadas), 0, "leitura repetida dentro do TTL não deveria ir à rede")
+        finally:
+            cliente.execute = original
+
+    def test_gravar_atualiza_cache_na_hora_write_through(self):
+        nuvem.gravar("projeto_teste", "Q1", "frame.json", {"v": 1})
+        nuvem.ler("projeto_teste", "Q1", "frame.json")  # popula o cache
+        nuvem.gravar("projeto_teste", "Q1", "frame.json", {"v": 2})  # não deveria deixar cache velho
+        self.assertEqual(nuvem.ler("projeto_teste", "Q1", "frame.json"), {"v": 2})
+
+    def test_cache_expira_depois_do_ttl(self):
+        nuvem.gravar("projeto_teste", "Q1", "frame.json", {"v": 1})
+        nuvem._cache[("projeto_teste", "Q1", "frame.json")] = (0.0, {"v": 1})  # forca expiracao (no passado)
+        cliente = nuvem._obter_cliente()
+        chamou = []
+        original = cliente.execute
+        cliente.execute = lambda *a, **k: (chamou.append(1), original(*a, **k))[1]
+        try:
+            nuvem.ler("projeto_teste", "Q1", "frame.json")
+            self.assertEqual(len(chamou), 1, "cache expirado deveria ir à rede de novo")
+        finally:
+            cliente.execute = original
 
     def test_projetos_diferentes_nao_se_misturam(self):
         nuvem.gravar("sesi", "Q1", "codificacao.json", {"p": "sesi"})

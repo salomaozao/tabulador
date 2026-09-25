@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from datetime import datetime, timezone
 
 import config
@@ -62,6 +63,30 @@ _lock = threading.Lock()
 _cliente = None
 _tabela_pronta = False
 
+# Cache curto de leitura (chave: projeto/qid/arquivo -> (expira_em, dados)). Cada pergunta aberta na
+# interface lê o mesmo arquivo mais de uma vez na mesma requisição (ver codeframe.frame/_exigir_frame,
+# coding.tabela) — sem cache isso vira ida e volta de rede ao Turso repetida, e é o principal motivo de
+# "mudar de aba/pergunta" ficar lento com a nuvem ativa. TTL curto (poucos segundos) limita o quanto uma
+# gravação de outra pessoa pode ficar "atrasada" pra quem só está lendo — grava (`gravar`/`remover`)
+# sempre atualiza o cache na hora (write-through), então as próprias mudanças de quem está usando nunca
+# ficam desatualizadas; só a leitura de mudança feita por OUTRO processo pode esperar até o TTL.
+_CACHE_TTL_S = 5.0
+_cache: dict[tuple[str, str, str], tuple[float, dict | None]] = {}
+
+
+def _cache_get(chave: tuple[str, str, str]):
+    item = _cache.get(chave)
+    if item is None:
+        return False, None
+    expira, dados = item
+    if time.monotonic() >= expira:
+        return False, None
+    return True, dados
+
+
+def _cache_set(chave: tuple[str, str, str], dados: dict | None) -> None:
+    _cache[chave] = (time.monotonic() + _CACHE_TTL_S, dados)
+
 
 def ativa() -> bool:
     if not config.TURSO_URL:
@@ -103,16 +128,23 @@ def _obter_cliente():
 
 
 def ler(projeto: str, qid: str, arquivo: str) -> dict | None:
+    chave = (projeto, qid, arquivo)
+    achou, dados = _cache_get(chave)
+    if achou:
+        return dados
     rs = _obter_cliente().execute(
         "SELECT dados FROM blobs WHERE projeto = ? AND qid = ? AND arquivo = ?",
         [projeto, qid, arquivo],
     )
-    if not rs.rows:
-        return None
-    return json.loads(rs.rows[0][0])
+    dados = json.loads(rs.rows[0][0]) if rs.rows else None
+    _cache_set(chave, dados)
+    return dados
 
 
 def existe(projeto: str, qid: str, arquivo: str) -> bool:
+    achou, dados = _cache_get((projeto, qid, arquivo))
+    if achou:
+        return dados is not None
     rs = _obter_cliente().execute(
         "SELECT 1 FROM blobs WHERE projeto = ? AND qid = ? AND arquivo = ?",
         [projeto, qid, arquivo],
@@ -126,6 +158,7 @@ def remover(projeto: str, qid: str, arquivo: str) -> bool:
         "DELETE FROM blobs WHERE projeto = ? AND qid = ? AND arquivo = ?",
         [projeto, qid, arquivo],
     )
+    _cache_set((projeto, qid, arquivo), None)
     return bool(rs.rows_affected)
 
 
@@ -136,6 +169,7 @@ def gravar(projeto: str, qid: str, arquivo: str, dados: dict) -> None:
         "ON CONFLICT (projeto, qid, arquivo) DO UPDATE SET dados = excluded.dados, atualizado_em = excluded.atualizado_em",
         [projeto, qid, arquivo, json.dumps(dados, ensure_ascii=False), agora],
     )
+    _cache_set((projeto, qid, arquivo), dados)
 
 # ----------------------------------------------------------------------------- manutenção (linha de comando)
 def fechar() -> None:
