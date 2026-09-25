@@ -1,0 +1,30 @@
+========================================================================
+TABULADOR DE RESPOSTAS ABERTAS — INSTITUTO OLHAR / JUMPPI
+========================================================================
+
+Como rodar o Tabulador no seu computador:
+
+1. O que este pacote contém:
+   - O aplicativo Tabulador completo.
+   - O projeto SESI Minas (já configurado na pasta "projetos/sesi_cat").
+   - A planilha de dados "base_processamento.xlsx" (em projetos/sesi_cat/data).
+   - O histórico de categorização e cruzamentos já processados.
+
+2. Como iniciar:
+   - Dê 2 cliques no arquivo "iniciar.bat" na raiz desta pasta.
+   - Na primeira vez, o programa prepara o ambiente Python automaticamente
+     (leva de 1 a 3 minutos).
+   - O navegador abrirá sozinho no endereço http://127.0.0.1:5000 com o
+     Tabulador pronto para uso.
+   - Deixe a janela preta do terminal aberta enquanto estiver usando;
+     para fechar o programa, basta fechar a janela.
+
+3. Dicas importantes:
+   - Se você estiver trabalhando em uma pergunta e outra pessoa estiver
+     na mesma pergunta ao mesmo tempo, um aviso de presença aparecerá no topo
+     da tela para evitar que vocês sobrescrevam o trabalho um do outro.
+   - No topo da tela há uma bolinha indicando a conexão com a nuvem (Turso).
+   - Para navegar rapidamente na revisão de respostas, você pode usar as teclas
+     do teclado: J/K ou setas para subir e descer, Enter para confirmar e
+     números (0-99) para atribuir a categoria.
+========================================================================

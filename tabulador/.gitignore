@@ -1,3 +1,6 @@
 __pycache__/
 output/llm_log/
 .env
+projetos/**/data/
+projetos/**/output/
+projetos/**/output*/

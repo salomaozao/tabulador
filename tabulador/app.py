@@ -40,7 +40,8 @@ import supervisao as SUP
 import usage
 import variables as V
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
+_DIR = Path(__file__).resolve().parent
+app = Flask(__name__, static_folder=str(_DIR / "static"), template_folder=str(_DIR / "templates"))
 _lock = threading.Lock()  # uma operação de escrita por vez (arquivos JSON)
 
 
