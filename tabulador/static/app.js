@@ -454,11 +454,13 @@ function renderAcoesCod() {
       <div class="tools"><button class="btn primary" id="b-amostra">✨ Classificar amostra</button><button class="btn" id="b-codificar">Classificar todas as ${R.n_unicas || ""} de uma vez</button></div>
     </div>`;
   const acerto = V.acerto_ia == null ? null : Math.round(100 * V.acerto_ia);
+  const nPendentes = V.n_codificadas - V.n_revisadas;
   return `
     <div class="passo">
       <div class="revbar">
         <div><b>Revisão:</b> ${V.n_revisadas} de ${V.n_codificadas} classificadas conferidas (${pct(V.n_revisadas, V.n_codificadas)}) · <span class="pill ok">✓ ${V.n_confirmadas - (V.n_confirmadas_auto || 0)} confirmadas por pessoas</span>${V.n_confirmadas_auto ? ` <span class="pill ok auto" title="Confirmadas sozinhas: confiança alta e o auditor (outra IA) concordou">⚡ ${V.n_confirmadas_auto} automáticas</span>` : ""} <span class="pill human">✎ ${V.n_corrigidas} corrigidas</span>
-        ${acerto != null ? ` · <b>a IA acertou ${acerto}%</b> <small>(de ${V.n_avaliadas_ia} conferidas)</small>` : ""}</div>
+        ${acerto != null ? ` · <b>a IA acertou ${acerto}%</b> <small>(de ${V.n_avaliadas_ia} conferidas)</small>` : ""}
+        ${nPendentes ? ` · <button type="button" class="pill warn linkbtn" id="b-so-pendentes" title="Filtra a tabela abaixo só pelas ${nPendentes} que ainda faltam conferir">👁 ver as ${nPendentes} a conferir</button>` : ""}</div>
         <div class="small"><b>Classificadas:</b> ${V.n_codificadas} de ${V.n_unicas} respostas (${pct(V.n_codificadas, V.n_unicas)})${V.n_faltantes ? ` · faltam ${V.n_faltantes}` : ""}
           <span class="legenda"><i class="conf"></i>conferidas <i class="ia"></i>classificadas, a conferir <i></i>ainda não classificadas</span></div>
         <div class="prog pilha" title="${V.n_revisadas} conferidas · ${V.n_codificadas - V.n_revisadas} classificadas a conferir · ${V.n_faltantes} ainda não classificadas">
@@ -507,6 +509,11 @@ function bindAcoesCod() {
   });
   $("#b-auditar")?.addEventListener("click", abrirAuditoria);
   $("#b-janela")?.addEventListener("click", () => abrirJanelaCategorias());
+  $("#b-so-pendentes")?.addEventListener("click", () => {
+    state.filtro.situacao = "pendente"; state.mostrar = POR_PAGINA; state.congelar = false;
+    manterScroll(render);
+    $("#tab-cod")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
 }
 function mostrarResultadoAuto(a) {
   if (!a) return;
