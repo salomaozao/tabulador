@@ -1,6 +1,5 @@
 __pycache__/
 output/llm_log/
 .env
-projetos/**/data/
-projetos/**/output/
-projetos/**/output*/
+# dados de cliente (planilha-fonte de cada projeto embutido em projetos/<slug>/): nunca versionar
+projetos/*/data/

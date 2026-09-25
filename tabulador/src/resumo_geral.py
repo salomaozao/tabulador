@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
+import pandas as pd
+
 import codeframe as CF
 import coding as CD
 import config
@@ -39,7 +41,10 @@ def _temas_e_trechos() -> dict:
         for r in registros:
             for chave in ("primaria", "secundaria"):
                 cod = r.get(chave)
-                if cod is not None:
+                # resposta ainda não codificada: None no DataFrame original, mas vira NaN (float)
+                # depois de to_dict() quando a coluna tem outros códigos (int) misturados — pd.notna
+                # cobre os dois casos (None e NaN), diferente de "is not None" sozinho.
+                if pd.notna(cod):
                     cont[int(cod)] = cont.get(int(cod), 0) + int(r.get("n") or 0)
         for cat in frame["categorias"]:
             if cat["codigo"] in _CODIGOS_FORA:
@@ -47,7 +52,7 @@ def _temas_e_trechos() -> dict:
             m = cont.get(cat["codigo"], 0)
             if m:
                 temas.append({"qid": qid, "pergunta": rotulo, "nome": cat["nome"], "mencoes": m})
-        candidatas = [r for r in registros if r.get("primaria") not in (None, *_CODIGOS_FORA) and r.get("texto")]
+        candidatas = [r for r in registros if pd.notna(r.get("primaria")) and r.get("primaria") not in _CODIGOS_FORA and r.get("texto")]
         if candidatas:
             r = max(candidatas, key=lambda r: r.get("n") or 0)
             trechos.append({"qid": qid, "pergunta": rotulo, "texto": r["texto"]})

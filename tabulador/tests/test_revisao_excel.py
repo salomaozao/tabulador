@@ -11,6 +11,7 @@ from pathlib import Path
 _TMP = tempfile.mkdtemp(prefix="tabulador_test_revisao_")
 os.environ["TABULADOR_OUTPUT"] = _TMP
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 import pandas as pd
 import openpyxl

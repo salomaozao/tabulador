@@ -1,6 +1,6 @@
 {
  "ativo": "sesi",
  "projetos": {
-  "sesi": "../SESI_cat"
+  "sesi": "projetos/sesi_cat"
  }
 }

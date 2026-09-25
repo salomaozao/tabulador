@@ -13,7 +13,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).resolve().parent
+_MEU_DIR = Path(__file__).resolve().parent
+BASE_DIR = _MEU_DIR.parent if _MEU_DIR.name in ("src", "codigo") else _MEU_DIR
 ENV_FILE = BASE_DIR / ".env"
 
 # ---- projeto ativo (preenchido por projetos.ativar) ---------------------------

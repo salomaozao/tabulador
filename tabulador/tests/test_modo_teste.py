@@ -15,6 +15,7 @@ _TMP = tempfile.mkdtemp(prefix="tabulador_modoteste_")
 os.environ["TABULADOR_OUTPUT"] = _TMP
 os.environ["TABULADOR_SIMULADO_ATRASO"] = "0"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 import codeframe as CF  # noqa: E402
 import coding as CD  # noqa: E402

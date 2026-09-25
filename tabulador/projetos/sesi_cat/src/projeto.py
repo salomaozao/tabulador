@@ -21,7 +21,8 @@ NOME = "SESI Minas — Satisfação das Escolas"
 CLIENTE = "SESI Minas"
 FORMATO = "plano"  # uma linha de cabeçalho, uma coluna por pergunta
 
-_PASTA = Path(__file__).resolve().parent
+_MEU_DIR = Path(__file__).resolve().parent
+_PASTA = _MEU_DIR.parent if _MEU_DIR.name in ("src", "codigo") else _MEU_DIR
 FONTE_XLSX = _PASTA / "data" / "base_processamento.xlsx"
 PLANO = {"aba": "base", "aba_codebook": "Codebook", "id": "respondent_id"}
 # dados pessoais: nunca entram na base, nas saídas nem nos prompts da IA

@@ -35,13 +35,26 @@ _trava = threading.Lock()
 
 
 def arquivo_projeto(pasta: Path) -> Path | None:
-    for nome in ("projeto.py", "projeto.json"):
-        if (pasta / nome).exists():
-            return pasta / nome
+    for sub in ("", "src", "codigo"):
+        for nome in ("projeto.py", "projeto.json"):
+            alvo = pasta / sub / nome if sub else pasta / nome
+            if alvo.exists():
+                return alvo
     return None
 
 
 def carregar_modulo(arq: Path):
+    if arq.is_dir():
+        p = arquivo_projeto(arq)
+        if not p:
+            raise FileNotFoundError(f"Nenhum arquivo de projeto encontrado em {arq}")
+        arq = p
+    elif not arq.exists():
+        for sub in ("src", "codigo"):
+            alt = arq.parent / sub / arq.name
+            if alt.exists():
+                arq = alt
+                break
     if arq.suffix == ".json":
         return projeto_json.carregar(arq)
     spec = importlib.util.spec_from_file_location("projeto_em_validacao", arq)

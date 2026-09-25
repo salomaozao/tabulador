@@ -16,6 +16,7 @@ from types import SimpleNamespace
 _TMP = tempfile.mkdtemp(prefix="tabulador_ia_")
 os.environ["TABULADOR_OUTPUT"] = _TMP
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 import config  # noqa: E402
 import llm  # noqa: E402

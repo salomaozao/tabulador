@@ -15,6 +15,7 @@ from pathlib import Path
 _TMP = tempfile.mkdtemp(prefix="tabulador_novoprojeto_")
 os.environ["TABULADOR_OUTPUT"] = _TMP
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 import openpyxl  # noqa: E402
 from openpyxl.styles import PatternFill  # noqa: E402
@@ -27,7 +28,7 @@ from novo_projeto import perfil as PF  # noqa: E402
 from novo_projeto import projeto_json  # noqa: E402
 from novo_projeto import rascunho as R  # noqa: E402
 from novo_projeto import registrar as REG  # noqa: E402
-from novo_projeto.validar import carregar_modulo, validar  # noqa: E402
+from novo_projeto.validar import arquivo_projeto, carregar_modulo, validar  # noqa: E402
 
 ROXO, AMARELO = PatternFill("solid", fgColor="FF7030A0"), PatternFill("solid", fgColor="FFFFFF00")
 CAB = ["respondent_id", "email_address", "Q1", "Q2", "Q2_CAT", "Q3", "Q4", "Q4_CAT", "Q5", "Q5_CAT"]
@@ -160,7 +161,7 @@ class TestGabaritoSESI(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.gold = carregar_modulo(_SESI / "projeto.py")
+        cls.gold = carregar_modulo(arquivo_projeto(_SESI) or (_SESI / "projeto.py"))
         cls.perfil = PF.perfilar(_SESI / "data" / "base_processamento.xlsx")
         cls.proj = R.gerar(cls.perfil, _SESI, "SESI")
         cls.por_coluna = {p.get("coluna", p["id"]): p for p in cls.proj["PERGUNTAS"]}

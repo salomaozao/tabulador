@@ -36,3 +36,11 @@ navegador.
 Quando for retomar: decidir se a identificação vale a pena (troca simplicidade por fricção de login) e
 desenhar como estender `nuvem.marcar_presenca` para o projeto inteiro (não só por `qid`) antes de montar
 a sidebar. Só registro da ideia — não implementar sem o Gabriel priorizar.
+
+## Atualização 2026-09-25
+O lado *dev/CLI* do item 3 (como uma IA que roda por fora da interface se anuncia) ganhou uma resposta
+parcial fora deste escopo de produto: `jumppi/COMUNICACAO_IAS.md` agora é um log de mensagens
+`INÍCIO`/`FIM` (qualquer IA — Claude Code, Codex, Antigravity, Gemini — anuncia lá o que vai mexer),
+com `tabulador/.claude/scripts/coordenacao_ias.py` cruzando isso com `git worktree`/`git status` reais.
+Isso resolve coordenação entre IAs mexendo em código, mas continua sem tela/sidebar dentro do próprio
+Tabulador para quem usa o navegador — itens 1 e 2 desta pendência continuam em aberto.

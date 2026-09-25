@@ -34,3 +34,20 @@ arquivo inteiro antes** de fazer a tarefa correspondente. O índice fica em `.cl
 - Nunca versione `.env`, `SESI_cat/data` ou pastas `output*`, porque contêm dados de clientes.
 - As opções de resposta (`niveis`) são copiadas literalmente da planilha. Nunca as redigite.
 - Testes: `python -m unittest discover -s tests -v`. Eles gravam em pastas temporárias.
+
+## Trabalhando ao mesmo tempo que outra IA (Codex, Antigravity, Gemini, Claude Code)
+
+Antes de mexer em qualquer arquivo, leia `../COMUNICACAO_IAS.md` (na raiz do `jumppi`, um nível
+acima deste projeto). É um arquivo vivo (não vai pro git, sincroniza só por OneDrive/SharePoint) —
+lá está o `## Timeline` com quem está mexendo em quê agora. Rode também
+`python .claude/scripts/coordenacao_ias.py` para cruzar isso com o estado real do git (worktrees e
+diffs pendentes).
+
+- Se os arquivos que você vai tocar **não aparecem** em nenhum `INÍCIO` em aberto, pode trabalhar
+  direto na árvore principal — não precisa criar worktree. Registre seu próprio `INÍCIO`/`FIM` no
+  arquivo, mesmo assim.
+- Se **aparecem** (mesmo arquivo, ou arquivo muito relacionado), abra uma worktree isolada
+  (`git worktree add`) antes de começar, para não pisar em cima de trabalho não commitado de outra
+  IA.
+- Ao terminar (ou pausar por muito tempo), registre o `FIM` — um `INÍCIO` sem `FIM` é lido pelas
+  outras IAs como "ainda em uso".

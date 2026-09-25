@@ -19,7 +19,8 @@ import shutil
 import sys
 from pathlib import Path
 
-_DIR = Path(__file__).resolve().parent
+_MEU_DIR = Path(__file__).resolve().parent
+_DIR = _MEU_DIR.parent if _MEU_DIR.name in ("src", "codigo") else _MEU_DIR
 ARQUIVO = _DIR / "projetos.json"
 _modulos: dict = {}
 
@@ -34,18 +35,34 @@ def pasta(slug: str) -> Path:
     reg = _registro()["projetos"]
     if slug not in reg:
         raise KeyError(f"Projeto desconhecido: {slug}. Disponíveis: {', '.join(reg)}")
-    return (_DIR / reg[slug]).resolve()
+    caminho = (_DIR / reg[slug]).resolve()
+    if not caminho.exists():
+        for alt in [
+            _DIR / "projetos" / slug,
+            _DIR / "projetos" / f"{slug}_cat",
+            _DIR.parent / slug,
+            _DIR.parent / f"{slug}_cat",
+            _DIR.parent / f"{slug.upper()}_cat",
+        ]:
+            if alt.exists():
+                return alt.resolve()
+    return caminho
 
 
 def _carregar(slug: str):
     if slug not in _modulos:
-        arq = pasta(slug) / "projeto.py"
-        if not arq.exists() and (pasta(slug) / "projeto.json").exists():
-            from novo_projeto import projeto_json  # projeto declarativo (criado pelo assistente)
-            _modulos[slug] = projeto_json.carregar(pasta(slug) / "projeto.json")
-            return _modulos[slug]
-        if not arq.exists():
-            raise FileNotFoundError(f"{arq} (ou projeto.json) não existe")
+        p = pasta(slug)
+        arq = None
+        for cand in (p / "src" / "projeto.py", p / "codigo" / "projeto.py", p / "projeto.py"):
+            if cand.exists():
+                arq = cand
+                break
+        if arq is None:
+            if (p / "projeto.json").exists():
+                from novo_projeto import projeto_json  # projeto declarativo (criado pelo assistente)
+                _modulos[slug] = projeto_json.carregar(p / "projeto.json")
+                return _modulos[slug]
+            raise FileNotFoundError(f"projeto.py (ou projeto.json) não encontrado em {p}")
         spec = importlib.util.spec_from_file_location(f"projeto_{slug}", arq)
         mod = importlib.util.module_from_spec(spec)
         antes, sys.dont_write_bytecode = sys.dont_write_bytecode, True  # sem __pycache__ na pasta do projeto

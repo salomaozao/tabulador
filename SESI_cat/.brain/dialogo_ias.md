@@ -217,28 +217,6 @@ Log cronológico, só acrescentar no fim. Formato descrito em `README.md`.
 - Zero `git push` executado. Imutabilidade absoluta mantida nos dados de produção (`data/`).
 
 **Próxima IA / Handoff:**
-- As alterações estão commitadas localmente na branch `feat/melhorias-perpetuas` e mescladas em `main` (`01bbf8b`).
+- As alterações estão commitadas localmente na branch `feat/melhorias-perpetuas`. Gabriel pode fazer merge ou cherry-pick para a `main` a qualquer momento.
 - Para próximas iterações: avaliar virtualização de lista para perguntas com >2000 respostas ou resumo comparativo entre ondas de pesquisa.
-
----
-
-## 2026-09-25 11:20 — feat(tabulador): empacotamento do Tabulador.zip com projetos/sesi_cat e dados embutidos
-
-**Autor:** Antigravity (Gemini 2.5) · operador: Gabriel Nascimento
-
-**Contexto:** Solicitação do Gabriel para disponibilizar um pacote ZIP autônomo do Tabulador para a equipe (evitando edições e bloqueios simultâneos de arquivos no OneDrive compartilhado), contendo o projeto `sesi_cat` com a pasta `data/` (com `base_processamento.xlsx`) dentro de `projetos/`.
-
-**Feito:**
-- Criada a pasta `tabulador/projetos/sesi_cat` com a definição completa do projeto: `projeto.py`, `LEIA-ME.md`, `Abrir Tabulador.bat`, a planilha-fonte `data/base_processamento.xlsx` e os artefatos de `output/`.
-- Atualizado `tabulador/projetos.py` para detecção resiliente e busca automática por convenção em `projetos/sesi_cat`, `projetos/sesi` ou `../SESI_cat`.
-- Atualizado `tabulador/projetos.json` apontando para `"sesi": "projetos/sesi_cat"`.
-- Atualizado `tabulador/app.py` garantindo caminhos absolutos para `template_folder` e `static_folder`.
-- Criado `COMO USAR.txt` na raiz do Tabulador com instruções claras passo a passo para qualquer usuário.
-- Protegidos dados de clientes no `.gitignore` com a regra `projetos/**/data/` e `projetos/**/output/`.
-- Gerado o pacote portátil `jumppi/Tabulador.zip` (13.5 MB, 1.106 arquivos compactados), com a pasta raiz `Tabulador/` contendo o ambiente completo, `.env` com chaves/Turso configurados, `iniciar.bat` e a base do SESI pronta para uso offline ou conectado.
-- Suíte completa de testes executada e passando 100%.
-
-**Próxima IA / Handoff:**
-- Qualquer pessoa da equipe pode copiar o `Tabulador.zip` para sua máquina local e rodar com 2 cliques em `iniciar.bat`, sem interferir no OneDrive.
-
 

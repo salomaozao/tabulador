@@ -18,6 +18,11 @@ import webbrowser
 from datetime import datetime
 from pathlib import Path
 
+_DIR = Path(__file__).resolve().parent
+_SRC = _DIR / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 
 import backcoding
@@ -40,7 +45,6 @@ import supervisao as SUP
 import usage
 import variables as V
 
-_DIR = Path(__file__).resolve().parent
 app = Flask(__name__, static_folder=str(_DIR / "static"), template_folder=str(_DIR / "templates"))
 _lock = threading.Lock()  # uma operação de escrita por vez (arquivos JSON)
 
