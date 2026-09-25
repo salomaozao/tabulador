@@ -57,6 +57,13 @@ def gerar(incluir_rascunho: bool = False, verbose: bool = True):
             c1 = prox_col
             ws.cell(row=1, column=c1, value=col_cat).font = Font(bold=True)
             prox_col += 1
+        col_cod1 = f"{col_cat}_COD"
+        c_cod1 = cab.get(col_cod1)
+        if not c_cod1:
+            c_cod1 = prox_col
+            ws.cell(row=1, column=c_cod1, value=col_cod1).font = Font(bold=True)
+            cab[col_cod1] = c_cod1
+            prox_col += 1
         col2 = f"{col_cat}2"
         c2 = cab.get(col2)
         if not c2:
@@ -64,13 +71,22 @@ def gerar(incluir_rascunho: bool = False, verbose: bool = True):
             ws.cell(row=1, column=c2, value=col2).font = Font(bold=True)
             cab[col2] = c2
             prox_col += 1
+        col_cod2 = f"{col_cat}2_COD"
+        c_cod2 = cab.get(col_cod2)
+        if not c_cod2:
+            c_cod2 = prox_col
+            ws.cell(row=1, column=c_cod2, value=col_cod2).font = Font(bold=True)
+            cab[col_cod2] = c_cod2
+            prox_col += 1
         n = 0
         for rid, v in CD.mapa_respondentes(qid).items():
             r = linha_de.get(int(rid))
             if not r:
                 continue
             ws.cell(row=r, column=c1, value=nomes.get(v["primaria"]))
+            ws.cell(row=r, column=c_cod1, value=v["primaria"])
             ws.cell(row=r, column=c2, value=nomes.get(v["secundaria"]) if v["secundaria"] is not None else None)
+            ws.cell(row=r, column=c_cod2, value=v["secundaria"] if v["secundaria"] is not None else None)
             n += 1
         situacao.append({"pergunta": qid, "coluna": col_cat, "situacao": f"incluída ({status}) · {n} respondentes"})
     # aba de legenda

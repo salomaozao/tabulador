@@ -462,7 +462,21 @@ def tabela(qid: str) -> pd.DataFrame:
 
 
 def exportar_revisao(qid: str):
-    df = tabela(qid).drop(columns=["respondent_ids", "comentario", "comentario_pendente", "revisao", "corrigido_de_nome"])
+    colunas_drop = [
+        "respondent_ids", "comentario", "comentario_pendente", "revisao",
+        "corrigido_de_nome", "nsnr_regra", "auditoria", "validado_por",
+        "ia_original_nome"
+    ]
+    df_raw = tabela(qid)
+    cols_existentes = [c for c in colunas_drop if c in df_raw.columns]
+    df = df_raw.drop(columns=cols_existentes)
+    renomear = {}
+    if "sugestao_nome" in df.columns:
+        renomear["sugestao_nome"] = "sugestao_auditor"
+    if "sugestao_sec_nome" in df.columns:
+        renomear["sugestao_sec_nome"] = "sugestao_sec_auditor"
+    if renomear:
+        df = df.rename(columns=renomear)
     df["REVISAO_PRIMARIA"] = None
     df["REVISAO_SECUNDARIA"] = None
     df["COMENTARIO"] = None
@@ -474,7 +488,7 @@ def exportar_revisao(qid: str):
         legenda.to_excel(xw, sheet_name="frame", index=False)
         ws = xw.sheets["revisao"]
         ws.freeze_panes = "C2"
-        for col, largura in {"B": 60, "J": 45, "L": 30, "M": 18, "N": 18, "O": 30}.items():
+        for col, largura in {"B": 60, "E": 26, "G": 26, "I": 12, "J": 45, "L": 20, "M": 20, "N": 30}.items():
             ws.column_dimensions[col].width = largura
     return p
 

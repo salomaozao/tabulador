@@ -110,7 +110,11 @@ table.res td{vertical-align:middle}table.res td.acoes{text-align:right;white-spa
 .legenda i.conf{background:var(--ok)}.legenda i.ia{background:var(--accent-2)}
 .sep{width:1px;align-self:stretch;background:var(--border);margin:0 4px}
 .refino{margin-top:10px}.refino textarea{width:100%;min-height:48px;margin-top:6px}
-tr.confirmada td:first-child{box-shadow:inset 3px 0 0 var(--ok)}
+#tab-cod tbody tr{transition:background-color .25s ease}
+#tab-cod tbody tr.just-confirmed{animation:pulse-ok .45s ease-out}
+@keyframes pulse-ok{0%{background-color:var(--ok-bg)}100%{background-color:transparent}}
+tr.confirmada td:first-child{box-shadow:inset 4px 0 0 var(--ok)}
+tr.confirmada{background-color:color-mix(in srgb, var(--ok-bg) 25%, transparent)}
 tr.naocod td{color:var(--text-3)}
 /* botão de aprovar no fim da tabela de revisão, não no topo */
 .aprovar-bar{justify-content:flex-end;border-top:1px solid var(--border);padding-top:12px;margin-top:12px}
@@ -120,7 +124,10 @@ tr.naocod td{color:var(--text-3)}
 .chip-cat:hover{background:var(--surface-3)}
 .chip-cat.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .chip-cat.limpar{color:var(--text-3)}
-.btn.c-ok{min-width:30px;color:var(--text-3)}.btn.c-ok:hover{color:var(--ok);border-color:var(--ok)}.btn.c-ok.on{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.c-ok{min-width:32px;color:var(--text-3);transition:all .15s ease}
+.btn.c-ok:hover{color:var(--ok);border-color:var(--ok)}
+.btn.c-ok.on{background:var(--ok);border-color:var(--ok);color:#fff;font-weight:600;box-shadow:0 1px 3px rgba(27,127,77,.3)}
+.atalhos kbd{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-family:inherit;font-size:11px;color:var(--text)}
 dialog{border:1px solid var(--border);border-radius:12px;padding:20px 22px;background:var(--surface);color:var(--text);width:min(520px,92vw)}
 dialog::backdrop{background:rgba(0,0,0,.35)}
 dialog.larga{width:min(1100px,96vw);max-height:92vh;padding:0}dialog.larga form{display:flex;flex-direction:column;max-height:92vh}

@@ -782,11 +782,12 @@ def api_perfil(qid):
 
 @app.post("/api/pergunta/<qid>/auto-aceitar")
 def api_auto_aceitar(qid):
-    """{limiar?: 0.85, exigir_auditoria?: true} confirma sozinho o que tem confiança alta (e auditor concordando)."""
+    """{limiar?: 0.85, exigir_auditoria?: true, categoria?: int} confirma sozinho o que tem confiança alta (e auditor concordando)."""
     try:
         d = request.get_json(silent=True) or {}
+        cat = int(d["categoria"]) if d.get("categoria") is not None else None
         with _lock:
-            r = SUP.auto_aceitar(qid, float(d.get("limiar", SUP.LIMIAR_PADRAO)), bool(d.get("exigir_auditoria", True)))
+            r = SUP.auto_aceitar(qid, float(d.get("limiar", SUP.LIMIAR_PADRAO)), bool(d.get("exigir_auditoria", True)), categoria=cat)
         out = _payload_pergunta(qid)
         out["auto"] = r
         return jsonify(out)
