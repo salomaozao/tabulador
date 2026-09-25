@@ -104,7 +104,7 @@ async function carregarStatus() {
   const texto = n.conectada ? `sincronizado ${fmtDataHora(n.ultima_sincronizacao)}` : n.ativa ? "nuvem configurada, sem conexão" : "sem nuvem (local)";
   const titulo = n.conectada ? "Conectado ao banco compartilhado da equipe — a revisão de todo mundo aparece aqui."
     : n.ativa ? "TABULADOR_TURSO_URL configurado, mas não deu para conectar agora — a revisão pode estar desatualizada."
-    : "Sem TABULADOR_TURSO_URL configurado: a revisão fica só nesta máquina, não sincroniza com a equipe.";
+    : "Sem TABULADOR_TURSO_URL configurado: a revisão fica só nesta máquina, não sincroniza com a equipe. Peça as credenciais de nuvem da equipe a quem já usa o Tabulador (ver tabulador/docs/nuvem_turso.md).";
   ns.className = "nuvem-status muted " + dotCls;
   ns.title = titulo;
   ns.innerHTML = `<span class="dot ${dotCls}"></span>${esc(texto)}`;
