@@ -1249,7 +1249,7 @@ function filtrarItens() {
   return rows;
 }
 function renderCodificacao() {
-  const P = state.P, cats = catsValidas(), n = P.respostas?.n_respondeu || 0, f = state.filtro, locked = P.codificacao.status === "aprovado";
+  const P = state.P, cats = catsValidas(), n = P.respostas?.n_respondeu || 0, f = state.filtro, locked = P.codificacao.status === "aprovado", V = P.revisao || {};
   const ordem = [...cats].map((c) => ({ c, m: (P.contagens[c.codigo]?.primaria || 0) + (P.contagens[c.codigo]?.secundaria || 0) })).sort((a, b) => b.m - a.m);
   const maxm = Math.max(1, ...ordem.map((o) => o.m));
   const chart = ordem.map(({ c, m }) => `<div class="row"><div class="n" title="${esc(c.nome)}">${esc(c.nome)}</div><div class="bar"><i style="width:${(100 * m) / maxm}%"></i><span>${m} · ${pct(m, n)}</span></div></div>`).join("");
