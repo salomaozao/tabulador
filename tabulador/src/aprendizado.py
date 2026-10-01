@@ -293,7 +293,13 @@ def saude(qid: str) -> list[dict]:
     frame, respostas, itens = _dados(qid)
     if not frame or not itens:
         return []
-    return saude_de(frame, dossie_de(frame, respostas, itens))
+    alertas = saude_de(frame, dossie_de(frame, respostas, itens))
+    # alertas de assimetria de grupo (se a pergunta pertence a um grupo)
+    import grupos_frame
+    nome, _ = grupos_frame.grupo_de(qid)
+    if nome:
+        alertas += grupos_frame.assimetrias(nome)
+    return alertas
 
 
 # ----------------------------------------------------------------------------- aprender (grava)
