@@ -369,14 +369,16 @@ def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", c
         item["confianca"] = 1.0
         item["revisado_em"] = agora
         _quem(item, por)
-        for c in ("validado", "validado_em", "validado_por"):
+        for c in ("validado", "validado_em", "validado_por", "alterada", "alterada_motivo", "alterada_em", "alterada_de"):
             item.pop(c, None)
     elif validado is not None:
         if validado:
             item["validado"], item["validado_em"], item["validado_por"] = True, agora, "humano"
             _quem(item, por)
+            for c in ("alterada", "alterada_motivo", "alterada_em", "alterada_de"):
+                item.pop(c, None)
         else:
-            for c in ("validado", "validado_em", "validado_por"):
+            for c in ("validado", "validado_em", "validado_por", "alterada", "alterada_motivo", "alterada_em", "alterada_de"):
                 item.pop(c, None)
     cod["status"] = "rascunho"
     CF._gravar(qid, "codificacao.json", cod, permitir_reducao=validado is False)  # desmarcar o ✓ é decisão da pessoa
@@ -399,9 +401,15 @@ def validar(qid: str, rids: list[int], valor: bool = True, por: str | None = Non
     agora = datetime.now().isoformat(timespec="seconds")
     n = 0
     for item in cod["itens"]:
-        if item["rid"] not in alvo or item.get("primaria") is None or item.get("origem") == "humano":
+        if item["rid"] not in alvo or item.get("primaria") is None or (item.get("origem") == "humano" and not item.get("alterada")):
             continue
-        if valor and item.get("origem") == "erro":  # confirmar um item com erro de IA = decisão humana
+        if valor and item.get("alterada"):
+            for c in ("alterada", "alterada_motivo", "alterada_em", "alterada_de"):
+                item.pop(c, None)
+            item["validado"], item["validado_em"], item["validado_por"] = True, agora, "humano"
+            _quem(item, por)
+            n += 1
+        elif valor and item.get("origem") == "erro":  # confirmar um item com erro de IA = decisão humana
             item.update(origem="humano", confianca=1.0, revisado_em=agora)
             _quem(item, por)
             n += 1
@@ -409,8 +417,8 @@ def validar(qid: str, rids: list[int], valor: bool = True, por: str | None = Non
             item["validado"], item["validado_em"], item["validado_por"] = True, agora, "humano"
             _quem(item, por)
             n += 1
-        elif not valor and item.get("validado"):
-            for c in ("validado", "validado_em", "validado_por"):
+        elif not valor and (item.get("validado") or item.get("alterada")):
+            for c in ("validado", "validado_em", "validado_por", "alterada", "alterada_motivo", "alterada_em", "alterada_de"):
                 item.pop(c, None)
             n += 1
     if n:
@@ -422,6 +430,8 @@ def validar(qid: str, rids: list[int], valor: bool = True, por: str | None = Non
 def situacao_revisao(item: dict | None) -> str | None:
     if not item or item.get("primaria") is None:
         return None
+    if item.get("alterada"):
+        return "alterada"
     if item.get("origem") == "humano":
         return "corrigida"
     if item.get("validado"):
@@ -443,6 +453,7 @@ def resumo_revisao(qid: str) -> dict:
     auto = sum(1 for i in itens.values() if situacao_revisao(i) == "confirmada" and i.get("validado_por") == "auto")
     corrigidas = sum(1 for i in itens.values() if situacao_revisao(i) == "corrigida")
     corrigidas_ia = sum(1 for i in itens.values() if situacao_revisao(i) == "corrigida" and "corrigido_de" in i)
+    alteradas = sum(1 for i in itens.values() if situacao_revisao(i) == "alterada")
     avaliadas = confirmadas - auto + corrigidas_ia
     return {
         "n_unicas": n_unicas,
@@ -452,6 +463,7 @@ def resumo_revisao(qid: str) -> dict:
         "n_confirmadas": confirmadas,
         "n_confirmadas_auto": auto,
         "n_corrigidas": corrigidas,
+        "n_alteradas": alteradas,
         "n_revisadas": confirmadas + corrigidas,
         "acerto_ia": round((confirmadas - auto) / avaliadas, 3) if avaliadas else None,
         "n_avaliadas_ia": avaliadas,
@@ -508,6 +520,10 @@ def tabela(qid: str) -> pd.DataFrame:
             "alertas": "; ".join(alertas_item(i, frame)) if i["primaria"] is not None else "não codificado",
             "respondent_ids": r["respondent_ids"],
             "revisao": situacao_revisao(i),
+            "alterada": bool(i.get("alterada")),
+            "alterada_motivo": i.get("alterada_motivo"),
+            "alterada_em": i.get("alterada_em"),
+            "alterada_de": i.get("alterada_de"),
             "validado_por": i.get("validado_por"),
             # segundo codificador (auditor): sugestão quando discorda; e o que a IA tinha posto, se a sugestão foi adotada
             "auditoria": i.get("auditoria"),

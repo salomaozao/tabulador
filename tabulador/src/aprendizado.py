@@ -24,6 +24,7 @@ from datetime import datetime
 
 import codeframe as CF
 import config
+import llm
 import protecao
 import variables as V
 
@@ -105,7 +106,7 @@ def dossie_de(frame: dict, respostas: list[dict], itens: list[dict]) -> dict[int
             continue
         e = d[k]
         e["n"] += 1
-        if conferido_por_humano(i):
+        if conferido_por_humano(i) and not i.get("alterada"):
             e["n_humano"] += 1
             e["_humanos"].append(i)
         de = i.get("corrigido_de")
@@ -159,7 +160,7 @@ def keywords_sugeridas_de(frame: dict, respostas: list[dict], itens: list[dict])
     fixas = {c["codigo"] for c in frame["categorias"] if c.get("fixa")}
     docs: dict[int, list[dict[str, str]]] = defaultdict(list)
     for i in itens:
-        if conferido_por_humano(i) and i["rid"] in resp and i["primaria"] not in fixas:
+        if conferido_por_humano(i) and not i.get("alterada") and i["rid"] in resp and i["primaria"] not in fixas:
             docs[i["primaria"]].append(_termos(resp[i["rid"]]["texto"]))
     df_total, forma = Counter(), defaultdict(Counter)
     n_total = sum(len(v) for v in docs.values())
@@ -337,3 +338,291 @@ def texto_saude(qid: str) -> str:
     if not alertas:
         return f"{qid}: nenhum alerta no quadro."
     return "\n".join([f"{qid}: {len(alertas)} alerta(s)"] + [f"  [{a['tipo']}] {a['msg']}" for a in alertas])
+
+
+SCHEMA_PROPOSTA_DEF = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["definicao_proposta", "justificativa"],
+    "properties": {
+        "definicao_proposta": {
+            "type": "string",
+            "description": "Nova definição concisa (1 a 2 frases) delimitando com clareza o escopo da categoria.",
+        },
+        "justificativa": {
+            "type": "string",
+            "description": "Breve justificativa (1 frase) explicando como a nova definição resolve a sobreposição.",
+        },
+    },
+}
+
+
+def diagnostico_saude_de(
+    frame: dict,
+    dossie: dict[int, dict],
+    alertas: list[dict],
+    keywords_sug: dict[int, list[str]] | None = None,
+) -> dict:
+    """Aglomera os problemas e alertas por categoria e estrutura soluções concretas para aprovação humana."""
+    keywords_sug = keywords_sug or {}
+    cats_por_cod = {c["codigo"]: c for c in frame["categorias"]}
+    nomes = {c["codigo"]: c["nome"] for c in frame["categorias"]}
+    total_respostas = sum(e["n"] for e in dossie.values())
+
+    alertas_por_cat = defaultdict(list)
+    kws_compartilhadas_por_cat = defaultdict(list)
+    for a in alertas:
+        cod = a.get("codigo")
+        if a["tipo"] == "keyword_compartilhada":
+            kws_compartilhadas_por_cat[a["codigo"]].append((a["msg"], a.get("par")))
+            if a.get("par"):
+                kws_compartilhadas_por_cat[a["par"]].append((a["msg"], a["codigo"]))
+        elif cod is not None:
+            alertas_por_cat[cod].append(a)
+
+    categorias_atencao = []
+    categorias_raras = []
+    categorias_saudaveis = []
+
+    for c in frame["categorias"]:
+        cod = c["codigo"]
+        e = dossie.get(cod) or {}
+        als = alertas_por_cat.get(cod, [])
+        tipos_alerta = {a["tipo"] for a in als}
+        kw_comps = kws_compartilhadas_por_cat.get(cod, [])
+
+        is_rara = "rara" in tipos_alerta
+        has_atencao = bool(tipos_alerta - {"rara"} or kw_comps)
+
+        if is_rara and not has_atencao:
+            categorias_raras.append({
+                "codigo": cod,
+                "nome": c["nome"],
+                "n": e.get("n", 0),
+                "pct": e.get("pct", 0.0),
+                "pode_excluir": e.get("n", 0) == 0 and not c.get("fixa"),
+            })
+            continue
+
+        if not has_atencao and not is_rara:
+            categorias_saudaveis.append({
+                "codigo": cod,
+                "nome": c["nome"],
+                "n": e.get("n", 0),
+                "pct": e.get("pct", 0.0),
+                "conf_media": e.get("conf_media"),
+            })
+            continue
+
+        problemas = []
+        solucoes = []
+
+        if "ampla" in tipos_alerta:
+            problemas.append({
+                "tipo": "ampla",
+                "titulo": "Categoria ampla demais",
+                "detalhe": "Teve correções para múltiplos temas distintos. Considere desmembrar em subcategorias.",
+            })
+            solucoes.append({
+                "tipo": "separar",
+                "rotulo": "✂️ Desmembrar categoria com IA",
+                "descricao": "Pedir à IA para desmembrar esta categoria ampla em temas mais específicos.",
+                "acao": "separar",
+            })
+
+        conf_saida = e.get("confusoes_saida", {})
+        if conf_saida:
+            destinos = [{"codigo": d, "nome": nomes.get(d, str(d)), "n": count} for d, count in conf_saida.items()]
+            total_corrigidas = sum(d["n"] for d in destinos)
+            nomes_destinos = [d["nome"] for d in destinos]
+            dest_resumo = ", ".join(f"{d['nome']} ({d['n']})" for d in destinos)
+            problemas.append({
+                "tipo": "confusao",
+                "titulo": f"Confusão de fronteira ({total_corrigidas} resposta(s) corrigida(s))",
+                "detalhe": f"A IA classificou aqui respostas que foram corrigidas para: {dest_resumo}.",
+                "destinos": destinos,
+            })
+            ressalva = f" (não inclui: {', '.join(nomes_destinos[:2])})"
+            solucoes.append({
+                "tipo": "adicionar_exclusao",
+                "rotulo": f"✓ Adicionar ressalva à definição (não inclui {nomes_destinos[0]})",
+                "descricao": f"Acrescentar à definição: '{ressalva.strip()}'",
+                "acao": "adicionar_exclusao",
+                "texto_adicional": ressalva,
+            })
+            solucoes.append({
+                "tipo": "propor_definicao_ia",
+                "rotulo": "✨ Propor nova definição com IA",
+                "descricao": "A IA gera uma nova definição concisa delimitando claramente as fronteiras.",
+                "acao": "propor_definicao_ia",
+            })
+
+        if "auditor" in tipos_alerta:
+            n_aud = e.get("n_auditadas", 0)
+            n_disc = e.get("n_auditor_discorda", 0)
+            pct_disc = (n_disc / n_aud) if n_aud else 0
+            problemas.append({
+                "tipo": "auditor",
+                "titulo": "Discordância do auditor",
+                "detalhe": f"O auditor discordou de {n_disc} de {n_aud} avaliações ({pct_disc:.0%}).",
+            })
+            if not any(s["tipo"] == "propor_definicao_ia" for s in solucoes):
+                solucoes.append({
+                    "tipo": "propor_definicao_ia",
+                    "rotulo": "✨ Refinar definição com IA",
+                    "descricao": "Ajustar a redação para sanar os pontos de discordância do auditor.",
+                    "acao": "propor_definicao_ia",
+                })
+
+        if "outros" in tipos_alerta:
+            problemas.append({
+                "tipo": "outros",
+                "titulo": f"Outros saturado ({e.get('pct', 0):.0%} das respostas)",
+                "detalhe": f"{e.get('n', 0)} respostas concentradas em Outros indicam temas não capturados pelo quadro.",
+            })
+            solucoes.append({
+                "tipo": "desmembrar_outros",
+                "rotulo": "🔍 Reclassificar ou criar categorias a partir de Outros",
+                "descricao": "Descobrir novas categorias a partir das respostas residuais.",
+                "acao": "desmembrar_outros",
+            })
+
+        for _msg, par_cod in kw_comps:
+            kws_c = {V.norm(k): k for k in keywords_ativas(c)}
+            par_cat = cats_por_cod.get(par_cod, {})
+            kws_par = {V.norm(k): k for k in keywords_ativas(par_cat)}
+            comuns = set(kws_c) & set(kws_par)
+            for norm_kw in comuns:
+                kw_orig = kws_c[norm_kw]
+                nome_par = nomes.get(par_cod, str(par_cod))
+                problemas.append({
+                    "tipo": "keyword_compartilhada",
+                    "titulo": f"Palavra-chave ambígua: \"{kw_orig}\"",
+                    "detalhe": f"Aparece simultaneamente nesta categoria e em \"{nome_par}\".",
+                    "keyword": kw_orig,
+                })
+                solucoes.append({
+                    "tipo": "remover_keyword",
+                    "rotulo": f"✓ Remover palavra ambígua \"{kw_orig}\"",
+                    "descricao": f"Remove \"{kw_orig}\" desta categoria para evitar sobreposição.",
+                    "acao": "remover_keyword",
+                    "keyword": kw_orig,
+                })
+
+        sug = keywords_sug.get(cod) or []
+        ativas_norm = {V.norm(k) for k in keywords_ativas(c)}
+        sug_novas = [k for k in sug if V.norm(k) not in ativas_norm]
+        if sug_novas:
+            solucoes.append({
+                "tipo": "adicionar_keywords",
+                "rotulo": f"✓ Adicionar termos sugeridos: {', '.join(sug_novas[:4])}",
+                "descricao": f"A revisão humana identificou termos de alto lift para esta categoria: {', '.join(sug_novas)}.",
+                "acao": "adicionar_keywords",
+                "keywords": sug_novas[:5],
+            })
+
+        if is_rara:
+            problemas.append({
+                "tipo": "rara",
+                "titulo": "Baixo volume de menções",
+                "detalhe": f"Apenas {e.get('n', 0)} resposta(s) ({e.get('pct', 0):.1%}).",
+            })
+            solucoes.append({
+                "tipo": "mesclar",
+                "rotulo": "🔀 Mesclar em outra categoria",
+                "descricao": "Unir esta categoria com outra afim para simplificar o quadro.",
+                "acao": "mesclar",
+            })
+
+        categorias_atencao.append({
+            "codigo": cod,
+            "nome": c["nome"],
+            "definicao": c.get("definicao", ""),
+            "n": e.get("n", 0),
+            "pct": e.get("pct", 0.0),
+            "conf_media": e.get("conf_media"),
+            "problemas": problemas,
+            "solucoes": solucoes,
+        })
+
+    categorias_atencao.sort(key=lambda x: len(x["problemas"]), reverse=True)
+
+    n_conferidas_total = n_conferidas((CF._ler(frame.get("pergunta", ""), "codificacao.json") or {}).get("itens", [])) if frame.get("pergunta") else 0
+    ultimo_aprender = (frame.get("aprendizado") or {}).get("n_conferidas", 0)
+    proximo_em = max(0, _limiar("APRENDIZADO_A_CADA") - (n_conferidas_total - ultimo_aprender))
+
+    return {
+        "resumo": {
+            "total_categorias": len(frame["categorias"]),
+            "total_alertas": len(alertas),
+            "n_atencao": len(categorias_atencao),
+            "n_raras": len(categorias_raras),
+            "n_saudaveis": len(categorias_saudaveis),
+            "total_respostas": total_respostas,
+            "n_conferidas": n_conferidas_total,
+            "revisoes_para_proximo_aprendizado": proximo_em,
+        },
+        "categorias_atencao": categorias_atencao,
+        "categorias_raras": categorias_raras,
+        "categorias_saudaveis": categorias_saudaveis,
+    }
+
+
+def diagnostico_saude(qid: str) -> dict:
+    frame, respostas, itens = _dados(qid)
+    if not frame or not itens:
+        return {
+            "resumo": {"total_categorias": 0, "total_alertas": 0, "n_atencao": 0, "n_raras": 0, "n_saudaveis": 0},
+            "categorias_atencao": [], "categorias_raras": [], "categorias_saudaveis": [],
+        }
+    dos = dossie_de(frame, respostas, itens)
+    als = saude_de(frame, dos)
+    sug = keywords_sugeridas_de(frame, respostas, itens)
+    return diagnostico_saude_de(frame, dos, als, sug)
+
+
+def propor_definicao(qid: str, codigo: int | str) -> dict:
+    """Usa IA para propor uma nova definição concisa para a categoria, considerando
+    as confusões com outras categorias e casos reais corrigidos por humanos."""
+    frame, respostas, itens = _dados(qid)
+    if not frame:
+        raise ValueError(f"{qid}: frame não encontrado")
+    cat = CF._cat(frame, codigo)
+    dos = dossie_de(frame, respostas, itens).get(cat["codigo"]) or {}
+
+    cats_por_cod = {c["codigo"]: c for c in frame["categorias"]}
+    confusoes = dos.get("confusoes_saida") or {}
+    nomes_confusao = [cats_por_cod[c]["nome"] for c in confusoes if c in cats_por_cod]
+
+    limites = dos.get("limites") or []
+    exemplos_limites = [f'"{l["texto"]}" (deveria ser {l["de_nome"]})' for l in limites[:4]]
+
+    system = (
+        "Você é um especialista em taxonomia e livros de códigos para pesquisa quantitativa. "
+        "Seu objetivo é delimitar a fronteira entre categorias para evitar que respostas sejam classificadas incorretamente."
+    )
+
+    detalhe_confusao = f"Ela tem sido frequentemente confundida com: {', '.join(nomes_confusao)}." if nomes_confusao else ""
+    detalhe_exemplos = f"Exemplos que geraram confusão: {'; '.join(exemplos_limites)}." if exemplos_limites else ""
+
+    user = f"""CATEGORIA: {cat['nome']} (Código {cat['codigo']})
+DEFINIÇÃO ATUAL: {cat.get('definicao', '(sem definição)')}
+{detalhe_confusao}
+{detalhe_exemplos}
+
+TAREFA:
+Proponha uma nova definição aprimorada para esta categoria.
+Regras:
+1. Máximo 2 frases claras e objetivas.
+2. Deixe explícito o escopo central e, se útil, uma breve cláusula de 'não inclui' para evitar confusão com as outras categorias.
+3. Responda em português do Brasil conforme o schema JSON.
+"""
+
+    saida = llm.chamar_json(system, user, SCHEMA_PROPOSTA_DEF, nome=f"prop_def_{qid}_{cat['codigo']}")
+    return {
+        "codigo": cat["codigo"],
+        "nome": cat["nome"],
+        "definicao_atual": cat.get("definicao", ""),
+        "definicao_proposta": saida.get("definicao_proposta", "").strip(),
+        "justificativa": saida.get("justificativa", "").strip(),
+    }

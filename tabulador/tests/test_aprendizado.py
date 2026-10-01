@@ -138,6 +138,19 @@ class TestDossie(unittest.TestCase):
         c = {"keywords": ["professor", "Aula"], "keywords_auto": ["aula", "didática"], "keywords_bloqueadas": ["didatica"]}
         self.assertEqual(A.keywords_ativas(c), ["professor", "Aula"])
 
+    def test_diagnostico_saude_de(self):
+        alertas = A.saude_de(self.frame, self.d)
+        kws = A.keywords_sugeridas_de(self.frame, self.respostas, self.itens)
+        diag = A.diagnostico_saude_de(self.frame, self.d, alertas, kws)
+        self.assertIn("resumo", diag)
+        self.assertIn("categorias_atencao", diag)
+        self.assertIn("categorias_raras", diag)
+        self.assertIn("categorias_saudaveis", diag)
+        cods_atencao = [c["codigo"] for c in diag["categorias_atencao"]]
+        self.assertIn(97, cods_atencao)
+        outros = next(c for c in diag["categorias_atencao"] if c["codigo"] == 97)
+        self.assertTrue(any(p["tipo"] == "outros" for p in outros["problemas"]))
+
 
 class TestArquivos(unittest.TestCase):
     """Edição de keywords, histórico com antes/depois, versão do frame e o aprendizado gravado."""
@@ -229,6 +242,17 @@ class TestArquivos(unittest.TestCase):
         self.assertEqual(c1["keywords"], ["professor", "didática", "aula"])  # 'chato' bloqueado não volta
         self.assertEqual(CF._cat(f, 4)["keywords"], ["passeio"])
         self.assertEqual(f["historico"][-1]["acao"], "refinar_ia")
+
+    def test_propor_definicao_com_ia(self):
+        fake_saida = {
+            "definicao_proposta": "Docentes, qualidade de ensino e metodologia pedagógica.",
+            "justificativa": "Foca nos professores e delimita a fronteira com coordenação.",
+        }
+        with mock.patch.object(A.llm, "chamar_json", return_value=fake_saida):
+            res = A.propor_definicao(QID, 1)
+        self.assertEqual(res["codigo"], 1)
+        self.assertEqual(res["definicao_proposta"], "Docentes, qualidade de ensino e metodologia pedagógica.")
+        self.assertEqual(res["justificativa"], "Foca nos professores e delimita a fronteira com coordenação.")
 
 
 if __name__ == "__main__":

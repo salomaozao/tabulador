@@ -735,14 +735,35 @@ def api_frame_keywords(qid):
 
 @app.get("/api/pergunta/<qid>/aprendizado")
 def api_aprendizado(qid):
-    """Dossiê por categoria (volume, confusões, auditor, âncoras, keywords sugeridas) + alertas de saúde."""
+    """Dossiê por categoria, alertas, keywords e diagnóstico aglomerado com propostas de solução."""
     try:
         frame, respostas, itens = aprendizado._dados(qid)
         if not frame:
-            return jsonify({"dossie": {}, "alertas": [], "keywords_sugeridas": {}})
+            return jsonify({"dossie": {}, "alertas": [], "keywords_sugeridas": {}, "diagnostico": {}})
         dos = aprendizado.dossie_de(frame, respostas, itens)
-        return jsonify({"dossie": {str(k): v for k, v in dos.items()}, "alertas": aprendizado.saude_de(frame, dos),
-                        "keywords_sugeridas": {str(k): v for k, v in aprendizado.keywords_sugeridas_de(frame, respostas, itens).items()}})
+        als = aprendizado.saude_de(frame, dos)
+        kws = aprendizado.keywords_sugeridas_de(frame, respostas, itens)
+        diag = aprendizado.diagnostico_saude_de(frame, dos, als, kws)
+        return jsonify({
+            "dossie": {str(k): v for k, v in dos.items()},
+            "alertas": als,
+            "keywords_sugeridas": {str(k): v for k, v in kws.items()},
+            "diagnostico": diag,
+        })
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/pergunta/<qid>/frame/propor-definicao")
+def api_frame_propor_definicao(qid):
+    """Pede à IA uma proposta de definição refinada para delimitar a fronteira da categoria."""
+    try:
+        d = request.get_json(force=True) or {}
+        codigo = d.get("codigo")
+        if codigo is None:
+            return jsonify({"erro": "codigo obrigatório"}), 400
+        res = aprendizado.propor_definicao(qid, codigo)
+        return jsonify(res)
     except Exception as e:
         return _erro(e)
 

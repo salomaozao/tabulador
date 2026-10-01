@@ -20,3 +20,8 @@ token.json
 *.pyc
 ~$*
 *.tmp
+*.xlsx
+*.xls
+*.mp4
+*.docx
+SALVAR.txt

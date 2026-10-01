@@ -53,6 +53,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:now
 tr.alerta td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
 tr.humano td:first-child{box-shadow:inset 3px 0 0 var(--human)}
 tr.pendente td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+tr.alterada td:first-child{box-shadow:inset 4px 0 0 var(--warn)}
 tr.hid{display:none}
 
 input,select,textarea{font:inherit;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);max-width:100%}
@@ -193,6 +194,8 @@ table.res th{position:sticky;top:calc(var(--topo,49px) + var(--revbar-h,66px));z
 @keyframes pulse-ok{0%{background-color:var(--ok-bg)}100%{background-color:transparent}}
 tr.confirmada td:first-child{box-shadow:inset 4px 0 0 var(--ok)}
 tr.confirmada{background-color:color-mix(in srgb, var(--ok-bg) 25%, transparent)}
+tr.alterada td:first-child{box-shadow:inset 4px 0 0 var(--warn)}
+tr.alterada{background-color:color-mix(in srgb, var(--warn-bg) 30%, transparent)}
 tr.naocod td{color:var(--text-3)}
 /* botão de aprovar no fim da tabela de revisão, não no topo */
 .aprovar-bar{justify-content:flex-end;border-top:1px solid var(--border);padding-top:12px;margin-top:12px}
@@ -205,6 +208,8 @@ tr.naocod td{color:var(--text-3)}
 .btn.c-ok{min-width:32px;color:var(--text-3);transition:all .15s ease}
 .btn.c-ok:hover{color:var(--ok);border-color:var(--ok)}
 .btn.c-ok.on{background:var(--ok);border-color:var(--ok);color:#fff;font-weight:600;box-shadow:0 1px 3px rgba(27,127,77,.3)}
+.btn.c-ok.alterada{background:var(--warn-bg);border-color:var(--warn);color:var(--warn);font-weight:700}
+.btn.c-ok.alterada:hover{background:var(--warn);color:#fff}
 .atalhos kbd{background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-family:inherit;font-size:11px;color:var(--text)}
 dialog{border:1px solid var(--border);border-radius:12px;padding:20px 22px;background:var(--surface);color:var(--text);width:min(520px,92vw)}
 dialog::backdrop{background:rgba(0,0,0,.35)}
@@ -392,3 +397,31 @@ h3{font-size:14px;margin:16px 0 6px}
 table.perfil{width:100%;font-size:12px;border-collapse:collapse}table.perfil td,table.perfil th{padding:2px 4px;border-bottom:1px solid var(--border)}
 table.perfil th{font-weight:500;color:var(--text-3)}
 .cc-acoes{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:auto}.cc-menor{color:var(--text-3)}
+
+/* ---- pop-up: saúde do quadro e diagnóstico com IA ---- */
+.sq-placar{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:16px}
+.sq-stat{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:2px}
+.sq-stat .sq-val{font-size:22px;font-weight:700;line-height:1.2}
+.sq-stat .sq-lbl{font-size:12px;color:var(--text-2)}
+.sq-barra-topo{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-2);border-radius:8px;padding:10px 14px;margin-bottom:16px}
+.sq-cards{display:flex;flex-direction:column;gap:14px}
+.sq-card{border:1px solid var(--border);border-radius:10px;background:var(--surface);overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.04)}
+.sq-card-cab{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;background:var(--surface-2);border-bottom:1px solid var(--border)}
+.sq-card-cab b{font-size:14px}
+.sq-card-corpo{padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.sq-def-atual{font-size:13px;color:var(--text-2);background:color-mix(in srgb,var(--surface-2) 60%,transparent);padding:6px 10px;border-radius:6px}
+.sq-problemas{display:flex;flex-direction:column;gap:6px}
+.sq-prob-item{background:color-mix(in srgb,var(--warn-bg) 60%,var(--surface));border-left:4px solid var(--warn);padding:7px 10px;border-radius:4px;font-size:13px}
+.sq-prob-item b{color:var(--text)}
+.sq-solucoes{background:color-mix(in srgb,var(--accent) 5%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 30%,var(--border));border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.sq-sol-titulo{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--accent)}
+.sq-sol-linha{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.sq-diff-box{margin-top:10px;padding:12px;border:1px dashed var(--accent);border-radius:8px;background:var(--surface);display:flex;flex-direction:column;gap:8px}
+.sq-destaque-def{font-size:13px;padding:8px 10px;background:color-mix(in srgb,var(--ok-bg) 40%,var(--surface));border-left:3px solid var(--ok);border-radius:4px;color:var(--text)}
+.tab-raras{width:100%;font-size:13px;border-collapse:collapse;margin-top:8px}
+.tab-raras th{text-align:left;padding:6px 10px;background:var(--surface-2);color:var(--text-2);font-weight:600}
+.tab-raras td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+.sq-saudaveis{margin-top:14px;padding:8px 12px;background:color-mix(in srgb,var(--ok-bg) 30%,var(--surface));border:1px solid color-mix(in srgb,var(--ok) 30%,var(--border));border-radius:8px}
+.sq-saudaveis summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ok)}
+.sq-saudaveis-lista{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+

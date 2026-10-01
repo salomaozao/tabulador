@@ -417,7 +417,7 @@ function nomeCat(c) { const x = catsValidas().find((k) => k.codigo === +c); retu
 // recalcula contagens e números da revisão no navegador (sem recarregar tudo a cada clique)
 function recalcular() {
   const P = state.P, cont = {};
-  let cod = 0, conf = 0, confAuto = 0, corr = 0, corrIA = 0;
+  let cod = 0, conf = 0, confAuto = 0, corr = 0, corrIA = 0, alt = 0;
   for (const r of P.itens) {
     for (const [k, campo] of [[r.primaria, "primaria"], [r.secundaria, "secundaria"]]) {
       if (k == null) continue;
@@ -427,20 +427,25 @@ function recalcular() {
     cod++;
     if (r.revisao === "confirmada") { conf++; if (r.validado_por === "auto") confAuto++; }
     if (r.revisao === "corrigida") { corr++; if (r.corrigido_de_nome != null) corrIA++; }
+    if (r.revisao === "alterada") { alt++; }
   }
   P.contagens = cont;
   P.n_alertas = P.itens.filter((r) => r.alertas && r.alertas !== "não codificado").length;
   P.n_comentarios_pendentes = P.itens.filter((r) => r.comentario_pendente).length;
   // confirmadas pelo supervisor.py (auto) não medem o acerto da IA — mesma regra de coding.resumo_revisao
   const aval = conf - confAuto + corrIA, tot = P.itens.length;
-  P.revisao = { n_unicas: tot, n_codificadas: cod, n_faltantes: tot - cod, n_confirmadas: conf, n_confirmadas_auto: confAuto, n_corrigidas: corr, n_revisadas: conf + corr, acerto_ia: aval ? (conf - confAuto) / aval : null, n_avaliadas_ia: aval };
+  P.revisao = { n_unicas: tot, n_codificadas: cod, n_faltantes: tot - cod, n_confirmadas: conf, n_confirmadas_auto: confAuto, n_corrigidas: corr, n_alteradas: alt, n_revisadas: conf + corr, acerto_ia: aval ? (conf - confAuto) / aval : null, n_avaliadas_ia: aval };
 }
 function aplicarItem(r, it) {
   const au = it.auditoria || null;
   Object.assign(r, {
     primaria: it.primaria, secundaria: it.secundaria, origem: it.origem, confianca: it.confianca,
     comentario: it.comentario || null, comentario_pendente: !!it.comentario && !it.comentario_aplicado_em,
-    revisao: it.primaria == null ? null : it.origem === "humano" ? "corrigida" : it.validado ? "confirmada" : "pendente",
+    revisao: it.primaria == null ? null : it.alterada ? "alterada" : it.origem === "humano" ? "corrigida" : it.validado ? "confirmada" : "pendente",
+    alterada: !!it.alterada,
+    alterada_motivo: it.alterada_motivo || null,
+    alterada_em: it.alterada_em || null,
+    alterada_de: it.alterada_de ?? null,
     validado_por: it.validado_por ?? null,
     corrigido_de_nome: it.corrigido_de != null ? nomeCat(it.corrigido_de) : null,
     auditoria: au,
@@ -449,13 +454,23 @@ function aplicarItem(r, it) {
     ia_original_nome: it.ia_original ? nomeCat(it.ia_original.primaria) : null,
   });
   r.primaria_nome = nomeCat(r.primaria); r.secundaria_nome = nomeCat(r.secundaria);
-  r.alertas = r.revisao === "pendente" ? r._alertas_ia || "" : r.revisao ? "" : "não codificado";
+  r.alertas = (r.revisao === "pendente" || r.revisao === "alterada") ? r._alertas_ia || "" : r.revisao ? "" : "não codificado";
+}
+
+function badgeSaudeQuadro() {
+  const S = state.P?.saude || [];
+  const n = S.length;
+  if (!n) return { classe: "ghost", texto: " (100% ok)" };
+  const criticos = S.filter((a) => a.tipo === "ampla" || a.tipo === "confusao" || a.tipo === "outros").length;
+  const classe = criticos > 0 ? "warn" : "";
+  return { classe, texto: ` (${n})` };
 }
 
 function render() {
   const P = state.P, R = P.respostas || {}, F = P.frame, C = P.codificacao, V = P.revisao;
   const frameOk = F && F.status === "aprovado", codOk = C && C.status === "aprovado";
   const faltam = V ? V.n_faltantes : 0;
+  const bs = badgeSaudeQuadro();
   // contador do canto direito: quantas respostas já foram conferidas do total desta pergunta.
   // Fica dentro do cabeçalho sticky, então acompanha a rolagem da tabela de revisão.
   const totRev = V ? V.n_unicas : (R.n_unicas || 0), nRev = V ? V.n_revisadas : 0;
@@ -504,6 +519,7 @@ function render() {
         ${!F ? `<button class="btn primary" id="b-induzir">✨ Gerar categorias com IA</button>` : ""}
         ${F && !F.fixo ? `<button class="btn" id="b-induzir">✨ Gerar do zero</button>` : ""}
         ${F ? `<button class="btn" id="b-janela-cat" title="Cada categoria com definição, exemplos${C ? ", perfil de quem citou e confirmação em bloco" : ""}">🗂 Revisar por categoria</button>` : ""}
+        ${F ? `<button class="btn ${bs.classe}" id="b-saude-quadro" title="Saúde do quadro: diagnóstico por categoria e soluções propostas">🩺 Saúde do quadro${bs.texto}</button>` : ""}
         ${F && !frameOk ? `<button class="btn ok" id="b-aprovar-frame">✓ Aprovar categorias</button>` : ""}
       </span>
     </h2>
@@ -532,6 +548,7 @@ function render() {
   });
   $("#b-aprovar-frame")?.addEventListener("click", async () => refresh(await post(`/api/pergunta/${P.qid}/frame/aprovar`, {}, "Aprovando…")));
   $("#b-janela-cat")?.addEventListener("click", () => abrirJanelaCategorias());
+  $("#b-saude-quadro")?.addEventListener("click", () => abrirJanelaSaudeQuadro());
   $("#b-reabrir")?.addEventListener("click", async () => refresh(await post(`/api/pergunta/${P.qid}/reabrir`, {}, "Reabrindo…")));
   bindFrame(); bindAcoesCod(); bindCodificacao(); bindAprovarBar();
 }
@@ -556,7 +573,6 @@ function renderFrame() {
   }).join("");
   return `
     ${F.raciocinio && !F.fixo ? `<div class="info">💡 ${esc(F.raciocinio)}</div>` : ""}
-    ${renderSaude()}
     <table id="tab-frame"><thead><tr><th style="width:44px">Cód.</th><th style="width:16%">Categoria</th><th style="width:24%">Definição</th><th style="width:17%" title="Palavras típicas da categoria. Entram no pedido à IA como pista. Tracejadas = aprendidas com a revisão (📌 fixa, × descarta e não volta).">Palavras-chave</th><th>Exemplos</th><th class="num" style="width:60px">Prim.</th><th class="num" style="width:60px">Sec.</th><th class="num" style="width:90px">Menções</th><th style="width:200px">Ações</th></tr></thead>
     <tbody>${rows}
       ${F.fixo ? "" : `<tr class="frame-add"><td>+</td><td><input class="inline" id="f-novo-nome" placeholder="Nova categoria"></td><td><input class="inline" id="f-novo-def" placeholder="Definição (1 frase)"></td><td colspan="5"></td><td><button class="btn sm" id="f-add">Adicionar</button></td></tr>`}
@@ -642,6 +658,7 @@ function renderRevbar() {
           <div class="revbar-status">
             <b>Revisão:</b> <b>${fmtN(V.n_revisadas)}</b> de ${fmtN(V.n_codificadas)} conferidas (${pct(V.n_revisadas, V.n_codificadas)}) · <span class="pill ok">✓ ${fmtN(nPessoas)} manual</span>${V.n_confirmadas_auto ? ` <span class="pill ok auto" title="Confirmadas sozinhas: confiança alta e auditor concordou">⚡ ${fmtN(V.n_confirmadas_auto)} auto</span>` : ""} <span class="pill human">✎ ${fmtN(V.n_corrigidas)} corrigidas</span>
             ${acerto != null ? ` · <b>IA: ${acerto}%</b> <small>(${V.n_avaliadas_ia} avaliadas)</small>` : ""}
+            ${V.n_alteradas ? ` · <button type="button" class="pill warn linkbtn" id="b-so-alteradas-revbar" title="Filtra a tabela só pelas ${V.n_alteradas} respostas que precisam de reconferência">⚠️ ${fmtN(V.n_alteradas)} a reconferir</button>` : ""}
             ${nPendentes ? ` · <button type="button" class="pill warn linkbtn" id="b-so-pendentes" title="Filtra a tabela abaixo só pelas ${nPendentes} que ainda faltam conferir">👁 ver as ${fmtN(nPendentes)} a conferir</button>` : ""}
           </div>
           <div class="revbar-acoes">
@@ -658,7 +675,7 @@ function renderRevbar() {
     </div>`;
 }
 function renderAcoesCod() {
-  const P = state.P, C = P.codificacao, V = P.revisao, R = P.respostas || {};
+  const P = state.P, C = P.codificacao, V = P.revisao, R = P.respostas || {}, bs = badgeSaudeQuadro();
   // quantidade livre (com sugestões): fica FORA do botão — dentro dele, clicar no campo disparava a classificação
   const maxTam = (C ? V.n_faltantes : R.n_unicas) || "";
   const tam = `<input id="tam-amostra" class="tam-amostra" type="number" min="1" ${maxTam ? `max="${maxTam}"` : ""} step="1" value="${maxTam ? Math.min(state.amostra, maxTam) : state.amostra}"
@@ -683,7 +700,9 @@ function renderAcoesCod() {
         <label class="small">limiar <input id="auto-limiar" type="number" min="0.5" max="1" step="0.05" value="${state.limiar ?? 0.85}" style="width:64px"></label>
         ${V.n_confirmadas_auto ? `<button class="btn ghost" id="b-desfazer-auto">↶ Desfazer as ${V.n_confirmadas_auto} automáticas</button>` : ""}
         <span class="sep"></span>
+        ${V.n_alteradas ? `<button class="btn warn" id="b-so-alteradas" title="Filtrar as ${V.n_alteradas} respostas que precisam de reconferência após alteração no quadro">⚠️ Reconferir alteradas (${V.n_alteradas})</button>` : ""}
         <button class="btn" id="b-janela" title="Cada categoria com exemplos, perfil de quem citou e confirmação em bloco">🗂 Revisar por categoria</button>
+        <button class="btn ${bs.classe}" id="b-saude-quadro-rev" title="Saúde do quadro: diagnóstico por categoria e soluções propostas">🩺 Saúde do quadro${bs.texto}</button>
       </div>
     </div>`;
 }
@@ -736,6 +755,14 @@ function bindAcoesCod() {
   });
   $("#b-auditar")?.addEventListener("click", abrirAuditoria);
   $("#b-janela")?.addEventListener("click", () => abrirJanelaCategorias());
+  $("#b-saude-quadro-rev")?.addEventListener("click", () => abrirJanelaSaudeQuadro());
+  const filtrarParaAlteradas = () => {
+    state.filtro.situacao = "alterada"; state.mostrar = POR_PAGINA; state.congelar = false;
+    manterScroll(render);
+    $("#tab-cod")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  $("#b-so-alteradas")?.addEventListener("click", filtrarParaAlteradas);
+  $("#b-so-alteradas-revbar")?.addEventListener("click", filtrarParaAlteradas);
   $("#b-so-pendentes")?.addEventListener("click", () => {
     state.filtro.situacao = "pendente"; state.mostrar = POR_PAGINA; state.congelar = false;
     manterScroll(render);
@@ -845,6 +872,285 @@ async function abrirJanelaCategorias() {
   $("#jc-aprovar")?.addEventListener("click", async () => { const r = await post(`/api/pergunta/${qid}/frame/aprovar`, {}, "Aprovando…"); $("#dlg-janela").close(); refresh(r); toast("Categorias aprovadas"); });
 }
 
+async function abrirJanelaSaudeQuadro() {
+  const P = state.P, qid = P.qid;
+  const res = await api(`/api/pergunta/${qid}/aprendizado`, {}, "Carregando diagnóstico de saúde do quadro…");
+  const diag = res.diagnostico || {};
+  const resumo = diag.resumo || {};
+  const atencao = diag.categorias_atencao || [];
+  const raras = diag.categorias_raras || [];
+  const saudaveis = diag.categorias_saudaveis || [];
+  const catsFrame = P.frame?.categorias || [];
+  const opts = (excl) => catsFrame.filter((c) => c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
+
+  const placarHtml = `
+    <div class="sq-placar">
+      <div class="sq-stat"><span class="sq-val">${resumo.total_categorias || 0}</span><span class="sq-lbl">Categorias no quadro</span></div>
+      <div class="sq-stat" style="border-left:4px solid var(--warn)"><span class="sq-val" style="color:var(--warn)">${atencao.length}</span><span class="sq-lbl">Com pontos de atenção</span></div>
+      <div class="sq-stat"><span class="sq-val">${raras.length}</span><span class="sq-lbl">Baixo volume (&lt; 1%)</span></div>
+      <div class="sq-stat" style="border-left:4px solid var(--ok)"><span class="sq-val" style="color:var(--ok)">${saudaveis.length}</span><span class="sq-lbl">Saudáveis</span></div>
+    </div>
+    <div class="sq-barra-topo">
+      <div>
+        <b>🧠 Aprendizado contínuo:</b> 
+        <span class="small">${resumo.n_conferidas || 0} respostas conferidas por pessoas</span>
+        ${resumo.revisoes_para_proximo_aprendizado ? `<span class="small">(faltam ${resumo.revisoes_para_proximo_aprendizado} revisões para a próxima rodada automática)</span>` : `<span class="small pill ok">pronto para aprender</span>`}
+      </div>
+      <button class="btn sm" id="sq-aprender">🧠 Aprender com a revisão agora</button>
+    </div>
+  `;
+
+  let atencaoHtml = "";
+  if (atencao.length) {
+    atencaoHtml = `
+      <h3 style="margin:16px 0 8px">⚠️ Categorias que precisam de ajuste (${atencao.length}) <span class="small">— confusões de fronteira, amplitude ou sobreposição de palavras</span></h3>
+      <div class="sq-cards">
+        ${atencao.map((c) => {
+          return `
+            <div class="sq-card" data-cod="${c.codigo}">
+              <div class="sq-card-cab">
+                <b>${c.codigo} · ${esc(c.nome)}</b>
+                <span class="pill ${c.problemas.length > 1 ? "warn" : ""}">${c.problemas.length} alerta(s)</span>
+                <span class="small">${c.n} respostas (${pct(c.n, resumo.total_respostas || 1)})</span>
+                ${c.conf_media != null ? `<span class="small">Confiança média: <b>${fmt1(c.conf_media, 2)}</b></span>` : ""}
+              </div>
+              <div class="sq-card-corpo">
+                <div class="sq-def-atual"><b>Definição atual:</b> <i>"${esc(c.definicao || "(sem definição cadastrada)")}"</i></div>
+                <div class="sq-problemas">
+                  ${c.problemas.map((p) => `
+                    <div class="sq-prob-item">
+                      <b>${esc(p.titulo)}</b>
+                      <div>${esc(p.detalhe)}</div>
+                    </div>
+                  `).join("")}
+                </div>
+                <div class="sq-solucoes">
+                  <div class="sq-sol-titulo">💡 Soluções Propostas — Aprove para aplicar na hora:</div>
+                  <div class="sq-sol-linha">
+                    ${c.solucoes.map((s) => {
+                      if (s.tipo === "propor_definicao_ia") {
+                        return `<button class="btn sm sq-btn-propor-ia" data-cod="${c.codigo}">${esc(s.rotulo)}</button>`;
+                      }
+                      if (s.tipo === "adicionar_exclusao") {
+                        return `<button class="btn sm sq-btn-exclusao" data-cod="${c.codigo}" data-texto="${esc(s.texto_adicional)}">${esc(s.rotulo)}</button>`;
+                      }
+                      if (s.tipo === "remover_keyword") {
+                        return `<button class="btn sm danger sq-btn-rem-kw" data-cod="${c.codigo}" data-kw="${esc(s.keyword)}">${esc(s.rotulo)}</button>`;
+                      }
+                      if (s.tipo === "adicionar_keywords") {
+                        return `<button class="btn sm ok sq-btn-add-kws" data-cod="${c.codigo}" data-kws="${esc(s.keywords.join(','))}">✓ Adicionar palavras sugeridas</button>`;
+                      }
+                      if (s.tipo === "separar") {
+                        return `<button class="btn sm sq-btn-separar" data-cod="${c.codigo}" data-nome="${esc(c.nome)}">${esc(s.rotulo)}</button>`;
+                      }
+                      if (s.tipo === "desmembrar_outros") {
+                        return `<button class="btn sm sq-btn-outros">${esc(s.rotulo)}</button>`;
+                      }
+                      return "";
+                    }).join("")}
+                  </div>
+                  <div class="sq-previa-def hidden" id="sq-previa-${c.codigo}"></div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    `;
+  } else {
+    atencaoHtml = `<div class="info ok" style="margin:12px 0">✓ Nenhuma categoria com confusão de fronteira ou amplitude excessiva! O quadro está consistente.</div>`;
+  }
+
+  let rarasHtml = "";
+  if (raras.length) {
+    rarasHtml = `
+      <h3 style="margin:20px 0 8px">📉 Categorias de Baixo Volume (${raras.length}) <span class="small">— menos de 1% das respostas; avalie mesclar ou excluir</span></h3>
+      <table class="tab-raras">
+        <thead>
+          <tr>
+            <th style="width:40px">Cód.</th>
+            <th>Categoria</th>
+            <th style="width:120px">Respostas</th>
+            <th>Solução Proposta</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${raras.map((r) => `
+            <tr data-cod="${r.codigo}">
+              <td><b>${r.codigo}</b></td>
+              <td><b>${esc(r.nome)}</b></td>
+              <td>${r.n} (${pct(r.n, resumo.total_respostas || 1)})</td>
+              <td>
+                <select class="sq-raras-mesclar sm" data-cod="${r.codigo}">
+                  <option value="">mesclar em…</option>
+                  ${opts(r.codigo)}
+                </select>
+                <button class="btn sm sq-btn-mesclar" data-cod="${r.codigo}">✓ Aprovar mesclagem</button>
+                ${r.pode_excluir ? `<button class="btn sm danger sq-btn-excluir" data-cod="${r.codigo}">🗑️ Excluir</button>` : ""}
+              </td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    `;
+  }
+
+  let saudaveisHtml = "";
+  if (saudaveis.length) {
+    saudaveisHtml = `
+      <details class="sq-saudaveis">
+        <summary>✓ <b>${saudaveis.length} categorias saudáveis</b> (sem alertas de sobreposição ou amplitude)</summary>
+        <div class="sq-saudaveis-lista">
+          ${saudaveis.map((s) => `<span class="pill ok">${s.codigo} · ${esc(s.nome)} (${s.n})</span>`).join("")}
+        </div>
+      </details>
+    `;
+  }
+
+  abrirJanela(`Saúde do quadro · ${qid}`, `
+    ${placarHtml}
+    ${atencaoHtml}
+    ${rarasHtml}
+    ${saudaveisHtml}
+  `);
+
+  $("#sq-aprender")?.addEventListener("click", async () => {
+    const r = await post(`/api/pergunta/${qid}/frame/aprender`, {}, "Aprendendo com a revisão…");
+    const m = r.aprendizado?.mudancas?.length || 0;
+    toast(m ? `Palavras-chave aprendidas atualizadas em ${m} categoria(s)` : (r.aprendizado?.motivo || "Nada novo para aprender ainda"));
+    refresh(r);
+    await abrirJanelaSaudeQuadro();
+  });
+
+  document.querySelectorAll(".sq-btn-propor-ia").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const cod = btn.dataset.cod;
+      const previaEl = $(`#sq-previa-${cod}`);
+      if (!previaEl) return;
+      btn.disabled = true;
+      btn.textContent = "⏳ Gerando proposta com IA…";
+      try {
+        const prop = await post(`/api/pergunta/${qid}/frame/propor-definicao`, { codigo: cod }, "A IA está formulando a definição…");
+        previaEl.innerHTML = `
+          <div class="sq-diff-box">
+            <div><small style="color:var(--text-3)">DEFINIÇÃO ATUAL:</small><br><i>"${esc(prop.definicao_atual || '(vazia)')}"</i></div>
+            <div class="sq-destaque-def"><small style="color:var(--ok);font-weight:700">DEFINIÇÃO PROPOSTA PELA IA:</small><br><b>${esc(prop.definicao_proposta)}</b></div>
+            ${prop.justificativa ? `<div class="small">💡 <b>Por que esta redação:</b> ${esc(prop.justificativa)}</div>` : ""}
+            <div class="sq-sol-linha" style="margin-top:6px">
+              <button class="btn sm ok sq-btn-aprovar-def" data-cod="${cod}" data-def="${esc(prop.definicao_proposta)}">✓ Aprovar esta definição</button>
+              <button class="btn sm ghost sq-btn-canc-def" data-cod="${cod}">Cancelar</button>
+            </div>
+          </div>
+        `;
+        previaEl.classList.remove("hidden");
+        previaEl.querySelector(".sq-btn-canc-def")?.addEventListener("click", () => {
+          previaEl.innerHTML = "";
+          previaEl.classList.add("hidden");
+        });
+        previaEl.querySelector(".sq-btn-aprovar-def")?.addEventListener("click", async (e) => {
+          const novaDef = e.target.dataset.def;
+          const r = await post(`/api/pergunta/${qid}/frame/categoria`, { codigo: cod, definicao: novaDef }, "Salvando nova definição…");
+          toast("Nova definição aprovada e salva no quadro!");
+          refresh(r);
+          await abrirJanelaSaudeQuadro();
+        });
+      } catch (err) {
+        toast("Erro ao gerar proposta: " + (err.message || err), true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "✨ Propor nova definição com IA";
+      }
+    });
+  });
+
+  document.querySelectorAll(".sq-btn-exclusao").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const cod = btn.dataset.cod, texto = btn.dataset.texto;
+      const cat = P.frame?.categorias?.find((c) => String(c.codigo) === String(cod));
+      const defAtual = cat?.definicao || "";
+      const novaDef = defAtual ? `${defAtual.replace(/\.*$/, "")}.${texto}` : texto.trim();
+      const r = await post(`/api/pergunta/${qid}/frame/categoria`, { codigo: cod, definicao: novaDef }, "Adicionando ressalva…");
+      toast("Ressalva adicionada à definição!");
+      refresh(r);
+      await abrirJanelaSaudeQuadro();
+    });
+  });
+
+  document.querySelectorAll(".sq-btn-rem-kw").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const cod = btn.dataset.cod, kw = btn.dataset.kw;
+      const r = await post(`/api/pergunta/${qid}/frame/keywords`, { codigo: cod, remover: [kw] }, "Removendo palavra ambígua…");
+      toast(`Palavra-chave "${kw}" removida da categoria!`);
+      refresh(r);
+      await abrirJanelaSaudeQuadro();
+    });
+  });
+
+  document.querySelectorAll(".sq-btn-add-kws").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const cod = btn.dataset.cod, kws = (btn.dataset.kws || "").split(",").filter(Boolean);
+      const r = await post(`/api/pergunta/${qid}/frame/keywords`, { codigo: cod, adicionar: kws }, "Adicionando termos…");
+      toast("Palavras-chave sugeridas adicionadas!");
+      refresh(r);
+      await abrirJanelaSaudeQuadro();
+    });
+  });
+
+  document.querySelectorAll(".sq-btn-separar").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const nome = btn.dataset.nome;
+      $("#dlg-janela")?.close();
+      const refino = $("#refino");
+      if (refino) {
+        refino.value = `A categoria "${nome}" está ampla demais: separe em subcategorias mais específicas preservando a precisão analítica.`;
+        refino.scrollIntoView({ behavior: "smooth", block: "center" });
+        refino.focus();
+      }
+    });
+  });
+
+  document.querySelectorAll(".sq-btn-outros").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      $("#dlg-janela")?.close();
+      const refino = $("#refino");
+      if (refino) {
+        refino.value = "Identifique os temas mais recorrentes em Outros e proponha novas categorias para capturar essas respostas.";
+        refino.scrollIntoView({ behavior: "smooth", block: "center" });
+        refino.focus();
+      }
+    });
+  });
+
+  document.querySelectorAll(".sq-btn-mesclar").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const cod = btn.dataset.cod;
+      const row = btn.closest("tr");
+      const sel = row?.querySelector(".sq-raras-mesclar");
+      const dest = sel?.value;
+      if (!dest) return toast("Selecione a categoria de destino para mesclar", true);
+      const c = P.frame?.categorias?.find((x) => String(x.codigo) === String(cod));
+      const d = P.frame?.categorias?.find((x) => String(x.codigo) === String(dest));
+      if (!confirm(`Mesclar "${c?.nome}" em "${d?.nome}"? As respostas serão remapeadas.`)) return;
+      const r = await post(`/api/pergunta/${qid}/frame/fundir`, { destino: dest, origens: [cod] }, "Mesclando…");
+      toast("Categorias mescladas com sucesso!");
+      refresh(r);
+      await abrirJanelaSaudeQuadro();
+    });
+  });
+
+  document.querySelectorAll(".sq-btn-excluir").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const cod = btn.dataset.cod;
+      const c = P.frame?.categorias?.find((x) => String(x.codigo) === String(cod));
+      if (!confirm(`Excluir a categoria vazia "${c?.nome}"?`)) return;
+      const r = await api(`/api/pergunta/${qid}/frame/categoria/${cod}`, { method: "DELETE" }, "Excluindo…");
+      toast("Categoria excluída!");
+      refresh(r);
+      await abrirJanelaSaudeQuadro();
+    });
+  });
+}
+
 // ---- auditoria por outra IA (segundo codificador)
 function abrirAuditoria() {
   const P = state.P, ia = state.status.ia, provs = ia.provedores || {};
@@ -901,6 +1207,7 @@ const temSugestao = (r) => r.revisao === "pendente" && r.auditoria?.ok === false
 function situacaoOk(r, s) {
   if (!s) return true;
   if (s === "nao") return r.primaria == null;
+  if (s === "alterada") return r.revisao === "alterada";
   if (s === "auto") return r.revisao === "confirmada" && r.validado_por === "auto";
   if (s === "humano") return r.revisao === "confirmada" && r.validado_por !== "auto";
   if (s === "discorda") return temSugestao(r);
@@ -984,19 +1291,22 @@ function renderCodificacao() {
   })();
   const rows = vis.map((r) => {
     const nc = r.primaria == null;
-    const cls = [r.alertas && !nc ? "alerta" : "", r.revisao === "corrigida" ? "humano" : "", r.revisao === "confirmada" ? "confirmada" : "", r.comentario_pendente ? "pendente" : "", nc ? "naocod" : ""].join(" ");
-    const origem = nc ? '<span class="pill">não classificada</span>' : r.revisao === "corrigida" ? `<span class="pill human" title="${r.corrigido_de_nome ? "A IA tinha posto: " + esc(r.corrigido_de_nome) : ""}">✎ você</span>`
+    const cls = [r.alertas && !nc ? "alerta" : "", r.revisao === "alterada" ? "alterada" : "", r.revisao === "corrigida" ? "humano" : "", r.revisao === "confirmada" ? "confirmada" : "", r.comentario_pendente ? "pendente" : "", nc ? "naocod" : ""].join(" ");
+    const origem = nc ? '<span class="pill">não classificada</span>'
+      : r.revisao === "alterada" ? `<span class="pill warn" title="${esc(r.alterada_motivo || 'Categoria alterada — reconferir')}">⚠️ alterada</span>`
+      : r.revisao === "corrigida" ? `<span class="pill human" title="${r.corrigido_de_nome ? "A IA tinha posto: " + esc(r.corrigido_de_nome) : ""}">✎ você</span>`
       : r.revisao === "confirmada" ? (r.validado_por === "auto" ? `<span class="pill ok auto" title="Confirmada sozinha: confiança alta e o auditor concordou">⚡ auto</span>` : '<span class="pill ok">✓ conferida</span>')
       : r.ia_original_nome ? `<span class="pill acc" title="O auditor corrigiu; a IA tinha posto: ${esc(r.ia_original_nome)}">revisor</span>`
       : r.origem === "regra" ? '<span class="pill">regra</span>' : r.origem === "llm+comentario" ? '<span class="pill acc">IA + comentário</span>' : r.origem === "erro" ? '<span class="pill warn">erro</span>' : '<span class="pill">IA</span>';
     // justificativa: sugestões já adotadas (supervisor.py) guardam o texto do revisor; mostra rotulado
     const just = r.justificativa ? (r.ia_original_nome ? `<small>revisor: ${esc(r.justificativa.replace(/^\[revisor [^:]*: ?/, "").replace(/\] IA tinha: .*$/, ""))} · a IA tinha posto: ${esc(r.ia_original_nome)}</small>` : `<small>IA: ${esc(r.justificativa)}</small>`) : "";
     const sugestao = !locked && temSugestao(r) ? `<div class="sugestao">🔎 auditor sugere: <b>${esc(r.sugestao_nome || r.auditoria.primaria)}</b>${r.sugestao_sec_nome ? ` + ${esc(r.sugestao_sec_nome)}` : ""}${r.auditoria.nota ? ` — ${esc(r.auditoria.nota)}` : ""} <button class="btn sm c-sug" title="Aceitar a sugestão do auditor (tecla S)">aceitar sugestão</button></div>` : "";
-    const btnOk = nc || locked || r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
+    const motivoAlt = r.revisao === "alterada" && r.alterada_motivo ? `<br><small style="color:var(--warn);font-weight:600">⚠️ Reconferir: ${esc(r.alterada_motivo)}</small>` : "";
+    const btnOk = nc || locked ? "" : r.revisao === "alterada" ? `<button class="btn sm c-ok alterada" title="Reconfirmar resposta após alteração da categoria">✓</button>` : r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
     return `<tr class="${cls}" data-rid="${r.rid}" tabindex="0">
       <td>${btnOk}</td>
       <td>${origem}</td>
-      <td><div class="txt-resp${r.texto.length > 280 ? " longa" : ""}" title="${r.texto.length > 280 ? "clique para ver a resposta inteira" : ""}">${esc(r.texto)}</div>${just}${sugestao}${r.alertas && !nc ? `<br><span class="pill warn">${esc(r.alertas)}</span>` : ""}${r.corrigido_de_nome ? `<br><small>a IA tinha posto: ${esc(r.corrigido_de_nome)}</small>` : ""}</td>
+      <td><div class="txt-resp${r.texto.length > 280 ? " longa" : ""}" title="${r.texto.length > 280 ? "clique para ver a resposta inteira" : ""}">${esc(r.texto)}</div>${just}${sugestao}${motivoAlt}${r.alertas && !nc ? `<br><span class="pill warn">${esc(r.alertas)}</span>` : ""}${r.corrigido_de_nome ? `<br><small>a IA tinha posto: ${esc(r.corrigido_de_nome)}</small>` : ""}</td>
       <td class="num">${r.n}</td>
       <td><select class="cat c-prim">${nc ? `<option value="" selected>— escolha —</option>` : ""}${optCat(r.primaria, null)}</select></td>
       <td><select class="cat c-sec" ${nc ? "disabled" : ""}>${optCat(r.secundaria, "— nenhuma —")}</select></td>
@@ -1004,13 +1314,14 @@ function renderCodificacao() {
       <td><textarea class="inline c-com" rows="1" ${nc ? "disabled" : ""} placeholder="O que está errado? (a IA reclassifica)">${esc(r.comentario || "")}</textarea>${r.comentario && !r.comentario_pendente ? `<small>já aplicado</small>` : ""}</td>
     </tr>`;
   }).join("");
-  const pendVis = vis.filter((r) => r.revisao === "pendente").length;
+  const pendVis = vis.filter((r) => r.revisao === "pendente" || r.revisao === "alterada").length;
   return `
     <div class="chart">${chart}</div>
     <div class="tools">
       <input id="c-q" placeholder="buscar texto…" value="${esc(f.q)}">
       <select id="c-sit">
         <option value="">todas as situações</option>
+        <option value="alterada" ${f.situacao === "alterada" ? "selected" : ""}>⚠️ alteradas para reconferir${V.n_alteradas ? ` (${V.n_alteradas})` : ""}</option>
         <option value="pendente" ${f.situacao === "pendente" ? "selected" : ""}>a conferir</option>
         <option value="confirmada" ${f.situacao === "confirmada" ? "selected" : ""}>confirmadas ✓ (todas)</option>
         <option value="humano" ${f.situacao === "humano" ? "selected" : ""}>confirmadas por pessoas</option>
@@ -1024,7 +1335,7 @@ function renderCodificacao() {
       <label><input type="checkbox" id="c-com" ${f.comentarios ? "checked" : ""}> só comentadas</label>
       <select id="c-ord"><option value="conf" ${f.ordem === "conf" ? "selected" : ""}>ordenar: menor confiança</option><option value="n" ${f.ordem === "n" ? "selected" : ""}>ordenar: mais frequentes</option><option value="cat" ${f.ordem === "cat" ? "selected" : ""}>ordenar: categoria</option></select>
       <span class="small">${vis.length} de ${todas.length} respostas${todas.length !== P.itens.length ? ` (filtradas de ${P.itens.length})` : ""}</span>
-      ${!locked && pendVis ? `<button class="btn sm" id="c-ok-todas" title="Confirma as respostas 'a conferir' mostradas nesta página">✓ Confirmar as ${pendVis} mostradas</button>` : ""}
+      ${!locked && pendVis ? `<button class="btn sm" id="c-ok-todas" title="Confirma as respostas 'a conferir/reconferir' mostradas nesta página">✓ Confirmar as ${pendVis} mostradas</button>` : ""}
     </div>
     ${chipsCat}
     ${painelDiscordancias}
@@ -1062,7 +1373,10 @@ function bindCodificacao() {
   $("#c-cat-limpar")?.addEventListener("click", () => mudaFiltro("cat", ""));
   $("#c-mais")?.addEventListener("click", () => { state.mostrar += POR_PAGINA; state.congelar = true; rerender(); });
   $("#c-ok-todas")?.addEventListener("click", async () => {
-    const rids = [...document.querySelectorAll("#tab-cod tbody tr")].map((tr) => +tr.dataset.rid).filter((rid) => state.P.itens.find((i) => i.rid === rid)?.revisao === "pendente");
+    const rids = [...document.querySelectorAll("#tab-cod tbody tr")].map((tr) => +tr.dataset.rid).filter((rid) => {
+      const sit = state.P.itens.find((i) => i.rid === rid)?.revisao;
+      return sit === "pendente" || sit === "alterada";
+    });
     const r = await post(`/api/pergunta/${P.qid}/validar`, { rids, valor: true }, "Confirmando…");
     toast(`${r.alterados} resposta(s) confirmada(s)`); refresh(r);
   });
@@ -1116,7 +1430,7 @@ function bindCodificacao() {
       else if (e.key === "ArrowUp" || keyLow === "k") { e.preventDefault(); proximaLinha(tr, -1)?.focus(); }
       else if (e.key === "Enter" && r.primaria != null) {
         e.preventDefault();
-        if (r.revisao === "pendente") salvar({ validado: true }, "Confirmada ✓", true);
+        if (r.revisao === "pendente" || r.revisao === "alterada") salvar({ validado: true }, "Confirmada ✓", true);
         else proximaLinha(tr, 1)?.focus();
       } else if (keyLow === "c" && !com.disabled) { e.preventDefault(); com.focus(); }
       else if (keyLow === "s" && temSugestao(r)) { e.preventDefault(); aceitarSugestao(); }

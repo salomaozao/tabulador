@@ -42,10 +42,11 @@ class GravacaoSuspeita(RuntimeError):
 
 
 def conferido_por_humano(item: dict) -> bool:
-    """Correção ou confirmação feita por uma pessoa (não conta aceite automático nem regra)."""
+    """Correção ou confirmação feita por uma pessoa (não conta aceite automático nem regra).
+    Respostas marcadas com o status 'alterada' continuam protegidas contra perda silenciosa."""
     if item.get("primaria") is None or item.get("origem") == "erro":
         return False
-    return item.get("origem") == "humano" or (bool(item.get("validado")) and item.get("validado_por") != "auto")
+    return item.get("origem") == "humano" or (bool(item.get("validado")) and item.get("validado_por") != "auto") or bool(item.get("alterada"))
 
 
 def _humanos(cod: dict | None) -> set:

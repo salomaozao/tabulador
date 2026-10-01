@@ -462,7 +462,7 @@ RESPOSTAS (frequência x texto){nota}:
     _registrar(f, "refinar_ia", pedido=feedback, remapeados={str(k): v for k, v in remap.items()})
     f["status"] = _status_apos_edicao(qid)
     _gravar(qid, "frame.json", f)
-    _remapear_codificacao(qid, remap)
+    _remapear_codificacao(qid, remap, motivo="Quadro ajustado com IA")
     return f
 
 
@@ -480,7 +480,7 @@ def desfazer_refino(qid: str) -> dict:
     cod = _ler(qid, "codificacao.json")
     if cod:
         orfaos = {i.get(k) for i in cod["itens"] for k in ("primaria", "secundaria")} - validos - {None}
-        _remapear_codificacao(qid, {o: CODIGO_OUTROS for o in orfaos})
+        _remapear_codificacao(qid, {o: CODIGO_OUTROS for o in orfaos}, motivo="Refino desfeito (categoria removida)")
     return anterior
 
 
@@ -548,20 +548,75 @@ def _registrar(f: dict, acao: str, **kw) -> None:
         f["status"] = _status_apos_edicao(f["pergunta"]) if f.get("pergunta") else "rascunho"
 
 
+def marcar_respostas_alteradas(qid: str, codigos: int | list[int] | set[int] | None = None,
+                               motivo: str = "Categoria alterada", rids: list[int] | None = None) -> int:
+    """Marca respostas já conferidas/revisadas que pertencem às categorias indicadas (ou RIDs específicos)
+    com o status 'alterada', exigindo reconferência pelo pesquisador após mudança conceitual ou estrutural.
+    
+    Eventos que disparam este status:
+      - Mudança na definição da categoria (ressalva, proposta de IA, ajuste manual)
+      - Mesclagem de categorias (fundir: respostas remapeadas)
+      - Exclusão de categoria (remover: respostas movidas para Outros)
+      - Refino estrutural de categorias com IA (quebra/reorganização)
+      
+    Futuros eventos mapeáveis (ex.: alteração de nome da categoria, mudança de instruções globais)
+    podem acionar esta mesma função passando os códigos ou RIDs afetados.
+    """
+    cod = _ler(qid, "codificacao.json")
+    if not cod or not cod.get("itens"):
+        return 0
+    alvo_rids = {int(r) for r in rids} if rids is not None else None
+    alvo_cats = None
+    if codigos is not None:
+        if isinstance(codigos, (int, str)):
+            alvo_cats = {int(codigos)}
+        else:
+            alvo_cats = {int(c) for c in codigos}
+    
+    agora = datetime.now().isoformat(timespec="seconds")
+    modificados = 0
+    for r in cod["itens"]:
+        tocar = False
+        if alvo_rids is not None and r.get("rid") in alvo_rids:
+            tocar = True
+        elif alvo_cats is not None and (r.get("primaria") in alvo_cats or r.get("secundaria") in alvo_cats):
+            tocar = True
+        
+        if tocar and (r.get("validado") or r.get("origem") == "humano"):
+            r["alterada"] = True
+            r["alterada_em"] = agora
+            r["alterada_motivo"] = motivo
+            modificados += 1
+            
+    if modificados:
+        cod["status"] = "rascunho"
+        _gravar(qid, "codificacao.json", cod)
+    return modificados
+
+
 def renomear(qid: str, ref, novo_nome: str, nova_definicao: str | None = None, por: str | None = None) -> dict:
-    """Muda nome e/ou definição. O histórico guarda o antes e o depois dos dois."""
+    """Muda nome e/ou definição. O histórico guarda o antes e o depois dos dois.
+    Se a definição mudar, respostas já conferidas nessa categoria ganham status 'alterada'
+    para reconferência pelo pesquisador. (Mudança no nome pode ser incluída futuramente)."""
     f = _exigir_frame(qid)
     c = _cat(f, ref)
     antigo, def_antiga = c["nome"], c.get("definicao", "")
     c["nome"] = novo_nome.strip()
-    if nova_definicao:
+    if nova_definicao is not None:
         c["definicao"] = nova_definicao.strip()
     if (c["nome"], c["definicao"]) == (antigo, def_antiga):
         return f
-    extra = {"definicao_de": def_antiga, "definicao_para": c["definicao"]} if c["definicao"] != def_antiga else {}
+    def_mudou = (c["definicao"] != def_antiga)
+    nome_mudou = (c["nome"] != antigo)
+    extra = {"definicao_de": def_antiga, "definicao_para": c["definicao"]} if def_mudou else {}
     _marcar_edicao(c, por)
-    _registrar(f, "renomear" if c["nome"] != antigo else "definir", codigo=c["codigo"], de=antigo, para=c["nome"], por=por, **extra)
+    _registrar(f, "renomear" if nome_mudou else "definir", codigo=c["codigo"], de=antigo, para=c["nome"], por=por, **extra)
     _gravar(qid, "frame.json", f)
+    if def_mudou:
+        marcar_respostas_alteradas(qid, c["codigo"], f"Definição da categoria '{c['nome']}' alterada")
+    # Futuramente: se mudança de nome também exigir reconferência:
+    # if nome_mudou:
+    #     marcar_respostas_alteradas(qid, c["codigo"], f"Nome da categoria alterado para '{c['nome']}'")
     return f
 
 
@@ -632,7 +687,7 @@ def fundir(qid: str, destino, *origens) -> dict:
         f["categorias"].remove(c)
     _registrar(f, "fundir", destino=d["codigo"], origens=list(remap))
     _gravar(qid, "frame.json", f)
-    _remapear_codificacao(qid, remap)
+    _remapear_codificacao(qid, remap, motivo=f"Categoria mesclada em '{d['nome']}'")
     return f
 
 
@@ -657,7 +712,7 @@ def remover(qid: str, ref) -> dict:
     f["categorias"].remove(c)
     _registrar(f, "remover", codigo=c["codigo"], nome=c["nome"])
     _gravar(qid, "frame.json", f)
-    _remapear_codificacao(qid, {c["codigo"]: CODIGO_OUTROS})
+    _remapear_codificacao(qid, {c["codigo"]: CODIGO_OUTROS}, motivo=f"Categoria '{c['nome']}' excluída (movida para Outros)")
     return f
 
 
@@ -671,18 +726,31 @@ def aprovar(qid: str) -> dict:
     return f
 
 
-def _remapear_codificacao(qid: str, remap: dict) -> None:
+def _remapear_codificacao(qid: str, remap: dict, motivo: str | None = None) -> None:
     if not remap:
         return
     cod = _ler(qid, "codificacao.json")
     if not cod:
         return
+    agora = datetime.now().isoformat(timespec="seconds")
+    f = _ler(qid, "frame.json")
+    nomes = {c["codigo"]: c["nome"] for c in (f or {}).get("categorias", [])} if f else {}
     for r in cod["itens"]:
+        remap_ocorreu = False
+        antigo_prim = r.get("primaria")
         for campo in ("primaria", "secundaria"):
             if r.get(campo) in remap:
                 r[campo] = remap[r[campo]]
+                remap_ocorreu = True
         if r.get("secundaria") == r.get("primaria"):
             r["secundaria"] = None
+        if remap_ocorreu and (r.get("validado") or r.get("origem") == "humano"):
+            r["alterada"] = True
+            r["alterada_em"] = agora
+            dest_nome = nomes.get(r.get("primaria"), str(r.get("primaria")))
+            r["alterada_motivo"] = motivo or f"Categoria remapeada para '{dest_nome}'"
+            if "alterada_de" not in r and antigo_prim is not None:
+                r["alterada_de"] = antigo_prim
     cod["status"] = "rascunho"
     _gravar(qid, "codificacao.json", cod)
 
