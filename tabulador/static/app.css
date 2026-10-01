@@ -125,20 +125,24 @@ select.cat{width:100%;max-width:230px}
 /* interruptor do modo teste (morava no topo, agora vive em "Configurar IA") */
 .switch{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface-2);margin:12px 0}
 .btn.on{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
-/* cabeçalho do projeto: % de perguntas revisadas + curva de progressão */
-.cab{display:grid;grid-template-columns:minmax(210px,290px) 1fr;gap:24px;align-items:center;border:1px solid var(--border);border-radius:12px;padding:16px 20px;background:var(--surface-2);margin:14px 0}
+/* cabeçalho do projeto: % de respostas revisadas + curva de progressão */
+.cab{display:grid;grid-template-columns:minmax(230px,320px) 1fr;gap:24px;align-items:center;border:1px solid var(--border);border-radius:12px;padding:16px 20px;background:var(--surface-2);margin:14px 0}
 .cab-num{display:flex;flex-direction:column}
+.pct-linha{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+.pct-destaque{flex:1;min-width:180px}
 .pct-grande{font:600 62px/1 ui-monospace,Consolas,monospace;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
 .pct-grande small{font-size:26px;color:var(--text-3)}
 .pct-lab{font-size:13px;color:var(--text-2);margin-top:2px}
+.pct-faltam{font-size:12.5px;font-weight:600;color:var(--warn);margin-top:3px}
 .pct-sec{font-size:12px;color:var(--text-3);margin-top:5px}
 .pilha{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--surface-3);margin-top:10px}
 .pilha i{display:block;height:100%}
-.pilha .rev{background:var(--ok)}.pilha .cls{background:var(--accent-2)}.pilha .nada{background:var(--surface-3)}
+.pilha .rev{background:var(--ok)}.pilha .rev-hum{background:var(--ok)}.pilha .rev-auto{background:var(--ok);opacity:0.72}
+.pilha .cls{background:var(--accent-2)}.pilha .nada{background:var(--surface-3)}
 .legenda{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-3);margin-top:7px}
 .legenda span{display:flex;align-items:center;gap:6px}
 .sw{width:14px;height:3px;border-radius:2px;display:inline-block;flex:none}
-.sw.ok{background:var(--ok)}.sw.acc{background:var(--accent)}.sw.nada{background:var(--surface-3)}
+.sw.ok{background:var(--ok)}.sw.auto{background:var(--ok);opacity:0.72}.sw.acc{background:var(--accent)}.sw.total{background:var(--text-3);border-top:1px dashed var(--text-3)}.sw.nada{background:var(--surface-3)}
 .grafico{border-left:1px solid var(--border);padding-left:20px;min-width:0}
 .grafico svg{display:block;max-width:100%}
 @media(max-width:860px){.cab{grid-template-columns:1fr}.grafico{border-left:0;padding-left:0}}
@@ -149,8 +153,8 @@ select.cat{width:100%;max-width:230px}
 .contador .lab{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-top:2px}
 .contador .bar{width:80px;height:4px;border-radius:3px;background:var(--surface-3);margin:5px 0 0 auto;overflow:hidden}
 .contador .bar i{display:block;height:100%;background:var(--ok)}
-/* cabeçalho da pergunta, preso no topo enquanto a tabela de revisão rola */
-.q-cab{position:sticky;top:var(--topo,49px);z-index:4;display:flex;align-items:flex-start;gap:16px;padding:10px 0 12px;margin:-10px 0 12px;background:var(--surface);border-bottom:1px solid var(--border)}
+/* cabeçalho da pergunta (estático no topo para liberar a rolagem com revbar-sticky) */
+.q-cab{display:flex;align-items:flex-start;gap:16px;padding:10px 0 12px;margin:0 0 12px;background:var(--surface);border-bottom:1px solid var(--border)}
 .q-cab-txt{flex:1;min-width:0}
 .q-cab h1{margin-bottom:2px}
 .sticky-num{flex:none;text-align:right;font-family:ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px 12px}
@@ -168,8 +172,16 @@ select.cat{width:100%;max-width:230px}
 .kv{display:flex;justify-content:space-between;font-size:12px;color:var(--text-2)}
 .prog{height:6px;background:var(--surface-3);border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;background:var(--accent)}.prog.hum i{background:var(--ok)}
 table.res td{vertical-align:middle}table.res td.acoes{text-align:right;white-space:nowrap}
+table.res th{position:sticky;top:calc(var(--topo,49px) + var(--revbar-h,66px));z-index:2}
 .passo{border:1px solid var(--border);border-radius:10px;padding:12px;margin:8px 0;display:flex;flex-direction:column;gap:8px}
+/* barra fixa de revisão (PEND-15): resumo da revisão e aprovação rápida sempre à mão ao rolar */
+.revbar-sticky{position:sticky;top:var(--topo,49px);z-index:4;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,0.06);margin:8px 0 12px;padding:10px 14px}
 .revbar{display:flex;flex-direction:column;gap:6px}
+.revbar-linha1{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.revbar-status{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1}
+.revbar-acoes{flex:none;display:flex;align-items:center;gap:8px}
+.revbar-linha2{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:4px}
+.revbar-linha2 .prog.pilha{flex:1;max-width:280px;height:7px;margin-top:0}
 /* barra da revisão: conferidas + classificadas a conferir, sobre o total de respostas */
 .prog.pilha{display:flex;height:8px}.prog.pilha i{flex:none}.prog.pilha i.conf{background:var(--ok)}.prog.pilha i.ia{background:var(--accent-2)}
 .legenda{margin-left:10px;color:var(--text-3);white-space:nowrap}.legenda i{display:inline-block;width:9px;height:9px;border-radius:2px;margin:0 3px 0 8px;vertical-align:-1px;background:var(--surface-3)}

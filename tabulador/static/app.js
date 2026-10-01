@@ -177,35 +177,43 @@ function irPara(qid) { location.hash = qid || "painel"; }
 
 // ---------------------------------------------------------------- painel geral
 // ---- cabeçalho do projeto: % de perguntas revisadas + a curva de progressão (src/historico.py)
-// O % grande responde "quanto já andou"; o gráfico responde "como chegou aqui". As duas séries são
-// % de PERGUNTAS (denominador fixo), então a linha não desce quando entra entrevista nova.
-function graficoProgresso(serie) {
+// ---- cabeçalho do projeto: % de respostas revisadas + a curva de progressão (src/historico.py)
+// Destaque primário em RESPOSTAS ÚNICAS (unidade do trabalho), com quebra de humanos e automáticas.
+// O gráfico plota a contagem absoluta de conferidas e o total em degrau (não cai quando entra base nova).
+function graficoProgresso(serie, totalUnicas) {
   const dias = (serie || []).map((p) => p.dia);
   if (dias.length < 2) return "";
-  const pct = (p, k) => 100 * Math.max(0, Math.min(1, p[k] || 0));
-  const L = 46, R = 548, T = 16, B = 186;
+  const maxResp = totalUnicas || Math.max(...serie.map((p) => Math.max(p.respostas_total || 0, p.respostas_revisadas || 0)), 1);
+  const L = 52, R = 548, T = 16, B = 186;
   const x = (i) => L + (R - L) * (i / (dias.length - 1));
-  const y = (v) => B - (B - T) * (v / 100);
-  const linha = (k) => serie.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(pct(p, k)).toFixed(1)}`).join(" ");
-  const pontos = (k, cor, campo) => serie.map((p, i) =>
-    `<circle cx="${x(i).toFixed(1)}" cy="${y(pct(p, k)).toFixed(1)}" r="3" fill="${cor}"><title>${diaBR(p.dia)}: ${p[campo]} de ${serie.length} · ${Math.round(pct(p, k))}% das perguntas</title></circle>`).join("");
-  const grade = [0, 25, 50, 75, 100].map((v) => `<line x1="${L}" y1="${y(v).toFixed(1)}" x2="${R}" y2="${y(v).toFixed(1)}"${v ? ' stroke-dasharray="3 4"' : ""}/>`).join("");
-  const rotulosY = [100, 75, 50, 25, 0].map((v) => `<text x="6" y="${(y(v) + 4).toFixed(1)}">${v}%</text>`).join("");
-  const passo = dias.length > 8 ? 2 : 1;  // muitos dias: um rótulo a cada dois, para não embolar
+  const y = (v) => B - (B - T) * (Math.max(0, Math.min(maxResp, v)) / maxResp);
+  const linhaResp = serie.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.respostas_revisadas ?? 0).toFixed(1)}`).join(" ");
+  const linhaTot = serie.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.respostas_total || maxResp).toFixed(1)}`).join(" ");
+  const pontos = serie.map((p, i) => {
+    const rev = p.respostas_revisadas ?? 0, tot = p.respostas_total || maxResp;
+    const pRev = tot ? Math.round((100 * rev) / tot) : 0;
+    return `<circle cx="${x(i).toFixed(1)}" cy="${y(rev).toFixed(1)}" r="3.5" fill="var(--ok)">
+      <title>${diaBR(p.dia)}: ${fmtN(rev)} de ${fmtN(tot)} respostas únicas conferidas (${pRev}%)</title>
+    </circle>`;
+  }).join("");
+  const ticks = [1.0, 0.75, 0.5, 0.25, 0];
+  const grade = ticks.map((f) => `<line x1="${L}" y1="${y(f * maxResp).toFixed(1)}" x2="${R}" y2="${y(f * maxResp).toFixed(1)}"${f && f < 1 ? ' stroke-dasharray="3 4"' : ""}/>`).join("");
+  const rotulosY = ticks.map((f) => `<text x="4" y="${(y(f * maxResp) + 4).toFixed(1)}">${f === 0 ? "0" : fmtN(Math.round(f * maxResp))}</text>`).join("");
+  const passo = dias.length > 8 ? 2 : 1;  // muitos dias: um rótulo a cada dois
   const rotulosX = dias.map((d, i) => (i % passo === 0 || i === dias.length - 1) ? `<text x="${(x(i) - 16).toFixed(1)}" y="${B + 22}">${diaBR(d)}</text>` : "").join("");
   return `<div class="grafico">
     <svg viewBox="0 0 560 214" width="100%" height="196" role="img"
-         aria-label="Progressão: percentual de perguntas classificadas e revisadas, dia a dia">
+         aria-label="Progressão: volume de respostas únicas conferidas em relação ao total">
       <g stroke="var(--border)">${grade}</g>
       <g font-size="10.5" fill="var(--text-3)" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">${rotulosY}${rotulosX}</g>
-      <polyline fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round" d="${linha("pct_classificadas")}"/>
-      <polyline fill="none" stroke="var(--ok)" stroke-width="2.4" stroke-linejoin="round" d="${linha("pct_revisadas")}"/>
-      ${pontos("pct_classificadas", "var(--accent)", "n_classificadas")}${pontos("pct_revisadas", "var(--ok)", "n_revisadas")}
+      <polyline fill="none" stroke="var(--text-3)" stroke-width="1.8" stroke-dasharray="4 4" stroke-linejoin="round" d="${linhaTot}"/>
+      <polyline fill="none" stroke="var(--ok)" stroke-width="2.6" stroke-linejoin="round" d="${linhaResp}"/>
+      ${pontos}
     </svg>
     <div class="legenda">
-      <span><i class="sw acc"></i>perguntas classificadas</span>
-      <span><i class="sw ok"></i>perguntas revisadas</span>
-      <span class="small">em % das perguntas do projeto — o denominador é fixo, então a curva não desce quando entra entrevista nova</span>
+      <span><i class="sw ok"></i>respostas conferidas</span>
+      <span><i class="sw total"></i>total de respostas únicas</span>
+      <span class="small">contagem absoluta de respostas únicas — a linha sobe a cada revisão; entrada de dados cria degrau no total</span>
     </div>
   </div>`;
 }
@@ -213,29 +221,42 @@ function diaBR(iso) { return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`; }
 function cabecalhoProjeto(S) {
   const H = S.historico;
   if (!H || !H.total) return "";
-  // O número grande é de RESPOSTAS (pedido da reunião de 30/09): uma pergunta de 21 respostas concluída
-  // não diz nada perto de uma de 4.500. Perguntas concluídas viram leitura secundária.
   const R = H.respostas || {}, tot = R.unicas || 0;
   const nRev = R.revisadas || 0, nCls = R.classificadas || 0;
+  const nAuto = R.revisadas_auto || 0;
+  const nHum = R.revisadas_humano ?? Math.max(0, nRev - nAuto);
   const nAConf = Math.max(0, nCls - nRev), nSem = Math.max(0, tot - nCls);
+  const faltam = R.faltam ?? Math.max(0, tot - nRev);
   const pctRev = tot ? Math.floor((100 * nRev) / tot) : 0;
   const parte = (n) => `${tot ? (100 * n) / tot : 0}%`;
   return `<div class="cab">
     <div class="cab-num">
-      <div class="pct-grande">${pctRev}<small>%</small></div>
-      <div class="pct-lab"><b>${tot && nRev >= tot ? "todas as respostas conferidas" : "das respostas conferidas"}</b></div>
-      <div class="pct-sec"><b>${fmtN(nRev)}</b> de ${fmtN(tot)} respostas únicas conferidas por pessoas${nSem ? ` · faltam classificar <b>${fmtN(nSem)}</b>` : ""}
-        <br>${H.n_revisadas} de ${H.total} pergunta${H.total === 1 ? "" : "s"} com a revisão concluída</div>
-      <div class="pilha" title="${fmtN(nRev)} conferidas · ${fmtN(nAConf)} classificadas a conferir · ${fmtN(nSem)} ainda não classificadas">
-        <i class="rev" style="width:${parte(nRev)}"></i><i class="cls" style="width:${parte(nAConf)}"></i><i class="nada" style="width:${parte(nSem)}"></i>
+      <div class="pct-linha">
+        <div class="pct-grande">${pctRev}<small>%</small></div>
+        <div class="pct-destaque">
+          <div class="pct-lab"><b>${fmtN(nRev)}</b> de <b>${fmtN(tot)}</b> respostas únicas conferidas</div>
+          <div class="pct-faltam">${faltam ? `faltam <b>${fmtN(faltam)}</b> respostas para concluir o projeto` : "todas as respostas conferidas!"}</div>
+        </div>
+      </div>
+      <div class="pct-sec">
+        <b>${fmtN(nHum)}</b> confirmadas por pessoas${nAuto ? ` · <b>⚡ ${fmtN(nAuto)}</b> automáticas` : ""}
+        ${nAConf ? ` · <b>${fmtN(nAConf)}</b> classificadas a conferir` : ""}${nSem ? ` · <b>${fmtN(nSem)}</b> a classificar` : ""}
+        <div class="small muted" style="margin-top:4px">${H.n_revisadas} de ${H.total} pergunta${H.total === 1 ? "" : "s"} com a revisão concluída</div>
+      </div>
+      <div class="pilha" title="${fmtN(nHum)} por pessoas · ${fmtN(nAuto)} automáticas · ${fmtN(nAConf)} a conferir · ${fmtN(nSem)} ainda não classificadas">
+        <i class="rev-hum" style="width:${parte(nHum)}"></i>
+        <i class="rev-auto" style="width:${parte(nAuto)}"></i>
+        <i class="cls" style="width:${parte(nAConf)}"></i>
+        <i class="nada" style="width:${parte(nSem)}"></i>
       </div>
       <div class="legenda">
-        <span><i class="sw ok"></i>conferidas ${fmtN(nRev)}</span>
+        <span><i class="sw ok"></i>pessoas ${fmtN(nHum)}</span>
+        ${nAuto ? `<span><i class="sw auto"></i>automáticas ${fmtN(nAuto)}</span>` : ""}
         <span><i class="sw acc"></i>a conferir ${fmtN(nAConf)}</span>
-        <span><i class="sw nada"></i>sem classificação ${fmtN(nSem)}</span>
+        <span><i class="sw nada"></i>a classificar ${fmtN(nSem)}</span>
       </div>
     </div>
-    ${graficoProgresso(H.serie)}
+    ${graficoProgresso(H.serie, tot)}
   </div>`;
 }
 function renderPainel() {
@@ -447,6 +468,7 @@ function render() {
         <div class="muted">${esc(R.enunciado || "")}</div>
         <div class="small">Quem respondeu: ${esc(R.base_descricao || "")}</div>
         <div id="presenca-banner"></div>
+        ${C ? `<div style="margin-top:6px"><a class="btn sm ghost" href="#area-revisao" id="link-ir-revisao">↓ ir para a revisão</a></div>` : ""}
       </div>
       ${totRev ? `<div class="sticky-num" title="${fmtN(nRev)} de ${fmtN(totRev)} respostas conferidas por pessoas">
         <div class="n">${fmtN(nRev)}<i> / ${fmtN(totRev)}</i></div>
@@ -487,7 +509,7 @@ function render() {
     </h2>
     ${F ? renderFrame() : `<div class="info">A IA lê as respostas e propõe uma lista fechada de categorias com definição e exemplos. Você pode renomear, mesclar, excluir, acrescentar ou pedir ajustes à IA antes de aprovar.</div>`}
 
-    <h2>Classificação das respostas
+    <h2 id="area-revisao">Classificação das respostas
       ${C ? `<span class="pill ${codOk ? "ok" : "warn"}">${codOk ? "aprovada" : "rascunho"}</span>` : ""}
       <span class="acoes">
         ${codOk ? `<button class="btn" id="b-reabrir">Reabrir para correções</button>` : ""}
@@ -499,6 +521,10 @@ function render() {
     ${frameOk && !codOk ? renderAcoesCod() : ""}
     ${C ? renderCodificacao() : ""}
   `;
+  $("#link-ir-revisao")?.addEventListener("click", (e) => {
+    e.preventDefault();
+    $("#area-revisao")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   $("#instr").onblur = async (e) => { if (e.target.value !== P.instrucoes) { await post(`/api/pergunta/${P.qid}/instrucoes`, { texto: e.target.value }); P.instrucoes = e.target.value; toast("Instruções salvas"); } };
   $("#b-induzir")?.addEventListener("click", async () => {
     if (F && !confirm("Gerar do zero substitui as categorias atuais" + (C ? " e a classificação terá de ser refeita" : "") + ". Para ajustes pontuais, use 'Pedir ajuste à IA'. Continuar?")) return;
@@ -603,23 +629,31 @@ function bindFrame() {
 // ---------------------------------------------------------------- ações de classificação (amostra / restantes / aprovar)
 function renderRevbar() {
   // distribuição de status das respostas (conferidas por pessoa, automáticas, corrigidas...).
-  // Mostrado sempre que existe codificação, mesmo depois de aprovada — antes sumia junto com o
-  // resto de renderAcoesCod() assim que a pergunta era aprovada, escondendo justamente o resumo que
-  // faz mais sentido olhar depois de concluído.
+  // Mostrado sempre que existe codificação, mesmo depois de aprovada — agora com barra sticky no topo (PEND-15).
   const P = state.P, V = P.revisao;
   if (!V) return "";
   const acerto = V.acerto_ia == null ? null : Math.round(100 * V.acerto_ia);
   const nPendentes = V.n_codificadas - V.n_revisadas;
+  const nPessoas = V.n_confirmadas - (V.n_confirmadas_auto || 0);
   return `
-    <div class="passo">
+    <div class="passo revbar-sticky" id="revbar-passo">
       <div class="revbar">
-        <div><b>Revisão:</b> ${V.n_revisadas} de ${V.n_codificadas} classificadas conferidas (${pct(V.n_revisadas, V.n_codificadas)}) · <span class="pill ok">✓ ${V.n_confirmadas - (V.n_confirmadas_auto || 0)} confirmadas por pessoas</span>${V.n_confirmadas_auto ? ` <span class="pill ok auto" title="Confirmadas sozinhas: confiança alta e o auditor (outra IA) concordou">⚡ ${V.n_confirmadas_auto} automáticas</span>` : ""} <span class="pill human">✎ ${V.n_corrigidas} corrigidas</span>
-        ${acerto != null ? ` · <b>a IA acertou ${acerto}%</b> <small>(de ${V.n_avaliadas_ia} conferidas)</small>` : ""}
-        ${nPendentes ? ` · <button type="button" class="pill warn linkbtn" id="b-so-pendentes" title="Filtra a tabela abaixo só pelas ${nPendentes} que ainda faltam conferir">👁 ver as ${nPendentes} a conferir</button>` : ""}</div>
-        <div class="small"><b>Classificadas:</b> ${V.n_codificadas} de ${V.n_unicas} respostas (${pct(V.n_codificadas, V.n_unicas)})${V.n_faltantes ? ` · faltam ${V.n_faltantes}` : ""}
-          <span class="legenda"><i class="conf"></i>conferidas <i class="ia"></i>classificadas, a conferir <i></i>ainda não classificadas</span></div>
-        <div class="prog pilha" title="${V.n_revisadas} conferidas · ${V.n_codificadas - V.n_revisadas} classificadas a conferir · ${V.n_faltantes} ainda não classificadas">
-          <i class="conf" style="width:${V.n_unicas ? (100 * V.n_revisadas) / V.n_unicas : 0}%"></i><i class="ia" style="width:${V.n_unicas ? (100 * (V.n_codificadas - V.n_revisadas)) / V.n_unicas : 0}%"></i></div>
+        <div class="revbar-linha1">
+          <div class="revbar-status">
+            <b>Revisão:</b> <b>${fmtN(V.n_revisadas)}</b> de ${fmtN(V.n_codificadas)} conferidas (${pct(V.n_revisadas, V.n_codificadas)}) · <span class="pill ok">✓ ${fmtN(nPessoas)} manual</span>${V.n_confirmadas_auto ? ` <span class="pill ok auto" title="Confirmadas sozinhas: confiança alta e auditor concordou">⚡ ${fmtN(V.n_confirmadas_auto)} auto</span>` : ""} <span class="pill human">✎ ${fmtN(V.n_corrigidas)} corrigidas</span>
+            ${acerto != null ? ` · <b>IA: ${acerto}%</b> <small>(${V.n_avaliadas_ia} avaliadas)</small>` : ""}
+            ${nPendentes ? ` · <button type="button" class="pill warn linkbtn" id="b-so-pendentes" title="Filtra a tabela abaixo só pelas ${nPendentes} que ainda faltam conferir">👁 ver as ${fmtN(nPendentes)} a conferir</button>` : ""}
+          </div>
+          <div class="revbar-acoes">
+            ${renderAprovarBtn()}
+          </div>
+        </div>
+        <div class="revbar-linha2 small">
+          <span><b>Classificadas:</b> ${fmtN(V.n_codificadas)} de ${fmtN(V.n_unicas)} respostas (${pct(V.n_codificadas, V.n_unicas)})${V.n_faltantes ? ` · faltam <b>${fmtN(V.n_faltantes)}</b>` : ""}</span>
+          <div class="prog pilha" title="${V.n_revisadas} conferidas · ${nPendentes} a conferir · ${V.n_faltantes} ainda não classificadas">
+            <i class="conf" style="width:${V.n_unicas ? (100 * V.n_revisadas) / V.n_unicas : 0}%"></i><i class="ia" style="width:${V.n_unicas ? (100 * nPendentes) / V.n_unicas : 0}%"></i>
+          </div>
+        </div>
       </div>
     </div>`;
 }
@@ -641,7 +675,6 @@ function renderAcoesCod() {
         <button class="btn primary" id="b-recod-com" ${P.n_comentarios_pendentes ? "" : "disabled"}>✨ Reclassificar comentadas (${P.n_comentarios_pendentes})</button>
         <button class="btn" id="b-recod-tudo" title="Refaz com a IA tudo que você ainda não conferiu">↻ Reclassificar tudo</button>
         ${V.n_faltantes ? `<span class="sep"></span><span class="tam-grupo"><button class="btn" id="b-mais">+ Classificar mais</button>${tam}<span class="small">respostas</span></span><button class="btn primary" id="b-restantes">Classificar as restantes (${V.n_faltantes})</button>` : ""}
-        <span class="sep"></span>${renderAprovarBtn()}
       </div>
       <div class="tools supervisao">
         <b>Supervisão:</b>
@@ -845,11 +878,13 @@ function abrirAuditoria() {
       <p class="small">As discordâncias aparecem na tabela com <b>🔎 auditor sugere…</b>. Filtre por <b>auditor discordou</b> e use o botão ou a tecla <kbd>S</kbd> para aceitar a sugestão.</p>`);
   };
 }
-// botão de aprovar fica junto de "Classificar as restantes" (acima da tabela), não no fim de uma
-// tabela de milhares de linhas — pedido da reunião de 30/09
+// botão de aprovar fica na revbar-sticky (PEND-15), sempre à mão e visível ao rolar a tabela
 function renderAprovarBtn() {
   const P = state.P, C = P.codificacao, V = P.revisao;
   if (!C) return "";
+  if (C.status === "aprovado") {
+    return `<span class="pill ok" style="font-weight:600;padding:5px 10px" title="A classificação desta pergunta já foi aprovada e gravada nos resultados">✓ Aprovada nos resultados</span>`;
+  }
   return `<button class="btn ok" id="b-aprovar-cod" ${V.n_faltantes ? `disabled title="Classifique as restantes antes de aprovar"` : ""}>✓ Aprovar e gravar nos resultados</button>`;
 }
 function bindAprovarBar() {

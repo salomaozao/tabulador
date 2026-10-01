@@ -81,6 +81,8 @@ def estado_perguntas(perguntas: list[dict] | None = None) -> list[dict]:
         qid = s["qid"]
         n_cod = s.get("n_codificadas") or 0
         n_rev = s.get("n_revisadas") or 0
+        n_auto = s.get("n_confirmadas_auto") or 0
+        n_humano = max(0, n_rev - n_auto)
         classificada = n_cod > 0 and not (s.get("n_faltantes") or 0)
         revisada = classificada and n_rev >= n_cod
         linhas.append({
@@ -89,6 +91,8 @@ def estado_perguntas(perguntas: list[dict] | None = None) -> list[dict]:
             "n_unicas": s.get("n_unicas") or 0,
             "n_codificadas": n_cod,
             "n_revisadas": n_rev,
+            "n_confirmadas_auto": n_auto,
+            "n_revisadas_humano": n_humano,
             "pct_revisadas": (n_rev / n_cod) if n_cod else 0.0,
             "classificada": classificada,
             "revisada": revisada,
@@ -102,9 +106,10 @@ def estado_perguntas(perguntas: list[dict] | None = None) -> list[dict]:
 def serie(estados: list[dict], total: int | None = None, hoje: str | None = None) -> list[dict]:
     """Pontos cumulativos, um por dia com movimento (mais o dia de hoje, para a linha terminar no
     presente). Pergunta sem carimbo (revisão importada de Excel antigo, por exemplo) conta a partir
-    de hoje, em vez de sumir da conta."""
+    de hoje, em vez de sumir da conta. Inclui contagem absoluta de respostas conferidas e total."""
     total = len(estados) if total is None else total
     hoje = hoje or date.today().isoformat()
+    tot_unicas = sum(e.get("n_unicas", 0) for e in estados)
 
     def dia_de(e: dict, campo: str) -> str:
         return e[campo] or hoje  # sem carimbo: conta a partir de hoje
@@ -119,11 +124,17 @@ def serie(estados: list[dict], total: int | None = None, hoje: str | None = None
     for d in dias:
         nc = sum(1 for e in estados if e["classificada"] and dia_de(e, "dia_classificada") <= d)
         nr = sum(1 for e in estados if e["revisada"] and dia_de(e, "dia_revisada") <= d)
+        if d == hoje:
+            resp_rev = sum(e.get("n_revisadas", 0) for e in estados)
+        else:
+            resp_rev = sum(e.get("n_revisadas", 0) for e in estados if e["revisada"] and dia_de(e, "dia_revisada") <= d)
         pontos.append({
             "dia": d,
             "n_classificadas": nc, "n_revisadas": nr,
             "pct_classificadas": (nc / total) if total else 0.0,
             "pct_revisadas": (nr / total) if total else 0.0,
+            "respostas_revisadas": resp_rev,
+            "respostas_total": tot_unicas,
         })
     return pontos
 
@@ -134,6 +145,12 @@ def resumo(perguntas: list[dict] | None = None) -> dict:
     total = len(estados)
     n_rev = sum(1 for e in estados if e["revisada"])
     n_cls = sum(1 for e in estados if e["classificada"])
+    tot_unicas = sum(e["n_unicas"] for e in estados)
+    tot_cod = sum(e["n_codificadas"] for e in estados)
+    tot_revisadas = sum(e["n_revisadas"] for e in estados)
+    tot_auto = sum(e.get("n_confirmadas_auto", 0) for e in estados)
+    tot_hum = sum(e.get("n_revisadas_humano", 0) for e in estados)
+    faltam = max(0, tot_unicas - tot_revisadas)
     return {
         "total": total,
         "n_revisadas": n_rev,
@@ -143,9 +160,12 @@ def resumo(perguntas: list[dict] | None = None) -> dict:
         "pct_revisadas": (n_rev / total) if total else 0.0,
         "pct_classificadas": (n_cls / total) if total else 0.0,
         "respostas": {
-            "unicas": sum(e["n_unicas"] for e in estados),
-            "classificadas": sum(e["n_codificadas"] for e in estados),
-            "revisadas": sum(e["n_revisadas"] for e in estados),
+            "unicas": tot_unicas,
+            "classificadas": tot_cod,
+            "revisadas": tot_revisadas,
+            "revisadas_humano": tot_hum,
+            "revisadas_auto": tot_auto,
+            "faltam": faltam,
         },
         "serie": serie(estados, total),
         "perguntas": estados,

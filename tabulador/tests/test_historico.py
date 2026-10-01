@@ -68,7 +68,10 @@ class TestSerieCronologica(unittest.TestCase):
         self.assertEqual(r["total"], 3)
         self.assertEqual((r["n_classificadas"], r["n_revisadas"], r["n_andamento"], r["n_a_iniciar"]), (2, 1, 1, 1))
         self.assertAlmostEqual(r["pct_revisadas"], 1 / 3)
-        self.assertEqual(r["respostas"], {"unicas": 60, "classificadas": 30, "revisadas": 15})
+        self.assertEqual(r["respostas"]["unicas"], 60)
+        self.assertEqual(r["respostas"]["classificadas"], 30)
+        self.assertEqual(r["respostas"]["revisadas"], 15)
+        self.assertEqual(r["respostas"]["faltam"], 45)
 
         serie = r["serie"]
         # um ponto por dia com movimento + o dia de hoje no fim (a curva termina no presente)
@@ -77,12 +80,17 @@ class TestSerieCronologica(unittest.TestCase):
         self.assertEqual((serie[0]["n_classificadas"], serie[0]["n_revisadas"]), (2, 0))
         self.assertEqual((serie[-1]["n_classificadas"], serie[-1]["n_revisadas"]), (2, 1))
         self.assertAlmostEqual(serie[-1]["pct_classificadas"], 2 / 3)
+        # série também traz a contagem absoluta de respostas e o total
+        self.assertEqual(serie[0]["respostas_revisadas"], 0)
+        self.assertEqual(serie[-1]["respostas_total"], 60)
+        self.assertEqual(serie[-1]["respostas_revisadas"], 15)
         # denominador = perguntas do projeto, nunca as respostas classificadas
         self.assertNotAlmostEqual(serie[-1]["pct_revisadas"], 15 / 30)
         # nunca anda para trás
         for antes, depois in zip(serie, serie[1:]):
             self.assertGreaterEqual(depois["n_revisadas"], antes["n_revisadas"])
             self.assertGreaterEqual(depois["n_classificadas"], antes["n_classificadas"])
+            self.assertGreaterEqual(depois["respostas_revisadas"], antes["respostas_revisadas"])
 
     def test_classificacao_parcial_nao_entra_na_curva(self):
         perguntas = [_pergunta("Q1", 10, 4, 4)]  # amostra classificada, base inteira pendente
