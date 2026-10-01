@@ -24,6 +24,7 @@ from datetime import datetime
 
 import codeframe as CF
 import config
+import protecao
 import variables as V
 
 # palavras que não distinguem categoria nenhuma (genéricas do português; nada de domínio de projeto)
@@ -45,11 +46,7 @@ def _limiar(nome: str):
         return getattr(config, nome)
 
 
-def conferido_por_humano(item: dict) -> bool:
-    """Correção ou confirmação feita por uma pessoa (não conta aceite automático nem regra)."""
-    if item.get("primaria") is None or item.get("origem") == "erro":
-        return False
-    return item.get("origem") == "humano" or (bool(item.get("validado")) and item.get("validado_por") != "auto")
+conferido_por_humano = protecao.conferido_por_humano  # a mesma regra que a guarda contra perda usa
 
 
 def keywords_ativas(c: dict) -> list[str]:

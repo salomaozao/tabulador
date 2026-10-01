@@ -222,6 +222,7 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
     somente_faltantes : mantém tudo que já foi classificado e envia à IA só o que falta
     """
     _aprender_antes(qid)
+    CF.snapshot_antes(qid, "classificar")
     frame = CF.frame(qid)
     if not frame or frame.get("status") != "aprovado":
         raise RuntimeError(f"{qid}: frame não aprovado. Rode: python run.py frame {qid} aprovar")
@@ -280,6 +281,7 @@ def recodificar(qid: str, rids: list[int] | None = None, apenas_comentados: bool
     nao_revisados=True: todas as já classificadas que o pesquisador ainda não corrigiu/confirmou
     (o 'Reclassificar tudo' da interface; não classifica as que estão fora da amostra)."""
     _aprender_antes(qid)
+    CF.snapshot_antes(qid, "reclassificar")
     frame = CF.frame(qid)
     if not frame or frame.get("status") != "aprovado":
         raise RuntimeError(f"{qid}: frame não aprovado")
@@ -377,7 +379,7 @@ def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", c
             for c in ("validado", "validado_em", "validado_por"):
                 item.pop(c, None)
     cod["status"] = "rascunho"
-    CF._gravar(qid, "codificacao.json", cod)
+    CF._gravar(qid, "codificacao.json", cod, permitir_reducao=validado is False)  # desmarcar o ✓ é decisão da pessoa
     return item
 
 
@@ -413,7 +415,7 @@ def validar(qid: str, rids: list[int], valor: bool = True, por: str | None = Non
             n += 1
     if n:
         cod["status"] = "rascunho"
-        CF._gravar(qid, "codificacao.json", cod)
+        CF._gravar(qid, "codificacao.json", cod, permitir_reducao=not valor)  # desfazer ✓ reduz o conferido de propósito
     return n
 
 

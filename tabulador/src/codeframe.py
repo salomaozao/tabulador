@@ -21,6 +21,7 @@ import llm
 import load
 import nuvem
 import progresso
+import protecao
 import variables as V
 
 CODIGO_OUTROS = 97
@@ -56,11 +57,43 @@ def _ler(qid: str, nome: str) -> dict | None:
     return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
 
 
-def _gravar(qid: str, nome: str, dados: dict) -> None:
+def _gravar(qid: str, nome: str, dados: dict, permitir_reducao: bool = False) -> None:
+    """ÚNICA porta de gravação. Para codificacao.json/frame.json: recusa o que apagaria trabalho
+    conferido (protecao.verificar; `permitir_reducao=True` só nas ações que reduzem de propósito)
+    e guarda a versão anterior (protecao.salvar_versao) antes de sobrescrever."""
+    if nome in protecao.ARQUIVOS:
+        atual = _ler(qid, nome)
+        if nome == "codificacao.json":
+            protecao.verificar(qid, atual, dados, permitir_reducao)
+        protecao.salvar_versao(qid, nome, atual, "revisão")
     if nuvem.ativa():
         nuvem.gravar(config.PROJETO, qid, nome, dados)
         return
     (pasta(qid) / nome).write_text(json.dumps(dados, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def snapshot_antes(qid: str, motivo: str) -> None:
+    """Guarda as versões atuais da codificação e do frame antes de uma operação em massa
+    (classificar, reclassificar, auditar, auto-aceitar, mesclar, aprovar...)."""
+    for nome in protecao.ARQUIVOS:
+        protecao.salvar_versao(qid, nome, _ler(qid, nome), motivo, forcar=True)
+
+
+def versoes(qid: str) -> dict:
+    return {nome: protecao.versoes(qid, nome) for nome in protecao.ARQUIVOS}
+
+
+def restaurar_versao(qid: str, arquivo: str, gravado_em: str) -> dict:
+    """Volta `arquivo` para uma versão guardada. A versão de hoje também vira snapshot, então a
+    restauração em si pode ser desfeita."""
+    if arquivo not in protecao.ARQUIVOS:
+        raise ValueError(f"só dá para restaurar {', '.join(protecao.ARQUIVOS)}")
+    dados = protecao.ler_versao(qid, arquivo, gravado_em)
+    if dados is None:
+        raise ValueError(f"{qid}: não há versão de {arquivo} em {gravado_em}")
+    protecao.salvar_versao(qid, arquivo, _ler(qid, arquivo), "antes de restaurar", forcar=True)
+    _gravar(qid, arquivo, dados, permitir_reducao=True)
+    return protecao.resumo(dados)
 
 
 def _existe(qid: str, nome: str) -> bool:
@@ -69,10 +102,16 @@ def _existe(qid: str, nome: str) -> bool:
     return (pasta(qid) / nome).exists()
 
 
-def _remover(qid: str, nome: str) -> bool:
+def _remover(qid: str, nome: str, permitir_reducao: bool = False) -> bool:
     """Apaga de verdade (True se havia algo para apagar) — sem lixeira, nem localmente. Para telas
     que precisam de lixeira (recuperar depois), ver `app.py` `_apagar_pergunta`, que só chama isto
-    do lado da nuvem e move o arquivo à mão do lado local."""
+    do lado da nuvem e move o arquivo à mão do lado local. Codificação com trabalho conferido só
+    é apagada com `permitir_reducao=True`; e antes de apagar guarda uma versão para restaurar."""
+    if nome in protecao.ARQUIVOS:
+        atual = _ler(qid, nome)
+        if nome == "codificacao.json":
+            protecao.verificar(qid, atual, {"itens": []}, permitir_reducao)
+        protecao.salvar_versao(qid, nome, atual, "antes de apagar", forcar=True)
     if nuvem.ativa():
         return nuvem.remover(config.PROJETO, qid, nome)
     p = pasta(qid) / nome
@@ -574,6 +613,7 @@ def editar_keywords(qid: str, ref, adicionar=(), remover=(), fixar=(), por: str 
 
 
 def fundir(qid: str, destino, *origens) -> dict:
+    snapshot_antes(qid, "mesclar categorias")
     """Funde as categorias `origens` em `destino` (exemplos são somados; códigos das origens somem).
     Se já houver codificação, os códigos fundidos são remapeados em codificacao.json."""
     f = _exigir_frame(qid)
@@ -622,6 +662,7 @@ def remover(qid: str, ref) -> dict:
 
 
 def aprovar(qid: str) -> dict:
+    snapshot_antes(qid, "aprovar quadro")
     f = _exigir_frame(qid)
     f["status"] = "aprovado"
     f["aprovado_em"] = datetime.now().isoformat(timespec="seconds")

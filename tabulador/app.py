@@ -41,6 +41,7 @@ import load
 import nuvem
 import perfil
 import progresso
+import protecao
 import projetos
 import report
 import resumo_geral
@@ -477,7 +478,7 @@ def _apagar_pergunta(qid: str, o_que: str, destino: Path) -> list[str]:
     movidos = []
     for nome in nomes:
         if nuvem.ativa() and nome.endswith(".json"):
-            if CF._remover(qid, nome):
+            if CF._remover(qid, nome, permitir_reducao=True):  # ação explícita de apagar; guarda versão antes
                 movidos.append(nome)
             continue
         p = CF.pasta(qid) / nome
@@ -1010,6 +1011,29 @@ def api_aprovar(qid):
         return _erro(e)
 
 
+@app.get("/api/pergunta/<qid>/versoes")
+def api_versoes(qid):
+    """Versões guardadas da codificação e do frame (PEND-24): de onde 'Restaurar versão' escolhe."""
+    try:
+        return jsonify(CF.versoes(qid))
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/pergunta/<qid>/restaurar")
+def api_restaurar(qid):
+    """{arquivo, gravado_em}: volta a uma versão guardada (a de hoje vira versão, então dá para desfazer)."""
+    try:
+        d = request.get_json() or {}
+        with _lock:
+            r = CF.restaurar_versao(qid, d["arquivo"], d["gravado_em"])
+        out = _payload_pergunta(qid)
+        out["restaurado"] = r
+        return jsonify(out)
+    except Exception as e:
+        return _erro(e)
+
+
 @app.post("/api/pergunta/<qid>/reabrir")
 def api_reabrir(qid):
     """Volta uma codificação aprovada para rascunho (para continuar corrigindo)."""
@@ -1108,6 +1132,7 @@ if __name__ == "__main__":
             input("\nPressione Enter para fechar...")
             sys.exit(1)
     config.garantir_pastas()
+    protecao.backup_se_preciso()  # cópia diária do projeto inteiro (PEND-24); nunca impede abrir o app
     import logging
     logging.getLogger("werkzeug").setLevel(logging.ERROR)  # sem log técnico na janela do usuário
     threading.Timer(1.2, lambda: webbrowser.open(f"{url}/?projeto={config.PROJETO}")).start()

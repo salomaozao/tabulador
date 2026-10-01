@@ -39,6 +39,7 @@ def auto_aceitar(qid: str, limiar: float = LIMIAR_PADRAO, exigir_auditoria: bool
     """Confirma sozinho o que tem confiança >= limiar (e auditoria concordando, se exigido).
     Se categoria for informada, restringe a essa categoria.
     Nunca mexe no que uma pessoa já conferiu/corrigiu. Retorna a contagem por motivo."""
+    CF.snapshot_antes(qid, "aceite automático")
     cod = CD.codificacao(qid)
     if not cod:
         raise RuntimeError(f"{qid}: ainda não há classificação")
@@ -73,6 +74,7 @@ def desfazer_auto(qid: str) -> int:
     cod = CD.codificacao(qid)
     if not cod:
         return 0
+    CF.snapshot_antes(qid, "desfazer aceite automático")
     k = 0
     for i in cod["itens"]:
         if i.get("validado_por") == AUTO:
@@ -81,7 +83,7 @@ def desfazer_auto(qid: str) -> int:
             k += 1
     if k:
         cod["status"] = "rascunho"
-        CF._gravar(qid, "codificacao.json", cod)
+        CF._gravar(qid, "codificacao.json", cod, permitir_reducao=True)  # o aceite automático não é conferência humana
     return k
 
 
@@ -139,6 +141,7 @@ CLASSIFICAÇÕES A CONFERIR
 def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, escopo: str = "pendentes") -> dict:
     """Pede a outra IA (provedor/modelo escolhidos na tela) que confira a classificação.
     escopo: 'pendentes' = ainda não conferidas e não auditadas; 'todas' = todas as não conferidas."""
+    CF.snapshot_antes(qid, "auditar")
     frame = CF._exigir_frame(qid)
     cod = CD.codificacao(qid)
     if not cod:

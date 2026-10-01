@@ -57,6 +57,22 @@ CREATE TABLE IF NOT EXISTS presenca_projeto (
 )
 """
 
+# Versões anteriores de codificacao.json/frame.json (PEND-24): só se acrescenta (a poda de retenção é
+# feita por protecao.py). É o que permite voltar atrás depois de uma gravação ruim.
+_CRIAR_TABELA_HISTORICO = """
+CREATE TABLE IF NOT EXISTS blobs_historico (
+    projeto TEXT NOT NULL,
+    qid TEXT NOT NULL,
+    arquivo TEXT NOT NULL,
+    dados TEXT NOT NULL,
+    gravado_em TEXT NOT NULL,
+    por TEXT,
+    motivo TEXT,
+    resumo TEXT,
+    PRIMARY KEY (projeto, qid, arquivo, gravado_em)
+)
+"""
+
 JANELA_PRESENCA_S = 30  # o navegador manda um heartbeat a cada 12s: folga para perder 1 batida
 
 _lock = threading.Lock()
@@ -123,6 +139,7 @@ def _obter_cliente():
             _cliente.execute(_CRIAR_TABELA)
             _cliente.execute(_CRIAR_TABELA_PRESENCA)
             _cliente.execute(_CRIAR_TABELA_PRESENCA_PROJETO)
+            _cliente.execute(_CRIAR_TABELA_HISTORICO)
             _tabela_pronta = True
     return _cliente
 
@@ -170,6 +187,41 @@ def gravar(projeto: str, qid: str, arquivo: str, dados: dict) -> None:
         [projeto, qid, arquivo, json.dumps(dados, ensure_ascii=False), agora],
     )
     _cache_set((projeto, qid, arquivo), dados)
+
+def gravar_historico(projeto: str, qid: str, arquivo: str, dados: dict, gravado_em: str, motivo: str,
+                     resumo: dict, por: str | None = None) -> None:
+    _obter_cliente().execute(
+        "INSERT INTO blobs_historico (projeto, qid, arquivo, dados, gravado_em, por, motivo, resumo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [projeto, qid, arquivo, json.dumps(dados, ensure_ascii=False), gravado_em, por, motivo, json.dumps(resumo)],
+    )
+
+
+def listar_historico(projeto: str, qid: str, arquivo: str) -> list[dict]:
+    """Versões guardadas, da mais nova para a mais velha (sem baixar os dados de cada uma)."""
+    rs = _obter_cliente().execute(
+        "SELECT gravado_em, motivo, resumo FROM blobs_historico WHERE projeto = ? AND qid = ? AND arquivo = ? ORDER BY gravado_em DESC",
+        [projeto, qid, arquivo],
+    )
+    return [{"gravado_em": q, "motivo": m or "", **json.loads(r or "{}")} for q, m, r in rs.rows]
+
+
+def ler_historico(projeto: str, qid: str, arquivo: str, gravado_em: str) -> dict | None:
+    rs = _obter_cliente().execute(
+        "SELECT dados FROM blobs_historico WHERE projeto = ? AND qid = ? AND arquivo = ? AND gravado_em = ?",
+        [projeto, qid, arquivo, gravado_em],
+    )
+    return json.loads(rs.rows[0][0]) if rs.rows else None
+
+
+def apagar_historico(projeto: str, qid: str, arquivo: str, gravados_em: list[str]) -> int:
+    n = 0
+    for q in gravados_em:
+        n += _obter_cliente().execute(
+            "DELETE FROM blobs_historico WHERE projeto = ? AND qid = ? AND arquivo = ? AND gravado_em = ?",
+            [projeto, qid, arquivo, q],
+        ).rows_affected
+    return n
+
 
 # ----------------------------------------------------------------------------- manutenção (linha de comando)
 def fechar() -> None:
