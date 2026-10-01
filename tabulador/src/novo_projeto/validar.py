@@ -1,4 +1,4 @@
-"""Validação de um projeto (projeto.json ou projeto.py, formato "plano") contra a planilha real.
+﻿"""Validação de um projeto (projeto.json ou projeto.py, formato "plano") contra a planilha real.
 
 Roda a leitura do pipeline de verdade (load.executar) numa pasta temporária e compara com a planilha
 lida pela mesma limpeza. ERROS bloqueiam o registro do projeto; AVISOS pedem só ciência.
@@ -125,6 +125,39 @@ def _estrutura(mod, erros: list, avisos: list) -> None:
         erros.append(f"SAIDA_PLANILHA.colunas tem {q}, que não está marcada para categorizar.")
 
 
+def _grupos(mod, erros: list, avisos: list) -> None:
+    """Valida a declaração GRUPOS (grupos de categorias compartilhadas)."""
+    grupos = getattr(mod, "GRUPOS", None) or {}
+    if not grupos:
+        return
+    perguntas = getattr(mod, "PERGUNTAS", []) or []
+    ids_codificaveis = {p["id"] for p in perguntas if p.get("codificar") and p.get("tipo") == "aberta"}
+    ids_todos = {p["id"] for p in perguntas}
+    membros_vistos: dict[str, str] = {}  # qid -> nome_grupo
+    for nome, cfg in grupos.items():
+        mems = cfg.get("perguntas") or []
+        if len(mems) < 2:
+            erros.append(f"GRUPOS['{nome}']: grupo precisa de pelo menos 2 perguntas (tem {len(mems)}).")
+        for qid in mems:
+            if qid not in ids_todos:
+                erros.append(f"GRUPOS['{nome}']: pergunta {qid!r} não existe em PERGUNTAS.")
+            elif qid not in ids_codificaveis:
+                erros.append(f"GRUPOS['{nome}']: {qid} precisa ter tipo 'aberta' e codificar=true.")
+            if qid in membros_vistos:
+                erros.append(
+                    f"GRUPOS: {qid!r} está declarada em '{membros_vistos[qid]}' e '{nome}' — "
+                    f"uma pergunta pode pertencer a no máximo um grupo."
+                )
+            membros_vistos[qid] = nome
+        if cfg.get("instrucoes_frame"):
+            for qid in mems:
+                spec = next((p for p in perguntas if p.get("id") == qid), {})
+                if spec.get("instrucoes_frame"):
+                    avisos.append(
+                        f"GRUPOS['{nome}']: {qid} tem instrucoes_frame própria E instrucoes_frame no grupo — "
+                        f"a do grupo prevalece; considere remover a da pergunta."
+                    )
+
 def _conferencia(mod, erros: list) -> None:
     c = getattr(mod, "CONFERENCIA", None) or {}
     faltam = [k for k in ("responsavel", "data", "origem_pedido") if not str(c.get(k, "")).strip()]
@@ -199,7 +232,8 @@ def validar(pasta, exigir_conferencia: bool = True) -> dict:
         return {**res, "valido": False}
     _estrutura(mod, erros, avisos)
     if exigir_conferencia:
-        _conferencia(mod, erros)
+        _grupos(mod, erros, avisos)
+    _conferencia(mod, erros)
     fonte = Path(getattr(mod, "FONTE_XLSX", ""))
     if not fonte.exists():
         erros.append(f"Planilha-fonte não encontrada: {fonte}")

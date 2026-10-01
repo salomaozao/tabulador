@@ -28,6 +28,7 @@ _PADROES = {
     "BANNERS_PADRAO": [],
     "SAIDA_PLANILHA": None,
     "PLANO": {},
+    "GRUPOS": {},
 }
 
 _ativo: ModuleType | None = None

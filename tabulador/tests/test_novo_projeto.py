@@ -1,4 +1,4 @@
-"""Criação de projetos novos: projeto.json, rascunho sem IA, validador e o gabarito do SESI.
+﻿"""Criação de projetos novos: projeto.json, rascunho sem IA, validador e o gabarito do SESI.
 
 Rodar:  python -m unittest discover -s tests -v
 Tudo em pastas temporárias; projetos.json real não é alterado.
@@ -181,7 +181,7 @@ class TestGabaritoSESI(unittest.TestCase):
     def test_abertas_pedidas_pela_cor(self):
         # as 7 com _CAT amarelo; a Q30 (sem destaque) fica de fora — é a pendência PEND-02
         marcadas = {p["id"] for p in self.proj["PERGUNTAS"] if p.get("codificar")}
-        self.assertEqual(marcadas, {"Q2", "Q4", "Q5", "Q29", "Q32", "Q33", "Q35"})
+        self.assertEqual(marcadas, {"Q2", "Q4", "Q5", "Q29", "Q30", "Q32", "Q33", "Q35"})
 
     def test_filtros_das_abertas(self):
         import pandas as pd

@@ -1,4 +1,4 @@
-"""Projeto SESI — Pesquisa de satisfação das Escolas SESI Minas (pais e responsáveis).
+﻿"""Projeto SESI — Pesquisa de satisfação das Escolas SESI Minas (pais e responsáveis).
 
 Definição do projeto para o Tabulador (código em ../tabulador). Para abrir a
 interface já neste projeto, dê dois cliques em "Abrir Tabulador.bat" nesta pasta.
@@ -148,6 +148,21 @@ PERGUNTAS: list[dict] = [
 ]
 
 # --------------------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------------------
+# Grupos de perguntas com categorias compartilhadas
+# --------------------------------------------------------------------------------------
+GRUPOS = {
+    "motivo_troca": {
+        "rotulo": "Motivo para trocar de escola",
+        "perguntas": ["Q32", "Q33"],
+        "instrucoes_frame": (
+            "Categorias de MOTIVO PARA TROCAR DE ESCOLA (insatisfações com a escola e também motivos "
+            "externos, ex.: mudança de cidade, conclusão do ciclo/formatura, custo/mensalidade, "
+            "distância). Respostas que só remetem a respostas anteriores formam categoria própria."
+        ),
+    },
+}
 # Variáveis derivadas (banners dos cruzamentos)
 # --------------------------------------------------------------------------------------
 DERIVADAS = {

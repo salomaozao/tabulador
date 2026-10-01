@@ -1,4 +1,4 @@
-"""Fase 1 - Code frame por pergunta.
+﻿"""Fase 1 - Code frame por pergunta.
 
 1. `preparar(qid)`  : extrai as respostas da base (com filtro de base), deduplica, marca NS/NR
                       -> output/perguntas/<QID>/respostas.json
@@ -136,6 +136,11 @@ def salvar_instrucoes(qid: str, texto: str) -> None:
 
 
 def instrucoes_completas(qid: str) -> str:
+    import grupos_frame
+    nome_grupo, cfg_grupo = grupos_frame.grupo_de(qid)
+    if nome_grupo:
+        partes = [t for t in (cfg_grupo.get("instrucoes_frame", ""), instrucoes(qid)) if t]
+        return "\n".join(partes)
     spec = V.por_id(qid)
     partes = [t for t in (spec.get("instrucoes_frame", ""), instrucoes(qid)) if t]
     return "\n".join(partes)
@@ -315,6 +320,10 @@ def _resumo_pedido(dados: dict, texto: str) -> str:
 
 def induzir(qid: str, min_cat: int = 6, max_cat: int = 15, forcar: bool = False) -> dict:
     """Gera frame_proposto.json e frame.json (rascunho). Se frame.json já estiver aprovado, exige forcar."""
+    import grupos_frame
+    nome, _ = grupos_frame.grupo_de(qid)
+    if nome:
+        return grupos_frame.induzir(nome, min_cat=min_cat, max_cat=max_cat, forcar=forcar)
     atual = _ler(qid, "frame.json")
     if atual and atual.get("status") == "aprovado" and not forcar:
         raise RuntimeError(f"{qid}: frame já aprovado. Use --forcar para reinduzir (o frame aprovado será substituído).")
@@ -382,6 +391,12 @@ def refinar(qid: str, feedback: str) -> dict:
     """Loop de feedback do frame: a IA recebe o frame atual + o pedido do pesquisador
     ("junte X e Y", "separe Z", "falta categoria para W") e devolve o frame revisado.
     Categorias que continuam mantêm o código; fundidas/removidas são remapeadas na codificação."""
+    import grupos_frame
+    nome, _ = grupos_frame.grupo_de(qid)
+    if nome:
+        raise NotImplementedError(
+            f"{qid} pertence ao grupo '{nome}': use refinar diretamente no grupo (em breve)."
+        )
     feedback = (feedback or "").strip()
     if not feedback:
         raise ValueError("Escreva o que deve mudar nas categorias.")
@@ -504,6 +519,10 @@ def frame_fixo(qid: str) -> dict:
 
 
 def frame(qid: str) -> dict | None:
+    import grupos_frame
+    nome, _ = grupos_frame.grupo_de(qid)
+    if nome:
+        return grupos_frame.frame(nome)
     f = _ler(qid, "frame.json")
     # antes, qualquer edição depois de classificar voltava o frame para rascunho e travava a
     # classificação; frames que já foram aprovados e têm classificação voltam a valer
@@ -598,6 +617,12 @@ def renomear(qid: str, ref, novo_nome: str, nova_definicao: str | None = None, p
     """Muda nome e/ou definição. O histórico guarda o antes e o depois dos dois.
     Se a definição mudar, respostas já conferidas nessa categoria ganham status 'alterada'
     para reconferência pelo pesquisador. (Mudança no nome pode ser incluída futuramente)."""
+    import grupos_frame
+    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    if nome_grupo:
+        raise NotImplementedError(
+            f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
+        )
     f = _exigir_frame(qid)
     c = _cat(f, ref)
     antigo, def_antiga = c["nome"], c.get("definicao", "")
@@ -668,6 +693,12 @@ def editar_keywords(qid: str, ref, adicionar=(), remover=(), fixar=(), por: str 
 
 
 def fundir(qid: str, destino, *origens) -> dict:
+    import grupos_frame
+    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    if nome_grupo:
+        raise NotImplementedError(
+            f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
+        )
     snapshot_antes(qid, "mesclar categorias")
     """Funde as categorias `origens` em `destino` (exemplos são somados; códigos das origens somem).
     Se já houver codificação, os códigos fundidos são remapeados em codificacao.json."""
@@ -692,6 +723,12 @@ def fundir(qid: str, destino, *origens) -> dict:
 
 
 def adicionar(qid: str, nome: str, definicao: str = "", por: str | None = None) -> dict:
+    import grupos_frame
+    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    if nome_grupo:
+        raise NotImplementedError(
+            f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
+        )
     f = _exigir_frame(qid)
     usados = [c["codigo"] for c in f["categorias"] if not c.get("fixa")]
     codigo = (max(usados) + 1) if usados else 1
@@ -705,6 +742,12 @@ def adicionar(qid: str, nome: str, definicao: str = "", por: str | None = None) 
 
 def remover(qid: str, ref) -> dict:
     """Remove a categoria; respostas já codificadas nela caem em 'Outros'."""
+    import grupos_frame
+    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    if nome_grupo:
+        raise NotImplementedError(
+            f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
+        )
     f = _exigir_frame(qid)
     c = _cat(f, ref)
     if c.get("fixa"):
@@ -717,6 +760,10 @@ def remover(qid: str, ref) -> dict:
 
 
 def aprovar(qid: str) -> dict:
+    import grupos_frame
+    nome, _ = grupos_frame.grupo_de(qid)
+    if nome:
+        return grupos_frame.aprovar(nome)
     snapshot_antes(qid, "aprovar quadro")
     f = _exigir_frame(qid)
     f["status"] = "aprovado"
@@ -756,8 +803,13 @@ def _remapear_codificacao(qid: str, remap: dict, motivo: str | None = None) -> N
 
 
 def texto_frame(qid: str) -> str:
+    import grupos_frame
+    nome_grupo, _ = grupos_frame.grupo_de(qid)
     f = _exigir_frame(qid)
-    linhas = [f"{qid} - frame [{f['status']}] {f.get('enunciado') or ''}"]
+    if nome_grupo:
+        linhas = [f"{qid} [grupo:{nome_grupo}] - frame [{f['status']}] {grupos_frame.rotulo(nome_grupo)}"]
+    else:
+        linhas = [f"{qid} - frame [{f['status']}] {f.get('enunciado') or ''}"]
     for c in f["categorias"]:
         ex = "; ".join(c.get("exemplos") or [])
         kws = ", ".join((c.get("keywords") or []) + [f"{k}*" for k in c.get("keywords_auto") or []])  # * = aprendida

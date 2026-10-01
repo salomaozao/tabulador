@@ -1,4 +1,4 @@
-# Formato do `projeto.json`
+﻿# Formato do `projeto.json`
 
 O `projeto.json` define um projeto no formato "plano": uma linha de cabeçalho e uma coluna por pergunta. Ele tem o mesmo conteúdo de um `projeto.py`, mas sem código, e fica na pasta do projeto. Quando existe `projeto.py` na mesma pasta, o `projeto.py` tem prioridade.
 
@@ -52,6 +52,29 @@ Todas as perguntas aceitam `base`, que é o nome do filtro de quem a recebeu. Se
 
 Cada filtro usa `entre` (faixa numérica, com as pontas incluídas) ou `em` (lista de valores exatos). O campo `ou_respondeu` mantém na base quem respondeu a pergunta mesmo estando fora da regra. **Use-o sempre nas abertas.** O tabulador apaga da base tudo o que fica fora do filtro, e o validador trata como erro qualquer resposta aberta que seria perdida assim.
 
+
+### Grupos de categorias (GRUPOS)
+
+Perguntas semanticamente análogas (ex.: "Por que provavelmente vai trocar" e "Por que certamente vai trocar")
+podem compartilhar um único frame de categorias. Declare-as num grupo:
+
+```python
+GRUPOS = {
+    "motivo_troca": {
+        "rotulo": "Motivo para trocar de escola",
+        "perguntas": ["Q32", "Q33"],
+        "instrucoes_frame": "Categorias de MOTIVO PARA TROCAR DE ESCOLA...",
+    }
+}
+```
+
+- otulo: nome legível do grupo (aparece na interface).
+- perguntas: lista de QIDs membros (mínimo 2; todos devem ter codificar: true).
+- instrucoes_frame: instrução única para a IA — substitui o instrucoes_frame individual de cada membro.
+- Uma pergunta pode pertencer a **no máximo um grupo**.
+
+O frame é induzido uma vez com as respostas unificadas de todas as perguntas do grupo.
+Cada pergunta continua sendo codificada com sua própria base (filtro normal).
 ## O que o validador confere
 
 **Erros** (impedem o registro do projeto):
@@ -65,6 +88,9 @@ Cada filtro usa `entre` (faixa numérica, com as pontas incluídas) ou `em` (lis
 - uma coluna com dado pessoal foi declarada como pergunta;
 - uma derivada ou um banner está inconsistente;
 - a conferência do pedido está ausente ou diferente das perguntas marcadas.
+- um grupo tem menos de 2 perguntas;
+- uma pergunta está declarada em dois grupos distintos;
+- uma pergunta de grupo não tem codificar: true.
 
 **Avisos** (pedem apenas ciência):
 

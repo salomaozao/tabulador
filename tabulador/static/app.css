@@ -1,4 +1,4 @@
-:root{color-scheme:light;--surface:#fcfcfb;--surface-2:#f1f0ee;--surface-3:#e6e4df;--border:#dedcd7;--text:#0b0b0b;--text-2:#52514e;--text-3:#7d7b76;
+﻿:root{color-scheme:light;--surface:#fcfcfb;--surface-2:#f1f0ee;--surface-3:#e6e4df;--border:#dedcd7;--text:#0b0b0b;--text-2:#52514e;--text-3:#7d7b76;
 --accent:#2a78d6;--accent-2:#9ec5f4;--ok:#1b7f4d;--ok-bg:#e3f5ea;--warn:#8a5300;--warn-bg:#fff4e0;--danger:#b00020;--human:#4a3aa7;--human-bg:#ebe8fb}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){color-scheme:dark;--surface:#1a1a19;--surface-2:#242423;--surface-3:#2f2f2d;--border:#3a3937;--text:#fff;--text-2:#c3c2b7;--text-3:#8f8e87;
 --accent:#3987e5;--accent-2:#1c5cab;--ok:#5fcf8f;--ok-bg:#163a26;--warn:#f2c46d;--warn-bg:#3a2a08;--danger:#ff7b8a;--human:#b3a9f5;--human-bg:#2a2450}}
@@ -425,3 +425,105 @@ table.perfil th{font-weight:500;color:var(--text-3)}
 .sq-saudaveis summary{cursor:pointer;font-weight:600;font-size:13px;color:var(--ok)}
 .sq-saudaveis-lista{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 
+/* ---- Grupos de categorias ---- */
+.grupo-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: #555;
+  background: #f0f4ff;
+  border: 1px solid #c5d0f5;
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-bottom: 4px;
+  cursor: default;
+}
+
+.grupo-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f5f8ff;
+  border: 1px solid #c5d0f5;
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin-bottom: 14px;
+  font-size: 0.88rem;
+}
+
+.grupo-banner-info { flex: 1; }
+.grupo-banner-membros { color: #555; margin-top: 2px; font-size: 0.82rem; }
+.grupo-membro-atual { font-weight: 700; color: #2a4cc7; }
+
+.grupo-pendente-badge {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.78rem;
+  color: #856404;
+}
+
+.grupo-btn-editar {
+  background: none;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  padding: 3px 9px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: #444;
+}
+.grupo-btn-editar:hover { background: #eee; }
+
+.grupo-editor {
+  background: #f9faff;
+  border: 1px solid #c5d0f5;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 14px;
+  font-size: 0.88rem;
+}
+
+.grupo-pendente {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 0.88rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* dark mode: adapta o banner e os badges ao esquema de cores */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme=light]) .grupo-badge {
+    background: #1c2340;
+    border-color: #3a4a80;
+    color: #b0bde8;
+  }
+  :root:not([data-theme=light]) .grupo-banner {
+    background: #1a2038;
+    border-color: #3a4a80;
+  }
+  :root:not([data-theme=light]) .grupo-banner-membros { color: #9aabb5; }
+  :root:not([data-theme=light]) .grupo-membro-atual { color: #7ba7f5; }
+  :root:not([data-theme=light]) .grupo-pendente-badge {
+    background: #3a2a08;
+    border-color: #8a5300;
+    color: #f2c46d;
+  }
+  :root:not([data-theme=light]) .grupo-btn-editar { color: #ccc; border-color: #555; }
+  :root:not([data-theme=light]) .grupo-btn-editar:hover { background: #2a2a2a; }
+  :root:not([data-theme=light]) .grupo-editor {
+    background: #16192a;
+    border-color: #3a4a80;
+  }
+  :root:not([data-theme=light]) .grupo-pendente {
+    background: #3a2a08;
+    border-color: #8a5300;
+  }
+}
+
+/* card de pergunta: garante que o badge de grupo não seja cortado por altura fixa */
+.card { height: auto; min-height: 0; }

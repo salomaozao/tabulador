@@ -48,6 +48,7 @@ import resumo_geral
 import supervisao as SUP
 import usage
 import variables as V
+import grupos_frame
 
 app = Flask(__name__, static_folder=str(_DIR / "static"), template_folder=str(_DIR / "templates"))
 _lock = threading.Lock()  # uma operação de escrita por vez (arquivos JSON)
@@ -1081,6 +1082,69 @@ def _versao_codigo() -> str:
 VERSAO = _versao_codigo()
 
 
+
+# ----------------------------------------------------------------------------- helper grupos
+def _info_grupo(qid: str) -> dict | None:
+    """Retorna metadados do grupo ao qual qid pertence, ou None."""
+    nome, cfg = grupos_frame.grupo_de(qid)
+    if not nome:
+        return None
+    pends = grupos_frame.pendentes()
+    return {
+        "nome": nome,
+        "rotulo": cfg.get("rotulo", nome),
+        "membros": cfg.get("perguntas", []),
+        "pendente": pends.get(nome),
+    }
+
+
+# ----------------------------------------------------------------------------- API: grupos
+@app.post("/api/grupo/<qid>")
+def api_grupo_editar(qid):
+    """{rotulo?, membros?} — salva alteração de grupo como pendente (não aplica ainda)."""
+    try:
+        V.por_id(qid)
+        d = request.get_json() or {}
+        nome, _ = grupos_frame.grupo_de(qid)
+        if not nome:
+            raise ValueError(f"{qid} não pertence a nenhum grupo declarado no projeto.")
+        with _lock:
+            grupos_frame.salvar_pendente(nome, {
+                "rotulo": d.get("rotulo", grupos_frame.rotulo(nome)),
+                "membros": d.get("membros", grupos_frame.membros(nome)),
+            })
+        return jsonify({"ok": True, "grupo": _info_grupo(qid)})
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/grupo/<qid>/confirmar")
+def api_grupo_confirmar(qid):
+    """Confirma alteração pendente e reinduz o frame do grupo."""
+    try:
+        V.por_id(qid)
+        nome, _ = grupos_frame.grupo_de(qid)
+        if not nome:
+            raise ValueError(f"{qid} não pertence a nenhum grupo.")
+        with _lock:
+            frame = grupos_frame.confirmar_pendente(nome)
+        return jsonify({"ok": True, "frame": frame})
+    except Exception as e:
+        return _erro(e)
+
+
+@app.delete("/api/grupo/<qid>/pendente")
+def api_grupo_descartar(qid):
+    """Descarta alteração pendente de grupo sem aplicar."""
+    try:
+        V.por_id(qid)
+        nome, _ = grupos_frame.grupo_de(qid)
+        if not nome:
+            raise ValueError(f"{qid} não pertence a nenhum grupo.")
+        grupos_frame.descartar_pendente(nome)
+        return jsonify({"ok": True})
+    except Exception as e:
+        return _erro(e)
 @app.get("/api/versao")
 def api_versao():
     return jsonify({"versao": VERSAO, "pid": os.getpid()})
@@ -1160,3 +1224,5 @@ if __name__ == "__main__":
     print(f"Tabulador ({config.NOME_PROJETO}) em {url}")
     print("Deixe esta janela aberta enquanto usa o programa. Para encerrar, feche-a.")
     app.run(host="127.0.0.1", port=porta, debug=False, threaded=True)
+
+

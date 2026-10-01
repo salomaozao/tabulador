@@ -275,8 +275,16 @@ function renderPainel() {
     const contador = tot ? `<div class="contador" title="${fmtN(rev)} de ${fmtN(tot)} respostas conferidas por pessoas">
         <div class="n">${fmtN(rev)}<i> / ${fmtN(tot)}</i></div><div class="lab">revisadas / total</div>
         <div class="bar"><i style="width:${pctRev}%"></i></div></div>` : "";
+    // badge de grupo: aparece logo abaixo do título do card quando a pergunta pertence a um grupo
+    const grupoBadge = s.grupo
+      ? (() => {
+          const outros = (s.grupo.membros || []).filter((m) => m !== s.qid).join(', ');
+          return `<span class="grupo-badge" title="Grupo: ${esc(s.grupo.rotulo)}">🔗 ${esc(s.grupo.rotulo)}${outros ? ` (+${esc(outros)})` : ''}</span>`;
+        })()
+      : '';
     return `<div class="card" data-qid="${esc(s.qid)}">
       <div class="card-h"><b>${esc(s.rotulo)}</b><span class="small">${esc(s.qid)}</span></div>
+      ${grupoBadge}
       ${contador}
       <div class="small">${s.respondeu ? `${s.respondeu} responderam · ${tot} respostas únicas` : "respostas ainda não lidas"}</div>
       <div>${pillStatus(s)} ${s.alertas ? `<span class="pill warn">${s.alertas} alertas</span>` : ""}</div>
@@ -491,6 +499,7 @@ function render() {
         <div class="bar"><i style="width:${pctRev}%"></i></div>
       </div>` : ""}
     </div>
+    ${renderGrupoBanner(P)}
     <div class="tiles">
       <div class="tile"><div class="l">Responderam</div><div class="v">${R.n_respondeu ?? "–"}</div></div>
       <div class="tile"><div class="l">Respostas únicas</div><div class="v">${R.n_unicas ?? "–"}</div></div>
@@ -550,7 +559,7 @@ function render() {
   $("#b-janela-cat")?.addEventListener("click", () => abrirJanelaCategorias());
   $("#b-saude-quadro")?.addEventListener("click", () => abrirJanelaSaudeQuadro());
   $("#b-reabrir")?.addEventListener("click", async () => refresh(await post(`/api/pergunta/${P.qid}/reabrir`, {}, "Reabrindo…")));
-  bindFrame(); bindAcoesCod(); bindCodificacao(); bindAprovarBar();
+  bindFrame(); bindAcoesCod(); bindCodificacao(); bindAprovarBar(); bindGrupo();
 }
 
 // ---------------------------------------------------------------- frame
@@ -1472,6 +1481,147 @@ function bindCodificacao() {
   }
 }
 
+
+// ---------------------------------------------------------------- grupos de categorias
+// Renderiza o banner que aparece no topo da página da pergunta quando ela pertence a um grupo.
+function renderGrupoBanner(dados) {
+  if (!dados.grupo) return '';
+  const { nome, rotulo, membros, pendente } = dados.grupo;
+  const lista = (membros || []).map((qid) => {
+    const ativo = qid === dados.qid ? ' class="grupo-membro-atual"' : '';
+    return `<span${ativo}>${esc(qid)}</span>`;
+  }).join(' · ');
+  const badgePendente = pendente
+    ? `<span class="grupo-pendente-badge">⚠️ alteração pendente</span>` : '';
+  return `
+    <div class="grupo-banner" data-grupo="${esc(nome)}">
+      <span class="grupo-banner-icon">🔗</span>
+      <div class="grupo-banner-info">
+        <strong>${esc(rotulo)}</strong>
+        <div class="grupo-banner-membros">${lista}</div>
+      </div>
+      ${badgePendente}
+      <button class="grupo-btn-editar" data-grupo-nome="${esc(nome)}" data-grupo-qid="${esc(dados.qid)}">
+        Editar grupo ▾
+      </button>
+    </div>`;
+}
+
+// Abre o painel de edição de grupo inline, logo após o banner.
+function abrirEdicaoGrupo(nomeGrupo, qidAtual) {
+  // fecha o editor se já estiver aberto (toggle)
+  const existente = document.querySelector('.grupo-editor');
+  if (existente) { existente.remove(); return; }
+
+  const banner = document.querySelector(`.grupo-banner[data-grupo="${nomeGrupo}"]`);
+  if (!banner) return;
+
+  const grupo = state.P?.grupo;
+  if (!grupo) return;
+
+  let membrosEditaveis = [...(grupo.membros || [])];
+
+  const buildEditor = () => {
+    const el = document.createElement('div');
+    el.className = 'grupo-editor';
+    el.innerHTML = `
+      <div style="margin-bottom:8px">
+        <label style="font-weight:600;display:block;margin-bottom:4px">Rótulo do grupo</label>
+        <input id="grupo-rotulo-input" value="${esc(grupo.rotulo)}" style="width:100%">
+      </div>
+      <div style="margin-bottom:8px">
+        <label style="font-weight:600;display:block;margin-bottom:4px">Perguntas do grupo</label>
+        <div id="grupo-membros-lista" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
+          ${membrosEditaveis.map((m) => `
+            <span class="grupo-membro-chip" style="display:inline-flex;align-items:center;gap:4px;background:var(--surface-3);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:0.82rem">
+              ${esc(m)}
+              ${m !== qidAtual ? `<button class="grupo-chip-remover" data-qid="${esc(m)}" style="border:0;background:none;cursor:pointer;font-size:14px;padding:0 2px;color:var(--text-3)" title="Remover">×</button>` : ''}
+            </span>`).join('')}
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn primary sm" id="grupo-btn-salvar">Salvar</button>
+        <button class="btn sm" id="grupo-btn-cancelar">Cancelar</button>
+      </div>
+      <div id="grupo-editor-msg" style="margin-top:8px"></div>`;
+    return el;
+  };
+
+  const editor = buildEditor();
+  banner.insertAdjacentElement('afterend', editor);
+
+  // remover membro
+  editor.querySelectorAll('.grupo-chip-remover').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      membrosEditaveis = membrosEditaveis.filter((m) => m !== btn.dataset.qid);
+      const lista = document.getElementById('grupo-membros-lista');
+      if (lista) {
+        lista.innerHTML = membrosEditaveis.map((m) => `
+          <span class="grupo-membro-chip" style="display:inline-flex;align-items:center;gap:4px;background:var(--surface-3);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:0.82rem">
+            ${esc(m)}
+            ${m !== qidAtual ? `<button class="grupo-chip-remover" data-qid="${esc(m)}" style="border:0;background:none;cursor:pointer;font-size:14px;padding:0 2px;color:var(--text-3)" title="Remover">×</button>` : ''}
+          </span>`).join('');
+        // re-bind após reconstrução
+        lista.querySelectorAll('.grupo-chip-remover').forEach((b2) => {
+          b2.addEventListener('click', () => {
+            membrosEditaveis = membrosEditaveis.filter((m) => m !== b2.dataset.qid);
+            b2.closest('.grupo-membro-chip')?.remove();
+          });
+        });
+      }
+    });
+  });
+
+  // cancelar
+  document.getElementById('grupo-btn-cancelar')?.addEventListener('click', () => editor.remove());
+
+  // salvar
+  document.getElementById('grupo-btn-salvar')?.addEventListener('click', async () => {
+    const novoRotulo = document.getElementById('grupo-rotulo-input')?.value.trim() || grupo.rotulo;
+    const msgEl = document.getElementById('grupo-editor-msg');
+    try {
+      await api(`/api/grupo/${qidAtual}`, {
+        method: 'POST',
+        body: JSON.stringify({ nome: nomeGrupo, rotulo: novoRotulo, membros: membrosEditaveis }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      editor.remove();
+      // injeta mensagem de "pendente de confirmação" após o banner
+      const pendente = document.createElement('div');
+      pendente.className = 'grupo-pendente';
+      pendente.innerHTML = `⚠️ Alteração salva — aguardando confirmação
+        <button class="btn sm ok" id="grupo-confirmar-btn">Confirmar e reinduzir frame</button>
+        <button class="btn sm" id="grupo-descartar-btn">Desfazer</button>`;
+      banner.insertAdjacentElement('afterend', pendente);
+      document.getElementById('grupo-confirmar-btn')?.addEventListener('click', () => confirmarGrupo(nomeGrupo, qidAtual));
+      document.getElementById('grupo-descartar-btn')?.addEventListener('click', () => descartarPendenteGrupo(nomeGrupo, qidAtual));
+      toast('Grupo salvo — confirme para reinduzir o frame');
+    } catch (e) {
+      if (msgEl) msgEl.innerHTML = `<span style="color:var(--danger)">Erro ao salvar: ${esc(e.message)}</span>`;
+    }
+  });
+}
+
+// Confirma a alteração pendente do grupo e recarrega a página da pergunta.
+async function confirmarGrupo(nome, qid) {
+  await api(`/api/grupo/${qid}/confirmar`, { method: 'POST' });
+  abrir(qid); // recarrega a página da pergunta
+}
+
+// Descarta a alteração pendente do grupo e recarrega a página da pergunta.
+async function descartarPendenteGrupo(nome, qid) {
+  await api(`/api/grupo/${qid}/pendente`, { method: 'DELETE' });
+  abrir(qid);
+}
+
+// Ativa os botões de edição de grupo injetados pelo renderGrupoBanner.
+function bindGrupo() {
+  document.querySelectorAll('.grupo-btn-editar').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      abrirEdicaoGrupo(btn.dataset.grupoNome, btn.dataset.grupoQid);
+    });
+  });
+}
 
 // ---------------------------------------------------------------- resultados
 const linhaArquivo = (R, tipo, titulo, desc) => {
