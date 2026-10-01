@@ -64,6 +64,13 @@ def grupo_de(qid: str) -> tuple[str, dict] | tuple[None, None]:
     return None, None
 
 
+def grupo_efetivo(qid: str) -> tuple[str, dict] | tuple[None, None]:
+    """Como grupo_de, mas só quando o grupo JÁ TEM quadro. Enquanto não tem, a pergunta segue com o
+    quadro dela: agrupar não pode esconder categorias já aprovadas nem o trabalho conferido sobre elas."""
+    nome, cfg = grupo_de(qid)
+    return (nome, cfg) if nome and frame(nome) else (None, None)
+
+
 def membros(nome_grupo: str) -> list[str]:
     """QIDs das perguntas membros do grupo."""
     return todos().get(nome_grupo, {}).get("perguntas", [])
@@ -343,7 +350,7 @@ def impacto(nome: str | None, rotulo_: str, perguntas: list[str], instrucoes: st
         elif s["frame_proprio"]:
             avisos.append({"nivel": "info", "msg": f"{q} tem um quadro próprio; ele fica guardado, mas só volta a valer se {q} sair do grupo."})
         if not f and s["frame_proprio"]:
-            avisos.append({"nivel": "alto", "msg": f"O grupo ainda não tem quadro: até gerar as categorias do grupo, {q} fica sem categorias."})
+            avisos.append({"nivel": "info", "msg": f"O grupo ainda não tem quadro: {q} continua com o quadro próprio até o quadro do grupo ser criado."})
     for q in saindo:
         s = _situacao(q)
         if s["n_cod"]:

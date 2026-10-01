@@ -74,6 +74,21 @@ class TestAdministracaoGrupos(unittest.TestCase):
             self.addCleanup(p.stop)
         self.situacao, self.resp = {}, {}
 
+    def test_grupo_sem_quadro_nao_esconde_o_quadro_da_pergunta(self):
+        import codeframe as CF
+        with patch.object(config, "PERGUNTAS_OUT", Path(self._tmp.name) / "perguntas"):
+            proprio = {"status": "aprovado", "categorias": [{"codigo": 1, "nome": "A", "definicao": "x"}], "historico": []}
+            (CF.pasta("Q32") / "frame.json").write_text(__import__("json").dumps(proprio), encoding="utf-8")
+            self.assertEqual(grupos_frame.grupo_de("Q32")[0], "motivo_troca")
+            self.assertEqual(grupos_frame.grupo_efetivo("Q32"), (None, None))
+            self.assertEqual(CF.frame("Q32")["status"], "aprovado")           # segue com o quadro dela
+            CF.renomear("Q32", 1, "B")                                          # e dá para editar
+            self.assertEqual(CF.frame("Q32")["categorias"][0]["nome"], "B")
+            grupos_frame._gravar_grupo("motivo_troca", "frame.json", {"status": "rascunho", "categorias": [{"codigo": 7, "nome": "G"}]})
+            self.assertEqual(CF.frame("Q32")["categorias"][0]["nome"], "G")     # quadro do grupo passa a valer
+            with self.assertRaises(NotImplementedError):
+                CF.renomear("Q32", 7, "H")
+
     def test_sem_arquivo_vale_o_projeto_py(self):
         self.assertEqual(list(grupos_frame.todos()), ["motivo_troca"])
 

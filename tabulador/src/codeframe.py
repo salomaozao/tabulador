@@ -137,7 +137,7 @@ def salvar_instrucoes(qid: str, texto: str) -> None:
 
 def instrucoes_completas(qid: str) -> str:
     import grupos_frame
-    nome_grupo, cfg_grupo = grupos_frame.grupo_de(qid)
+    nome_grupo, cfg_grupo = grupos_frame.grupo_efetivo(qid)
     if nome_grupo:
         partes = [t for t in (cfg_grupo.get("instrucoes_frame", ""), instrucoes(qid)) if t]
         return "\n".join(partes)
@@ -392,7 +392,7 @@ def refinar(qid: str, feedback: str) -> dict:
     ("junte X e Y", "separe Z", "falta categoria para W") e devolve o frame revisado.
     Categorias que continuam mantêm o código; fundidas/removidas são remapeadas na codificação."""
     import grupos_frame
-    nome, _ = grupos_frame.grupo_de(qid)
+    nome, _ = grupos_frame.grupo_efetivo(qid)
     if nome:
         raise NotImplementedError(
             f"{qid} pertence ao grupo '{nome}': use refinar diretamente no grupo (em breve)."
@@ -520,7 +520,7 @@ def frame_fixo(qid: str) -> dict:
 
 def frame(qid: str) -> dict | None:
     import grupos_frame
-    nome, _ = grupos_frame.grupo_de(qid)
+    nome, _ = grupos_frame.grupo_efetivo(qid)
     if nome:
         return grupos_frame.frame(nome)
     f = _ler(qid, "frame.json")
@@ -618,7 +618,7 @@ def renomear(qid: str, ref, novo_nome: str, nova_definicao: str | None = None, p
     Se a definição mudar, respostas já conferidas nessa categoria ganham status 'alterada'
     para reconferência pelo pesquisador. (Mudança no nome pode ser incluída futuramente)."""
     import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
     if nome_grupo:
         raise NotImplementedError(
             f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
@@ -669,7 +669,7 @@ def editar_keywords(qid: str, ref, adicionar=(), remover=(), fixar=(), por: str 
     remover  : sai das fixas e das aprendidas e fica BLOQUEADA (o aprendizado não a traz de volta);
     fixar    : uma keyword aprendida (keywords_auto) passa a ser fixa."""
     import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
     if nome_grupo:
         raise NotImplementedError(
             f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
@@ -700,7 +700,7 @@ def editar_keywords(qid: str, ref, adicionar=(), remover=(), fixar=(), por: str 
 
 def fundir(qid: str, destino, *origens) -> dict:
     import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
     if nome_grupo:
         raise NotImplementedError(
             f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
@@ -730,7 +730,7 @@ def fundir(qid: str, destino, *origens) -> dict:
 
 def adicionar(qid: str, nome: str, definicao: str = "", por: str | None = None) -> dict:
     import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
     if nome_grupo:
         raise NotImplementedError(
             f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
@@ -749,7 +749,7 @@ def adicionar(qid: str, nome: str, definicao: str = "", por: str | None = None) 
 def remover(qid: str, ref) -> dict:
     """Remove a categoria; respostas já codificadas nela caem em 'Outros'."""
     import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
     if nome_grupo:
         raise NotImplementedError(
             f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
@@ -767,7 +767,7 @@ def remover(qid: str, ref) -> dict:
 
 def aprovar(qid: str) -> dict:
     import grupos_frame
-    nome, _ = grupos_frame.grupo_de(qid)
+    nome, _ = grupos_frame.grupo_efetivo(qid)
     if nome:
         return grupos_frame.aprovar(nome)
     snapshot_antes(qid, "aprovar quadro")
@@ -810,7 +810,7 @@ def _remapear_codificacao(qid: str, remap: dict, motivo: str | None = None) -> N
 
 def texto_frame(qid: str) -> str:
     import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
     f = _exigir_frame(qid)
     if nome_grupo:
         linhas = [f"{qid} [grupo:{nome_grupo}] - frame [{f['status']}] {grupos_frame.rotulo(nome_grupo)}"]

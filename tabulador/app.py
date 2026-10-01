@@ -1091,7 +1091,8 @@ def _info_grupo(qid: str) -> dict | None:
     nome, cfg = grupos_frame.grupo_de(qid)
     if not nome:
         return None
-    return {"nome": nome, "rotulo": cfg.get("rotulo", nome), "membros": cfg.get("perguntas", [])}
+    return {"nome": nome, "rotulo": cfg.get("rotulo", nome), "membros": cfg.get("perguntas", []),
+            "tem_quadro": grupos_frame.frame(nome) is not None}
 
 
 def _grupo_completo(nome: str, cfg: dict) -> dict:

@@ -1498,6 +1498,7 @@ function renderGrupoBanner(dados) {
       <div class="grupo-banner-info">
         <strong>${esc(rotulo)}</strong>
         <div class="grupo-banner-membros">${lista}</div>
+        ${dados.grupo.tem_quadro ? "" : `<div class="grupo-banner-membros">O grupo ainda não tem quadro de categorias: esta pergunta segue com o quadro dela.</div>`}
       </div>
       <a class="grupo-btn-editar" href="#grupos">Gerenciar grupos</a>
     </div>`;
