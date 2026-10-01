@@ -41,7 +41,12 @@ function renderProgresso(p) {
   if (p.tokens) st.push(`${fmtMil(p.tokens)} tokens`);
   if (p.erros) st.push(`<span class="warn-t">${p.erros} lote(s) com erro</span>`);
   if (p.limite_atingido) st.push(`<span class="warn-t">limite do provedor atingido — parando…</span>`);
+  if (p.parando) st.push(`<span class="warn-t">parando a pedido…</span>`);
   $("#busy-stats").innerHTML = st.join("<span>·</span>");
+  const btnParar = $("#busy-parar");
+  btnParar.classList.toggle("hidden", !p.lotes_total);
+  btnParar.disabled = !!p.parando;
+  btnParar.textContent = p.parando ? "Parando…" : "⏹ Parar";
   $("#busy-etapas").innerHTML = (p.etapas || []).map((e) => {
     const ic = e.estado === "feito" ? "✓" : e.estado === "ativo" ? '<span class="mini-spin"></span>' : e.estado === "erro" ? "✕" : "○";
     const t = e.estado === "ativo" && e.decorrido != null ? fmtDur(e.decorrido) : e.estado === "feito" && e.fim && e.inicio ? fmtDur(e.fim - e.inicio) : "";
@@ -53,6 +58,8 @@ function busy(msg) {
   busyIni = Date.now();
   $("#busy-msg").textContent = msg || "Processando…"; $("#busy-sub").textContent = "";
   $("#busy-stats").innerHTML = ""; $("#busy-etapas").innerHTML = ""; $("#busy-log").innerHTML = "";
+  const btnParar = $("#busy-parar");
+  btnParar.classList.add("hidden"); btnParar.disabled = false; btnParar.textContent = "⏹ Parar";
   barraBusy(null);
   $("#busy").classList.remove("hidden");
   clearInterval(progT); clearInterval(relT);
@@ -68,6 +75,20 @@ function busy(msg) {
   setTimeout(tick, 250); progT = setInterval(tick, 800);
 }
 function idle() { clearInterval(progT); clearInterval(relT); $("#busy").classList.add("hidden"); }
+$("#busy-parar").onclick = () => {
+  const btn = $("#busy-parar");
+  btn.disabled = true; btn.textContent = "Parando…";
+  fetch("/api/parar", { method: "POST" }).catch(() => {}); // sem `api()`: não deve abrir outra janela de "processando"
+};
+// Lotes grandes gastam muitos tokens e muito tempo: confirma antes (pedido da reunião de 30/09).
+const AVISO_VOLUME = 500;
+function confirmarVolume(n, acao) {
+  if (!n || n <= AVISO_VOLUME) return true;
+  const lotes = Math.ceil(n / 30);
+  return confirm(`${acao}: ${fmtN(n)} respostas vão para a IA (~${fmtN(lotes)} chamadas).\n\n`
+    + `Isso pode levar muitos minutos e gastar bastante crédito do provedor. Dá para parar no meio (⏹ Parar): `
+    + `o que já foi classificado fica salvo e o resto continua pendente.\n\nContinuar?`);
+}
 let toastT;
 function toast(msg, err = false) {
   const t = $("#toast"); t.textContent = msg; t.className = "toast" + (err ? " err" : ""); clearTimeout(toastT);
@@ -75,12 +96,18 @@ function toast(msg, err = false) {
 }
 async function api(path, opts = {}, msg, progresso = false) {
   if (msg) busy(msg, progresso);
-  const timeoutMs = opts.timeout || 35000;
-  const signal = opts.signal || (AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined);
+  // Operações com progresso (classificação, recodificação, auditoria) são longas e acompanhadas por /api/progresso;
+  // não devem ser abortadas pelo navegador enquanto o servidor trabalha.
+  const timeoutMs = opts.timeout ?? (progresso ? 0 : 240000);
+  const signal = opts.signal || (timeoutMs > 0 && AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined);
   try {
-    const r = await fetch(path, { headers: { "Content-Type": "application/json" }, signal, ...opts }).catch((err) => {
+    // quem está nesta aba vai junto (revisado_por / atualizado_por); codificado porque cabeçalho não aceita acento
+    const headers = { "Content-Type": "application/json", "X-Tabulador-Usuario": encodeURIComponent(nomeExibicao()) };
+    const r = await fetch(path, { headers, signal, ...opts }).catch((err) => {
       if (err?.name === "TimeoutError") {
-        throw new Error(`o servidor demorou mais de ${timeoutMs / 1000}s para responder.`);
+        const seg = Math.round(timeoutMs / 1000);
+        const tempoTxt = seg >= 60 ? `${Math.round(seg / 60)} min` : `${seg}s`;
+        throw new Error(`o servidor demorou mais de ${tempoTxt} para responder.`);
       }
       throw new Error("o Tabulador não respondeu — a janela do programa foi fechada ou reiniciada. Abra-o de novo pelo atalho e recarregue a página.");
     });
@@ -90,14 +117,25 @@ async function api(path, opts = {}, msg, progresso = false) {
   } catch (e) { toast("Erro: " + e.message, true); throw e; }
   finally { if (msg) idle(); }
 }
-const post = (path, body, msg, progresso) => api(path, { method: "POST", body: JSON.stringify(body || {}) }, msg, progresso);
+const post = (path, body, msg, progresso, opts = {}) => api(path, { method: "POST", body: JSON.stringify(body || {}), ...opts }, msg, progresso);
 const manterScroll = (fn) => { const y = window.scrollY; fn(); window.scrollTo(0, y); };
 
 // ---------------------------------------------------------------- status / topo / barra lateral
 async function carregarStatus() {
   state.status = await api("/api/status");
   const S = state.status, b = S.base;
-  $("#sel-projeto").innerHTML = S.projetos.map((p) => `<option value="${esc(p.slug)}" ${p.slug === S.projeto.slug ? "selected" : ""} ${p.ok ? "" : "disabled"}>${esc(p.nome)}${p.ok ? "" : " (erro)"}</option>`).join("");
+  $("#proj-nome").textContent = S.projeto.nome;
+  $("#lista-projetos").innerHTML = S.projetos.map((p) => {
+    const atual = p.slug === S.projeto.slug;
+    return `<li class="proj-item${atual ? " atual" : ""}${p.ok ? "" : " erro"}" data-slug="${esc(p.slug)}"
+      title="${p.ok ? "Trocar para este projeto" : "Este projeto não abre (erro ao carregar)"}">
+      <span class="tick">${atual ? "✓" : ""}</span>${esc(p.nome)}<span class="slug">${esc(p.slug)}</span></li>`;
+  }).join("");
+  document.querySelectorAll("#lista-projetos .proj-item").forEach((li) => (li.onclick = () => {
+    if (li.classList.contains("atual")) return fecharPainelProjeto();
+    if (li.classList.contains("erro")) return toast("Este projeto não abre: veja o erro na pasta dele.", true);
+    fecharPainelProjeto(); trocarProjeto(li.dataset.slug);
+  }));
   $("#ia-status").innerHTML = `IA: ${S.ia.tem_chave ? esc(S.ia.modelo) + (S.ia.provedor !== "openai" ? ` <small>(${esc(S.ia.provedor)})</small>` : "") : '<span class="pill warn">sem chave</span>'}`;
   const n = S.nuvem, ns = $("#nuvem-status");
   const dotCls = n.conectada ? "ok" : n.ativa ? "warn" : "off";
@@ -138,6 +176,68 @@ function renderSidebar() {
 function irPara(qid) { location.hash = qid || "painel"; }
 
 // ---------------------------------------------------------------- painel geral
+// ---- cabeçalho do projeto: % de perguntas revisadas + a curva de progressão (src/historico.py)
+// O % grande responde "quanto já andou"; o gráfico responde "como chegou aqui". As duas séries são
+// % de PERGUNTAS (denominador fixo), então a linha não desce quando entra entrevista nova.
+function graficoProgresso(serie) {
+  const dias = (serie || []).map((p) => p.dia);
+  if (dias.length < 2) return "";
+  const pct = (p, k) => 100 * Math.max(0, Math.min(1, p[k] || 0));
+  const L = 46, R = 548, T = 16, B = 186;
+  const x = (i) => L + (R - L) * (i / (dias.length - 1));
+  const y = (v) => B - (B - T) * (v / 100);
+  const linha = (k) => serie.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(pct(p, k)).toFixed(1)}`).join(" ");
+  const pontos = (k, cor, campo) => serie.map((p, i) =>
+    `<circle cx="${x(i).toFixed(1)}" cy="${y(pct(p, k)).toFixed(1)}" r="3" fill="${cor}"><title>${diaBR(p.dia)}: ${p[campo]} de ${serie.length} · ${Math.round(pct(p, k))}% das perguntas</title></circle>`).join("");
+  const grade = [0, 25, 50, 75, 100].map((v) => `<line x1="${L}" y1="${y(v).toFixed(1)}" x2="${R}" y2="${y(v).toFixed(1)}"${v ? ' stroke-dasharray="3 4"' : ""}/>`).join("");
+  const rotulosY = [100, 75, 50, 25, 0].map((v) => `<text x="6" y="${(y(v) + 4).toFixed(1)}">${v}%</text>`).join("");
+  const passo = dias.length > 8 ? 2 : 1;  // muitos dias: um rótulo a cada dois, para não embolar
+  const rotulosX = dias.map((d, i) => (i % passo === 0 || i === dias.length - 1) ? `<text x="${(x(i) - 16).toFixed(1)}" y="${B + 22}">${diaBR(d)}</text>` : "").join("");
+  return `<div class="grafico">
+    <svg viewBox="0 0 560 214" width="100%" height="196" role="img"
+         aria-label="Progressão: percentual de perguntas classificadas e revisadas, dia a dia">
+      <g stroke="var(--border)">${grade}</g>
+      <g font-size="10.5" fill="var(--text-3)" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">${rotulosY}${rotulosX}</g>
+      <polyline fill="none" stroke="var(--accent)" stroke-width="2.4" stroke-linejoin="round" d="${linha("pct_classificadas")}"/>
+      <polyline fill="none" stroke="var(--ok)" stroke-width="2.4" stroke-linejoin="round" d="${linha("pct_revisadas")}"/>
+      ${pontos("pct_classificadas", "var(--accent)", "n_classificadas")}${pontos("pct_revisadas", "var(--ok)", "n_revisadas")}
+    </svg>
+    <div class="legenda">
+      <span><i class="sw acc"></i>perguntas classificadas</span>
+      <span><i class="sw ok"></i>perguntas revisadas</span>
+      <span class="small">em % das perguntas do projeto — o denominador é fixo, então a curva não desce quando entra entrevista nova</span>
+    </div>
+  </div>`;
+}
+function diaBR(iso) { return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`; }
+function cabecalhoProjeto(S) {
+  const H = S.historico;
+  if (!H || !H.total) return "";
+  // O número grande é de RESPOSTAS (pedido da reunião de 30/09): uma pergunta de 21 respostas concluída
+  // não diz nada perto de uma de 4.500. Perguntas concluídas viram leitura secundária.
+  const R = H.respostas || {}, tot = R.unicas || 0;
+  const nRev = R.revisadas || 0, nCls = R.classificadas || 0;
+  const nAConf = Math.max(0, nCls - nRev), nSem = Math.max(0, tot - nCls);
+  const pctRev = tot ? Math.floor((100 * nRev) / tot) : 0;
+  const parte = (n) => `${tot ? (100 * n) / tot : 0}%`;
+  return `<div class="cab">
+    <div class="cab-num">
+      <div class="pct-grande">${pctRev}<small>%</small></div>
+      <div class="pct-lab"><b>${tot && nRev >= tot ? "todas as respostas conferidas" : "das respostas conferidas"}</b></div>
+      <div class="pct-sec"><b>${fmtN(nRev)}</b> de ${fmtN(tot)} respostas únicas conferidas por pessoas${nSem ? ` · faltam classificar <b>${fmtN(nSem)}</b>` : ""}
+        <br>${H.n_revisadas} de ${H.total} pergunta${H.total === 1 ? "" : "s"} com a revisão concluída</div>
+      <div class="pilha" title="${fmtN(nRev)} conferidas · ${fmtN(nAConf)} classificadas a conferir · ${fmtN(nSem)} ainda não classificadas">
+        <i class="rev" style="width:${parte(nRev)}"></i><i class="cls" style="width:${parte(nAConf)}"></i><i class="nada" style="width:${parte(nSem)}"></i>
+      </div>
+      <div class="legenda">
+        <span><i class="sw ok"></i>conferidas ${fmtN(nRev)}</span>
+        <span><i class="sw acc"></i>a conferir ${fmtN(nAConf)}</span>
+        <span><i class="sw nada"></i>sem classificação ${fmtN(nSem)}</span>
+      </div>
+    </div>
+    ${graficoProgresso(H.serie)}
+  </div>`;
+}
 function renderPainel() {
   state.view = "painel"; state.qid = null; state.P = null; renderSidebar();
   const S = state.status, b = S.base, R = S.resultados;
@@ -147,10 +247,16 @@ function renderPainel() {
   else if (!b.carregada) avisos.push(`<div class="aviso">A planilha ainda não foi lida. <button class="btn sm primary" data-acao="load">Ler a planilha agora</button></div>`);
 
   const cards = S.perguntas.map((s) => {
-    const cod = s.n_codificadas || 0, tot = s.n_unicas || s.respostas || 0;
+    const cod = s.n_codificadas || 0, tot = s.n_unicas || s.respostas || 0, rev = s.n_revisadas || 0;
     const barra = (v, d, cls = "") => `<div class="prog ${cls}"><i style="width:${d ? (100 * v) / d : 0}%"></i></div>`;
+    const pctRev = tot ? Math.round((100 * rev) / tot) : 0;
+    // canto direito do card: quantas já foram revisadas do total — é o que diz se falta trabalho aqui
+    const contador = tot ? `<div class="contador" title="${fmtN(rev)} de ${fmtN(tot)} respostas conferidas por pessoas">
+        <div class="n">${fmtN(rev)}<i> / ${fmtN(tot)}</i></div><div class="lab">revisadas / total</div>
+        <div class="bar"><i style="width:${pctRev}%"></i></div></div>` : "";
     return `<div class="card" data-qid="${esc(s.qid)}">
       <div class="card-h"><b>${esc(s.rotulo)}</b><span class="small">${esc(s.qid)}</span></div>
+      ${contador}
       <div class="small">${s.respondeu ? `${s.respondeu} responderam · ${tot} respostas únicas` : "respostas ainda não lidas"}</div>
       <div>${pillStatus(s)} ${s.alertas ? `<span class="pill warn">${s.alertas} alertas</span>` : ""}</div>
       ${s.codificacao ? `
@@ -169,6 +275,7 @@ function renderPainel() {
     <h1>${esc(S.projeto.nome)}</h1>
     <div class="small">Planilha-fonte: ${esc(b.fonte)}</div>
     ${b.carregada ? `<div class="small">Base: <b>${b.n}</b> respondentes · atualizada ${b.atualizada_em}</div>` : ""}
+    ${cabecalhoProjeto(S)}
     ${avisos.join("")}
     <h2>Perguntas abertas <small>${aprovadas} de ${S.perguntas.length} aprovadas</small></h2>
     <div class="cards">${cards}</div>
@@ -275,6 +382,10 @@ async function refresh(payload) {
   manterScroll(render); carregarStatus();
   if (payload?.limite_atingido) {
     toast(`Limite de uso do provedor atingido: parei a classificação. ${payload.nao_tentados} resposta(s) ficaram pendentes — espere um pouco (ou troque de provedor em '⚙ Configurar IA') e tente de novo.`, true);
+  } else if (payload?.parado_usuario) {
+    toast(`Classificação parada a seu pedido. ${payload.nao_tentados} resposta(s) ficaram pendentes — o que já foi classificado está salvo.`);
+  } else if (payload?.n_erro) {
+    toast(`${payload.n_erro} resposta(s) deram erro na IA e continuam sem classificação (não foram para Outros). Use "Classificar as restantes" para tentar de novo.`, true);
   }
 }
 function prepararItens() { for (const r of state.P.itens || []) if (r._alertas_ia === undefined) r._alertas_ia = r.alertas; }
@@ -324,12 +435,25 @@ function render() {
   const P = state.P, R = P.respostas || {}, F = P.frame, C = P.codificacao, V = P.revisao;
   const frameOk = F && F.status === "aprovado", codOk = C && C.status === "aprovado";
   const faltam = V ? V.n_faltantes : 0;
-  $("#main").innerHTML = `
-    <div class="small"><a href="#painel">← Painel geral</a></div>
-    <h1>${esc(P.rotulo)} <small>${esc(P.qid)}</small></h1>
-    <div class="muted">${esc(R.enunciado || "")}</div>
-    <div class="small">Quem respondeu: ${esc(R.base_descricao || "")}</div>
-    <div id="presenca-banner"></div>
+  // contador do canto direito: quantas respostas já foram conferidas do total desta pergunta.
+  // Fica dentro do cabeçalho sticky, então acompanha a rolagem da tabela de revisão.
+  const totRev = V ? V.n_unicas : (R.n_unicas || 0), nRev = V ? V.n_revisadas : 0;
+  const pctRev = totRev ? Math.round((100 * nRev) / totRev) : 0;
+  $("main").innerHTML = `
+    <div class="q-cab">
+      <div class="q-cab-txt">
+        <div class="small"><a href="#painel">← Painel geral</a></div>
+        <h1>${esc(P.rotulo)} <small>${esc(P.qid)}</small></h1>
+        <div class="muted">${esc(R.enunciado || "")}</div>
+        <div class="small">Quem respondeu: ${esc(R.base_descricao || "")}</div>
+        <div id="presenca-banner"></div>
+      </div>
+      ${totRev ? `<div class="sticky-num" title="${fmtN(nRev)} de ${fmtN(totRev)} respostas conferidas por pessoas">
+        <div class="n">${fmtN(nRev)}<i> / ${fmtN(totRev)}</i></div>
+        <div class="lab">revisadas / total</div>
+        <div class="bar"><i style="width:${pctRev}%"></i></div>
+      </div>` : ""}
+    </div>
     <div class="tiles">
       <div class="tile"><div class="l">Responderam</div><div class="v">${R.n_respondeu ?? "–"}</div></div>
       <div class="tile"><div class="l">Respostas únicas</div><div class="v">${R.n_unicas ?? "–"}</div></div>
@@ -374,7 +498,6 @@ function render() {
     ${C ? renderRevbar() : ""}
     ${frameOk && !codOk ? renderAcoesCod() : ""}
     ${C ? renderCodificacao() : ""}
-    ${frameOk && !codOk ? renderAprovarBar() : ""}
   `;
   $("#instr").onblur = async (e) => { if (e.target.value !== P.instrucoes) { await post(`/api/pergunta/${P.qid}/instrucoes`, { texto: e.target.value }); P.instrucoes = e.target.value; toast("Instruções salvas"); } };
   $("#b-induzir")?.addEventListener("click", async () => {
@@ -390,7 +513,8 @@ function render() {
 // ---------------------------------------------------------------- frame
 function renderFrame() {
   const P = state.P, F = P.frame, n = P.respostas?.n_respondeu || 0, cats = F.categorias;
-  const opts = (excl) => cats.filter((c) => !c.fixa && c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  // destino pode ser Outros (97) ou NS/NR (98); só a ORIGEM não pode ser fixa (a linha fixa não tem o menu)
+  const opts = (excl) => cats.filter((c) => c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
   const rows = cats.map((c) => {
     const k = P.contagens[c.codigo] || { primaria: 0, secundaria: 0 }, m = k.primaria + k.secundaria;
     const ro = c.fixa || F.fixo;
@@ -398,6 +522,7 @@ function renderFrame() {
       <td class="num">${c.codigo}</td>
       <td>${ro ? `<b>${esc(c.nome)}</b>` : `<input class="inline f-nome" value="${esc(c.nome)}" title="Clique para renomear">`}</td>
       <td>${ro ? esc(c.definicao) : `<textarea class="inline f-def" rows="2">${esc(c.definicao)}</textarea>`}</td>
+      <td>${renderKeywords(c, ro)}</td>
       <td class="ex"><small title="${esc((c.exemplos || []).join(" | "))}">${esc((c.exemplos || []).slice(0, 3).join("; "))}</small></td>
       <td class="num">${k.primaria}</td><td class="num">${k.secundaria}</td><td class="num"><b>${m}</b> <small>${pct(m, n)}</small></td>
       <td class="acoes">${ro ? "" : `<select class="f-mesclar sm" title="Mesclar esta categoria em outra"><option value="">mesclar em…</option>${opts(c.codigo)}</select> <button class="btn sm danger f-remover" title="Excluir (respostas vão para Outros)">✕</button>`}</td>
@@ -405,11 +530,12 @@ function renderFrame() {
   }).join("");
   return `
     ${F.raciocinio && !F.fixo ? `<div class="info">💡 ${esc(F.raciocinio)}</div>` : ""}
-    <table id="tab-frame"><thead><tr><th style="width:44px">Cód.</th><th style="width:19%">Categoria</th><th style="width:27%">Definição</th><th>Exemplos</th><th class="num" style="width:60px">Prim.</th><th class="num" style="width:60px">Sec.</th><th class="num" style="width:90px">Menções</th><th style="width:200px">Ações</th></tr></thead>
+    ${renderSaude()}
+    <table id="tab-frame"><thead><tr><th style="width:44px">Cód.</th><th style="width:16%">Categoria</th><th style="width:24%">Definição</th><th style="width:17%" title="Palavras típicas da categoria. Entram no pedido à IA como pista. Tracejadas = aprendidas com a revisão (📌 fixa, × descarta e não volta).">Palavras-chave</th><th>Exemplos</th><th class="num" style="width:60px">Prim.</th><th class="num" style="width:60px">Sec.</th><th class="num" style="width:90px">Menções</th><th style="width:200px">Ações</th></tr></thead>
     <tbody>${rows}
-      ${F.fixo ? "" : `<tr class="frame-add"><td>+</td><td><input class="inline" id="f-novo-nome" placeholder="Nova categoria"></td><td><input class="inline" id="f-novo-def" placeholder="Definição (1 frase)"></td><td colspan="4"></td><td><button class="btn sm" id="f-add">Adicionar</button></td></tr>`}
+      ${F.fixo ? "" : `<tr class="frame-add"><td>+</td><td><input class="inline" id="f-novo-nome" placeholder="Nova categoria"></td><td><input class="inline" id="f-novo-def" placeholder="Definição (1 frase)"></td><td colspan="5"></td><td><button class="btn sm" id="f-add">Adicionar</button></td></tr>`}
     </tbody></table>
-    <div class="small">Renomear/definir: edite o texto e saia do campo. Mesclar: as respostas passam para a categoria de destino. 97 (Outros) e 98 (NS/NR) são fixas.</div>
+    <div class="small">Renomear/definir: edite o texto e saia do campo. Mesclar: as respostas passam para a categoria de destino (dá para mesclar em 97 Outros ou 98 NS/NR). 97 e 98 são fixas: não podem ser renomeadas nem excluídas.</div>
     ${P.codificacao ? `<div class="info">Já há respostas classificadas, então as mudanças aqui valem na hora, sem aprovar de novo. <b>Renomear</b> não muda as respostas. <b>Mesclar</b> e <b>excluir</b> movem as respostas (as excluídas vão para Outros). Uma <b>definição nova</b> vale para as próximas classificações; para refazer as que você ainda não conferiu, use <b>Reclassificar tudo</b>.</div>` : ""}
     ${F.fixo ? "" : `
     <div class="box-instr refino">
@@ -418,10 +544,38 @@ function renderFrame() {
       <div class="tools"><button class="btn primary" id="b-refinar">✨ Ajustar categorias com IA</button>${P.pode_desfazer_refino ? `<button class="btn" id="b-desfazer">↶ Desfazer último ajuste</button>` : ""}</div>
     </div>`}`;
 }
+// palavras-chave: fixas (definidas por alguém) e aprendidas com a revisão (tracejadas, dá para fixar ou descartar)
+function renderKeywords(c, ro) {
+  const chip = (k, auto) => `<span class="kw${auto ? " auto" : ""}" data-kw="${esc(k)}" title="${auto ? "Aprendida com as respostas conferidas" : "Palavra-chave fixa"}">${esc(k)}${ro ? "" :
+    (auto ? `<button class="kw-fixar" title="Fixar">📌</button>` : "") + `<button class="kw-tirar" title="Remover (não volta pelo aprendizado)">×</button>`}</span>`;
+  return `<div class="kws">${(c.keywords || []).map((k) => chip(k, false)).join("")}${(c.keywords_auto || []).map((k) => chip(k, true)).join("")}${ro ? "" : `<input class="inline f-kw" placeholder="+ palavra" title="Digite e tecle Enter (várias: separe por vírgula)">`}</div>`;
+}
+function renderSaude() {
+  const A = state.P.saude || [];
+  if (!A.length) return "";
+  return `<div class="saude"><b>Saúde do quadro</b> <span class="small">— sinais tirados da revisão; mudar a estrutura (separar, mesclar, criar) é decisão de vocês</span>
+    <ul>${A.map((a) => `<li>${esc(a.msg)}</li>`).join("")}</ul>
+    ${state.P.frame?.fixo ? "" : `<div class="tools"><button class="btn sm" id="b-aprender" title="Recalcula agora as palavras-chave aprendidas (isso também acontece sozinho antes de classificar, a cada 25 revisões novas)">🧠 Aprender com a revisão agora</button></div>`}
+  </div>`;
+}
 function bindFrame() {
   const P = state.P; if (!P.frame) return;
+  $("#b-aprender")?.addEventListener("click", async () => {
+    const r = await post(`/api/pergunta/${P.qid}/frame/aprender`, {}, "Aprendendo com a revisão…");
+    const m = r.aprendizado?.mudancas?.length || 0;
+    toast(m ? `Palavras-chave aprendidas atualizadas em ${m} categoria(s)` : "Nada novo para aprender ainda"); refresh(r);
+  });
   document.querySelectorAll("#tab-frame tr[data-cod]").forEach((tr) => {
     const cod = tr.dataset.cod;
+    const kw = (corpo, msg) => post(`/api/pergunta/${P.qid}/frame/keywords`, { codigo: cod, ...corpo }).then((r) => { manterScroll(() => refresh(r)); if (msg) toast(msg); });
+    tr.querySelector(".f-kw")?.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const novas = e.target.value.split(",").map((s) => s.trim()).filter(Boolean);
+      if (novas.length) kw({ adicionar: novas }, "Palavra-chave salva");
+    });
+    tr.querySelectorAll(".kw-tirar").forEach((b) => b.addEventListener("click", () => kw({ remover: [b.closest(".kw").dataset.kw] })));
+    tr.querySelectorAll(".kw-fixar").forEach((b) => b.addEventListener("click", () => kw({ fixar: [b.closest(".kw").dataset.kw] })));
     tr.querySelector(".f-nome")?.addEventListener("change", async (e) => { refresh(await post(`/api/pergunta/${P.qid}/frame/categoria`, { codigo: cod, nome: e.target.value })); toast("Categoria renomeada"); });
     tr.querySelector(".f-def")?.addEventListener("change", async (e) => { await post(`/api/pergunta/${P.qid}/frame/categoria`, { codigo: cod, definicao: e.target.value }); toast("Definição salva"); });
     tr.querySelector(".f-mesclar")?.addEventListener("change", async (e) => {
@@ -471,7 +625,10 @@ function renderRevbar() {
 }
 function renderAcoesCod() {
   const P = state.P, C = P.codificacao, V = P.revisao, R = P.respostas || {};
-  const tam = `<select id="tam-amostra">${[30, 50, 100, 200].map((n) => `<option ${n === state.amostra ? "selected" : ""}>${n}</option>`).join("")}</select>`;
+  // quantidade livre (com sugestões): fica FORA do botão — dentro dele, clicar no campo disparava a classificação
+  const maxTam = (C ? V.n_faltantes : R.n_unicas) || "";
+  const tam = `<input id="tam-amostra" class="tam-amostra" type="number" min="1" ${maxTam ? `max="${maxTam}"` : ""} step="1" value="${maxTam ? Math.min(state.amostra, maxTam) : state.amostra}"
+      list="tam-sugestoes" title="Quantas respostas mandar para a IA (digite ou escolha)"><datalist id="tam-sugestoes">${[30, 50, 100, 200, 500].map((n) => `<option value="${n}">`).join("")}</datalist>`;
   if (!C) return `
     <div class="passo">
       <div><b>Comece por uma amostra.</b> A IA classifica ${tam} respostas; você confere, corrige e ajusta as instruções/categorias. Quando a taxa de acerto estiver boa, classifique o restante.</div>
@@ -483,7 +640,8 @@ function renderAcoesCod() {
       <div class="tools">
         <button class="btn primary" id="b-recod-com" ${P.n_comentarios_pendentes ? "" : "disabled"}>✨ Reclassificar comentadas (${P.n_comentarios_pendentes})</button>
         <button class="btn" id="b-recod-tudo" title="Refaz com a IA tudo que você ainda não conferiu">↻ Reclassificar tudo</button>
-        ${V.n_faltantes ? `<span class="sep"></span><button class="btn" id="b-mais">+ Classificar mais ${tam}</button><button class="btn primary" id="b-restantes">Classificar as restantes (${V.n_faltantes})</button>` : ""}
+        ${V.n_faltantes ? `<span class="sep"></span><span class="tam-grupo"><button class="btn" id="b-mais">+ Classificar mais</button>${tam}<span class="small">respostas</span></span><button class="btn primary" id="b-restantes">Classificar as restantes (${V.n_faltantes})</button>` : ""}
+        <span class="sep"></span>${renderAprovarBtn()}
       </div>
       <div class="tools supervisao">
         <b>Supervisão:</b>
@@ -498,15 +656,38 @@ function renderAcoesCod() {
 }
 function bindAcoesCod() {
   const P = state.P;
-  $("#tam-amostra")?.addEventListener("change", (e) => (state.amostra = +e.target.value));
+  // lê o campo na hora do clique (a pessoa pode digitar e clicar direto, sem sair do campo)
+  const lerTam = () => {
+    const campo = $("#tam-amostra"), max = +campo.max || Infinity, n = Math.floor(+campo.value);
+    if (!(n >= 1)) { toast("Digite quantas respostas mandar para a IA (1 ou mais).", true); campo.focus(); return null; }
+    state.amostra = Math.min(n, max); campo.value = state.amostra;
+    return state.amostra;
+  };
+  $("#tam-amostra")?.addEventListener("change", (e) => { if (+e.target.value >= 1) lerTam(); });
+  $("#tam-amostra")?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); ($("#b-mais") || $("#b-amostra"))?.click(); } });
   const classificar = async (body, msg) => refresh(await post(`/api/pergunta/${P.qid}/codificar`, body, msg, true));
-  $("#b-amostra")?.addEventListener("click", () => classificar({ limite: state.amostra }, "A IA está classificando a amostra…"));
-  $("#b-codificar")?.addEventListener("click", () => { if (!confirm(`Classificar todas as ${P.respostas?.n_unicas} respostas agora? (Recomendado: testar numa amostra antes.)`)) return; classificar({}, "A IA está classificando as respostas…"); });
-  $("#b-mais")?.addEventListener("click", () => classificar({ limite: state.amostra, restantes: true }, "A IA está classificando mais respostas…"));
-  $("#b-restantes")?.addEventListener("click", () => classificar({ restantes: true }, "A IA está classificando as respostas restantes…"));
+  $("#b-amostra")?.addEventListener("click", () => {
+    const n = lerTam(); if (!n || !confirmarVolume(n, "Classificar amostra")) return;
+    classificar({ limite: n }, `A IA está classificando uma amostra de ${n}…`);
+  });
+  $("#b-codificar")?.addEventListener("click", () => {
+    const n = P.respostas?.n_unicas;
+    if (n > AVISO_VOLUME ? !confirmarVolume(n, "Classificar todas de uma vez") : !confirm(`Classificar todas as ${n} respostas agora? (Recomendado: testar numa amostra antes.)`)) return;
+    classificar({}, "A IA está classificando as respostas…");
+  });
+  $("#b-mais")?.addEventListener("click", () => {
+    const n = lerTam(); if (!n || !confirmarVolume(n, "Classificar mais")) return;
+    classificar({ limite: n, restantes: true }, `A IA está classificando mais ${n} respostas…`);
+  });
+  $("#b-restantes")?.addEventListener("click", () => {
+    if (!confirmarVolume(P.revisao?.n_faltantes, "Classificar as restantes")) return;
+    classificar({ restantes: true }, "A IA está classificando as respostas restantes…");
+  });
   $("#b-recod-com")?.addEventListener("click", async () => { const r = await post(`/api/pergunta/${P.qid}/recodificar`, { apenas_comentados: true }, "Reclassificando as respostas comentadas…", true); toast(`${r.recodificados} resposta(s) reclassificada(s)`); refresh(r); });
   $("#b-recod-tudo")?.addEventListener("click", async () => {
-    if (!confirm("Reclassificar com a IA tudo o que você ainda não conferiu? O que você corrigiu ou confirmou é mantido.")) return;
+    const V = P.revisao, n = V ? V.n_codificadas - V.n_revisadas : 0;
+    const msg = `Reclassificar com a IA as ${fmtN(n)} já classificadas que você ainda não conferiu? O que você corrigiu ou confirmou é mantido; as que ainda não foram classificadas não entram (para elas, use "Classificar as restantes").`;
+    if (n > AVISO_VOLUME ? !confirmarVolume(n, "Reclassificar tudo") : !confirm(msg)) return;
     refresh(await post(`/api/pergunta/${P.qid}/recodificar`, { apenas_comentados: false }, "Reclassificando…", true));
   });
   $("#auto-limiar")?.addEventListener("change", (e) => (state.limiar = Math.min(1, Math.max(0.5, +e.target.value || 0.85))));
@@ -568,6 +749,7 @@ function cardCategoria(c, D, podeEditar, catsOpc) {
       ${satOutros}
       ${D.classificada ? `<span class="cc-n"><b>${fmtN(c.n || 0)}</b> <small>${c.pct != null ? fmt1(c.pct) + "%" : ""}</small></span>` : ""}</div>
     ${podeEditar && !c.fixa ? `<textarea class="inline cc-def" rows="2">${esc(c.definicao)}</textarea>` : `<div class="small">${esc(c.definicao)}</div>`}
+    ${(c.keywords || []).length + (c.keywords_auto || []).length ? renderKeywords(c, true) : ""}
     ${exemplos ? `<ul class="cc-ex">${exemplos}</ul>` : ""}
     ${perfil}
     <div class="cc-acoes">
@@ -584,7 +766,7 @@ async function abrirJanelaCategorias() {
   const D = await api(`/api/pergunta/${qid}/perfil`, {}, "Montando o perfil das categorias…");
   const F = P.frame, frameOk = F && F.status === "aprovado", locked = P.codificacao?.status === "aprovado";
   const podeEditar = !F?.fixo && !locked;
-  const catsOpc = (excl) => catsValidas().filter((c) => !c.fixa && c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  const catsOpc = (excl) => catsValidas().filter((c) => c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
   const b = D.base || {};
   const cats = D.classificada ? [...D.categorias].sort((x, y) => (y.n || 0) - (x.n || 0)) : D.categorias;
   const catOutros = D.classificada ? cats.find((c) => (c.codigo === 97 || String(c.codigo) === "97" || (c.nome || "").toLowerCase().includes("outros")) && (c.pct || 0) > 5.0) : null;
@@ -658,18 +840,17 @@ function abrirAuditoria() {
     const A = r.auditoria || {};
     abrirJanela("Auditoria concluída", `<p>Auditor: <b>${esc(A.por || "—")}</b>. ${fmtN(A.auditadas || 0)} resposta(s) conferidas:
       <b>${fmtN(A.concorda || 0)}</b> concordam e <b>${fmtN(A.discorda || 0)}</b> discordam.${A.lotes_com_erro ? ` ${A.lotes_com_erro} lote(s) deram erro (rode de novo depois).` : ""}</p>
+      ${A.parado_usuario ? `<p class="small">⏹ Parada a seu pedido: o que já foi auditado está salvo; o resto continua sem auditoria.</p>` : ""}
       ${A.auto ? `<p><b>${fmtN(A.auto.aceitas)}</b> aceitas sozinhas (confiança alta + auditor concordando).</p>` : ""}
       <p class="small">As discordâncias aparecem na tabela com <b>🔎 auditor sugere…</b>. Filtre por <b>auditor discordou</b> e use o botão ou a tecla <kbd>S</kbd> para aceitar a sugestão.</p>`);
   };
 }
-// botão de aprovar fica no fim da tabela (depois de revisar tudo), não no topo — ver renderCodificacao
-function renderAprovarBar() {
+// botão de aprovar fica junto de "Classificar as restantes" (acima da tabela), não no fim de uma
+// tabela de milhares de linhas — pedido da reunião de 30/09
+function renderAprovarBtn() {
   const P = state.P, C = P.codificacao, V = P.revisao;
   if (!C) return "";
-  return `
-    <div class="tools aprovar-bar">
-      <button class="btn ok" id="b-aprovar-cod" ${V.n_faltantes ? `disabled title="Classifique as restantes antes de aprovar"` : ""}>✓ Aprovar e gravar nos resultados</button>
-    </div>`;
+  return `<button class="btn ok" id="b-aprovar-cod" ${V.n_faltantes ? `disabled title="Classifique as restantes antes de aprovar"` : ""}>✓ Aprovar e gravar nos resultados</button>`;
 }
 function bindAprovarBar() {
   const P = state.P; if (!P.codificacao) return;
@@ -1042,6 +1223,13 @@ async function renderGerenciar() {
       <tr><td><b>Lixeira</b><br><small>tudo o que for apagado aqui vai para ela e pode ser recuperado</small></td><td><code>${esc(G.lixeira)}</code> <small>(${G.n_lixeira} item(ns))</small></td><td></td></tr>
     </tbody></table>
 
+    <h2>Base e planilha</h2>
+    <div class="info">Ação usada quando chega base nova (mais entrevistas) ou quando a planilha-fonte é corrigida — por isso fica aqui, e não no topo da tela.</div>
+    <div class="perigo-zona"><div class="cab">Atualizar a base</div>
+      <div class="perigo-item"><div class="d"><b>↻ Recarregar planilha</b><small>Relê a planilha-fonte e reconstrói a base. O que já foi classificado e conferido continua nas mesmas respostas (casamento pelo texto); perguntas aprovadas que ganharem respostas novas voltam para revisão.</small></div>
+        <button class="btn" id="gz-load">Recarregar planilha</button></div>
+    </div>
+
     <h2 style="color:var(--danger)">⚠ Zona de perigo</h2>
     <div class="perigo-zona"><div class="cab">Categorias e classificações</div>
       <div class="perigo-item"><div class="d"><b>Apagar a classificação de uma pergunta</b><small>Mantém as categorias (aprovadas). As respostas voltam a “não classificadas”, inclusive o que foi conferido por pessoas. Sai da base e dos resultados.</small></div>
@@ -1058,6 +1246,7 @@ async function renderGerenciar() {
         <button class="btn perigo" id="pz-b4" ${G.n_projetos > 1 ? "" : 'disabled title="É o único projeto: crie outro antes"'}>Excluir projeto</button></div>
     </div>`;
   document.querySelector("[data-acao=pasta]").onclick = () => post("/api/abrir-pasta");
+  $("#gz-load").onclick = recarregarPlanilha;  // veio do topo: ação de base, usada de vez em quando
   const apagar = async (qids, o_que, rotulo) => {
     const r = await post("/api/perigo/pergunta", { qids, o_que }, "Apagando…");
     toast(r.lixeira ? `${rotulo} — movido para a lixeira` : "Nada para apagar");
@@ -1551,7 +1740,11 @@ async function alternarTeste(ativo) {
   toast(ativo ? "Modo teste ligado — resultados simulados" : "Modo teste desligado — de volta à IA real");
   state.qid = null; await carregarStatus(); rota();
 }
-$("#btn-teste").onclick = () => alternarTeste(!state.status.ia.modo_teste);
+$("#btn-teste").onclick = async () => {
+  const antes = !!state.status.ia.modo_teste;
+  await alternarTeste(!antes);
+  if (!!state.status.ia.modo_teste !== antes) $("#dlg-ia").close();  // a tela toda recarrega: fecha a janela
+};
 $("#teste-sair").onclick = () => alternarTeste(false);
 $("#teste-limpar").onclick = async () => {
   if (!confirm("Apagar todos os dados do MODO TESTE deste projeto (categorias, classificações e resultados simulados)?\nOs resultados reais não são afetados.")) return;
@@ -1559,16 +1752,27 @@ $("#teste-limpar").onclick = async () => {
   state.qid = null; await carregarStatus(); irPara(null); renderPainel();
 };
 $("#btn-ia").onclick = abrirIA;
-$("#btn-load").onclick = recarregarPlanilha;
 $("#li-painel").onclick = () => irPara(null);
 $("#li-usage").onclick = () => { if (location.hash === "#usage") renderUsage(); else location.hash = "usage"; };
 $("#li-resultados").onclick = () => { if (location.hash === "#resultados") renderResultados(); else location.hash = "resultados"; };
 $("#li-gerenciar").onclick = () => { if (location.hash === "#gerenciar") renderGerenciar(); else location.hash = "gerenciar"; };
-$("#sel-projeto").onchange = async (e) => {
-  await post("/api/projeto", { slug: e.target.value }, "Trocando de projeto…");
+// ---- topo: menu do projeto (trocar de projeto / novo projeto ficam aqui dentro)
+function fecharPainelProjeto() { $("#proj").classList.remove("aberto"); $("#proj-panel").classList.add("hidden"); }
+function alternarPainelProjeto() {
+  const aberto = !$("#proj-panel").classList.contains("hidden");
+  $("#proj").classList.toggle("aberto", !aberto);
+  $("#proj-panel").classList.toggle("hidden", aberto);
+}
+async function trocarProjeto(slug) {
+  if (!slug || slug === state.status.projeto.slug) return;
+  await post("/api/projeto", { slug }, "Trocando de projeto…");
   state.qid = null; await carregarStatus();
   if (["#usage", "#resultados", "#gerenciar", "#painel", ""].includes(location.hash)) rota(); else irPara(null);
-};
+}
+$("#proj-btn").onclick = (e) => { e.stopPropagation(); alternarPainelProjeto(); };
+$("#proj-panel").onclick = (e) => e.stopPropagation();  // clique dentro do cartão não fecha
+document.addEventListener("click", () => { if (!$("#proj-panel").classList.contains("hidden")) fecharPainelProjeto(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharPainelProjeto(); });
 
 // ---------------------------------------------------------------- novo projeto (assistente)
 // O rascunho vem do servidor, feito sem IA a partir da planilha. Aqui a pessoa só revisa: tipos,
@@ -1787,7 +1991,7 @@ function ligarNovo() {
     state.novo = null; toast(`Projeto criado (${r.slug}).`); await carregarStatus(); irPara(null); renderPainel();
   };
 }
-$("#btn-novo").onclick = () => { if (location.hash === "#novo") renderNovo(); else location.hash = "novo"; };
+$("#btn-novo").onclick = () => { fecharPainelProjeto(); if (location.hash === "#novo") renderNovo(); else location.hash = "novo"; };
 
 // ---------------------------------------------------------------- rotas / boot
 function rota() {

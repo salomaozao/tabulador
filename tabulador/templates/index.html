@@ -9,16 +9,23 @@
 </head>
 <body>
 <header class="top">
-  <div class="brand">Tabulador de respostas abertas</div>
-  <label class="proj" title="Projeto (pesquisa) em que você está trabalhando">Projeto
-    <select id="sel-projeto"></select>
-  </label>
-  <button id="btn-novo" class="btn ghost" title="Criar um projeto novo a partir de uma planilha de pesquisa">+ Novo projeto</button>
+  <div class="brand">Tabulador</div>
+  <div class="proj" id="proj">
+    <button class="proj-btn" id="proj-btn" title="Projeto atual — clique para trocar de projeto ou criar um novo">
+      <span id="proj-nome">carregando…</span><span class="chev">▼</span>
+    </button>
+    <div class="proj-panel hidden" id="proj-panel">
+      <div class="side-title">Projeto</div>
+      <ul id="lista-projetos"></ul>
+      <div class="proj-foot">
+        <button class="btn" id="btn-novo" title="Criar um projeto novo a partir de uma planilha de pesquisa">+ Novo projeto</button>
+      </div>
+    </div>
+  </div>
+  <div class="grow"></div>
   <div id="ia-status" class="muted">carregando…</div>
   <div id="nuvem-status" class="nuvem-status muted"><span class="dot"></span></div>
-  <button id="btn-teste" class="btn ghost" title="Liga/desliga o modo teste: a IA é substituída por valores simulados (sem custo) e os resultados vão para uma pasta separada">🧪 Modo teste</button>
-  <button id="btn-ia" class="btn ghost" title="Chave da OpenAI e modelo usado">⚙ Configurar IA</button>
-  <button id="btn-load" class="btn ghost" title="Relê a planilha-fonte e reconstrói a base">↻ Recarregar planilha</button>
+  <button id="btn-ia" class="btn ghost" title="Chave do provedor de IA, modelo e modo teste">⚙ Configurar IA</button>
 </header>
 <div id="faixa-teste" class="faixa-teste hidden">
   🧪 <b>MODO TESTE</b> — categorias e classificações são <b>simuladas</b> (sem IA, sem custo). Os resultados ficam em uma pasta separada: <code id="faixa-pasta"></code>
@@ -72,6 +79,10 @@
       <input id="ia-url" placeholder="https://…/v1">
     </label>
     <p class="small">As chaves ficam gravadas só neste computador (arquivo <code>.env</code> do tabulador) e nunca aparecem nos resultados. Cada provedor guarda a sua. Planos gratuitos têm limite de chamadas por minuto: em perguntas grandes a classificação pode ficar mais lenta.</p>
+    <div class="switch">
+      <button type="button" id="btn-teste" class="btn" title="Liga/desliga o modo teste: a IA é substituída por valores simulados (sem custo) e os resultados vão para uma pasta separada">🧪 Modo teste</button>
+      <div class="small">Valida telas e fluxo sem gastar IA e sem internet. Os resultados vão para uma pasta separada (<code>…_teste</code>) e não se misturam com os reais.</div>
+    </div>
     <div id="ia-teste-detalhe"></div>
     <div class="dlg-acoes"><span id="ia-teste-res" class="small"></span><button class="btn" type="button" id="ia-testar">Testar conexão</button><button class="btn" value="cancel" formnovalidate>Cancelar</button><button class="btn primary" id="ia-salvar" value="ok">Salvar</button></div>
   </form>
@@ -83,6 +94,7 @@
   <div id="busy-stats" class="busy-stats"></div>
   <ol id="busy-etapas" class="etapas"></ol>
   <div id="busy-log" class="busy-log"></div>
+  <div class="busy-acoes"><button class="btn sm hidden" id="busy-parar" type="button">⏹ Parar</button></div>
 </div></div>
 <dialog id="dlg-perigo">
   <form method="dialog" id="form-perigo">

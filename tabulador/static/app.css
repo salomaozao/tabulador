@@ -90,17 +90,80 @@ select.cat{width:100%;max-width:230px}
 #tab-frame{table-layout:fixed}
 #tab-frame td.ex small{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 #tab-frame td.acoes{white-space:nowrap}#tab-frame td.acoes select{max-width:150px;font-size:12px;padding:3px 6px}
+/* palavras-chave da categoria: fixas (cheias) e aprendidas com a revisão (tracejadas) */
+.kws{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
+.kw{display:inline-flex;align-items:center;gap:2px;padding:1px 4px 1px 7px;border-radius:10px;font-size:11px;background:var(--surface-3);color:var(--text-2);white-space:nowrap}
+.kw.auto{background:transparent;border:1px dashed var(--text-3);color:var(--text-3)}
+.kw button{border:0;background:none;color:inherit;cursor:pointer;font-size:11px;padding:0 2px;line-height:1;opacity:.6}.kw button:hover{opacity:1}
+.kws input.f-kw{width:90px;font-size:11px;padding:1px 6px}
+.saude{background:var(--warn-bg);color:var(--text);padding:8px 12px;border-radius:8px;margin:8px 0;font-size:13px}
+.saude ul{margin:4px 0 0;padding-left:18px}.saude li{margin:2px 0}.saude .tools{margin-top:6px}
 #tab-cod{table-layout:fixed}#tab-cod td:first-child{word-wrap:break-word}
 #tab-cod textarea.c-com{resize:none;min-height:30px;overflow:hidden}#tab-cod textarea.c-com:focus{overflow:auto}
 
 /* ---- projeto, painel, loop de revisão ---- */
 .top{flex-wrap:wrap}
-.proj{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2)}.proj select{max-width:260px}
+.brand{flex:none;color:var(--text-2)}
+.grow{flex:1}
+/* menu de projeto no próprio título (trocar de projeto / + Novo projeto moram aqui dentro) */
+.proj{position:relative;display:flex;align-items:center;gap:6px}
+.proj-btn{display:flex;align-items:center;gap:8px;font:inherit;font-size:16px;font-weight:600;padding:6px 11px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);cursor:pointer}
+.proj-btn:hover{background:var(--surface-2)}
+.proj-btn .chev{font-size:11px;color:var(--text-3);transition:transform .15s;display:inline-block}
+.proj.aberto .proj-btn .chev{transform:rotate(180deg)}
+.proj-panel{position:absolute;top:calc(100% + 6px);left:0;min-width:300px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.18);z-index:9}
+.proj-panel .side-title{margin:4px 8px 6px}
+.proj-panel ul{list-style:none;margin:0;padding:0}
+.proj-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13.5px}
+.proj-item:hover{background:var(--surface-2)}
+.proj-item .tick{width:14px;flex:none;color:var(--accent);font-weight:700}
+.proj-item .slug{margin-left:auto;font:11.5px ui-monospace,Consolas,monospace;color:var(--text-3)}
+.proj-item.atual{font-weight:600}
+.proj-item.erro{opacity:.5;cursor:not-allowed}
+.proj-foot{border-top:1px solid var(--border);margin-top:6px;padding-top:6px}
+.proj-foot .btn{width:100%;text-align:center}
+/* interruptor do modo teste (morava no topo, agora vive em "Configurar IA") */
+.switch{display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:8px;padding:8px 10px;background:var(--surface-2);margin:12px 0}
+.btn.on{background:var(--warn-bg);border-color:var(--warn);color:var(--warn)}
+/* cabeçalho do projeto: % de perguntas revisadas + curva de progressão */
+.cab{display:grid;grid-template-columns:minmax(210px,290px) 1fr;gap:24px;align-items:center;border:1px solid var(--border);border-radius:12px;padding:16px 20px;background:var(--surface-2);margin:14px 0}
+.cab-num{display:flex;flex-direction:column}
+.pct-grande{font:600 62px/1 ui-monospace,Consolas,monospace;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.pct-grande small{font-size:26px;color:var(--text-3)}
+.pct-lab{font-size:13px;color:var(--text-2);margin-top:2px}
+.pct-sec{font-size:12px;color:var(--text-3);margin-top:5px}
+.pilha{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--surface-3);margin-top:10px}
+.pilha i{display:block;height:100%}
+.pilha .rev{background:var(--ok)}.pilha .cls{background:var(--accent-2)}.pilha .nada{background:var(--surface-3)}
+.legenda{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-3);margin-top:7px}
+.legenda span{display:flex;align-items:center;gap:6px}
+.sw{width:14px;height:3px;border-radius:2px;display:inline-block;flex:none}
+.sw.ok{background:var(--ok)}.sw.acc{background:var(--accent)}.sw.nada{background:var(--surface-3)}
+.grafico{border-left:1px solid var(--border);padding-left:20px;min-width:0}
+.grafico svg{display:block;max-width:100%}
+@media(max-width:860px){.cab{grid-template-columns:1fr}.grafico{border-left:0;padding-left:0}}
+/* canto direito de cada card de pergunta: revisadas / total */
+.contador{position:absolute;top:10px;right:12px;text-align:right;font-family:ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums}
+.contador .n{font-size:19px;font-weight:600;line-height:1}
+.contador .n i{font-style:normal;font-size:13px;color:var(--text-3)}
+.contador .lab{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);margin-top:2px}
+.contador .bar{width:80px;height:4px;border-radius:3px;background:var(--surface-3);margin:5px 0 0 auto;overflow:hidden}
+.contador .bar i{display:block;height:100%;background:var(--ok)}
+/* cabeçalho da pergunta, preso no topo enquanto a tabela de revisão rola */
+.q-cab{position:sticky;top:var(--topo,49px);z-index:4;display:flex;align-items:flex-start;gap:16px;padding:10px 0 12px;margin:-10px 0 12px;background:var(--surface);border-bottom:1px solid var(--border)}
+.q-cab-txt{flex:1;min-width:0}
+.q-cab h1{margin-bottom:2px}
+.sticky-num{flex:none;text-align:right;font-family:ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:8px 12px}
+.sticky-num .n{font-size:26px;font-weight:600;line-height:1}
+.sticky-num .n i{font-style:normal;font-size:17px;color:var(--text-3)}
+.sticky-num .lab{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-top:3px}
+.sticky-num .bar{width:118px;height:5px;border-radius:3px;background:var(--surface-3);margin-top:6px;overflow:hidden}
+.sticky-num .bar i{display:block;height:100%;background:var(--ok)}
 #lista-topo{margin-bottom:10px}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
-.card{border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;cursor:pointer;background:var(--surface)}
+.card{position:relative;border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;cursor:pointer;background:var(--surface)}
 .card:hover{border-color:var(--accent)}.card .btn{align-self:flex-start;margin-top:4px}
-.card-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.card-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline;padding-right:104px}
 .card .top{color:var(--text-2)}
 .kv{display:flex;justify-content:space-between;font-size:12px;color:var(--text-2)}
 .prog{height:6px;background:var(--surface-3);border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;background:var(--accent)}.prog.hum i{background:var(--ok)}
@@ -205,6 +268,9 @@ h3{font-size:14px;margin:16px 0 6px}
 .etapas li .t{font-size:12px;font-weight:400;color:var(--text-3);font-variant-numeric:tabular-nums}
 .mini-spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;transform:none;animation:cat-giro .8s linear infinite;vertical-align:-1px}
 .busy-log{font:11.5px/1.5 ui-monospace,Consolas,monospace;color:var(--text-2);background:var(--surface-2);border-radius:6px;padding:6px 8px;max-height:110px;overflow:auto}
+.tam-grupo{display:inline-flex;align-items:center;gap:6px}
+.tam-amostra{width:80px;font-variant-numeric:tabular-nums}
+.busy-acoes{display:flex;justify-content:flex-end;margin-top:10px}
 .busy-log:empty{display:none}.busy-log div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.busy-log span{color:var(--text-3);margin-right:6px}
 
 /* ---- resultados ---- */
