@@ -1,0 +1,99 @@
+{
+  "ciclo_id": "2026-10-01_amostra_controle",
+  "versao": "1.1",
+  "descricao": "Controle de qualidade contínuo: pacotes esporádicos e cegos que medem o erro do que vai ao cliente sem conferência humana (PEND-32)",
+  "data_criacao": "2026-10-01",
+  "fase": "DEV",
+  "tarefas": [
+    {
+      "id": "TASK-00",
+      "titulo": "Pré-requisito: PEND-22 commitada e worktree feat/amostra_controle criada a partir dela",
+      "modulo_arquivo": "git",
+      "depende_de": [],
+      "role": "Engineer",
+      "modelo_sugerido": "Claude Code (Opus) — separar hunks de duas sessões",
+      "status": "TODO",
+      "criterio_verificacao": "worktree contém src/aprendizado.py e src/historico.py; python -m unittest discover -s tests sem falhas novas"
+    },
+    {
+      "id": "TASK-01",
+      "titulo": "controle.py: elegiveis, sortear_pacote (projeto|pergunta, sem persistir, cartão sem 'ia'), wilson, estimativa_pergunta, estimativa_projeto (combinação por pergunta + cobertura + estrato auto) + CONTROLE_* em config.py",
+      "modulo_arquivo": "tabulador/src/controle.py, tabulador/src/config.py",
+      "depende_de": ["TASK-00"],
+      "role": "Engineer",
+      "modelo_sugerido": "Claude Code (Sonnet)",
+      "status": "TODO",
+      "criterio_verificacao": "tests.test_controle: humano/regra/erro nunca sorteados; mesma semente → mesmos (qid,rid); 'ia' ausente nos cartões; wilson(3,40) ≈ (0.026, 0.199); projeto com uma pergunta sem medida → cobertura < 1; k=0 não gera IC degenerado; N_q=0 sai da combinação"
+    },
+    {
+      "id": "TASK-02",
+      "titulo": "controle.py: registrar (relê, substituto se deixou de ser elegível, aplica via CD.atualizar_item, append em controle.json) e pular",
+      "modulo_arquivo": "tabulador/src/controle.py",
+      "depende_de": ["TASK-01"],
+      "role": "Engineer",
+      "modelo_sugerido": "Claude Code (Sonnet)",
+      "status": "TODO",
+      "criterio_verificacao": "test_controle: final==ia → validado_por=humano; final!=ia → origem=humano + corrigido_de; resposta conferida por outra pessoa entre sorteio e registro → substituto, nada gravado; pular grava pulada=True e não altera a base"
+    },
+    {
+      "id": "TASK-03",
+      "titulo": "Rotas POST /api/controle/pacote, POST /api/pergunta/<qid>/controle/registrar, GET /api/controle; 'controle' em _payload_pergunta e elegiveis em /api/status",
+      "modulo_arquivo": "tabulador/app.py",
+      "depende_de": ["TASK-02"],
+      "role": "Engineer",
+      "modelo_sugerido": "Claude Code (Sonnet)",
+      "status": "TODO",
+      "criterio_verificacao": "app.test_client(): pacote → registrar ×3 → GET /api/controle com n=3; projeto sem classificação → cartoes=[] com motivo"
+    },
+    {
+      "id": "TASK-04",
+      "titulo": "Pílula '🎯 Controle · 5' no topo + janela de cartões cegos (atalhos, revelação, substituto transparente, fechar a qualquer momento, sem refresh da pergunta aberta)",
+      "modulo_arquivo": "tabulador/templates/index.html, tabulador/static/app.js, tabulador/static/app.css",
+      "depende_de": ["TASK-03"],
+      "role": "Engineer (ui_ux)",
+      "modelo_sugerido": "Claude Code (Sonnet)",
+      "status": "TODO",
+      "criterio_verificacao": "node --check static/app.js; no modo teste: com a tabela filtrada e rolada, abrir e fechar um pacote não muda filtro nem rolagem; categoria da IA ausente do DOM antes do Enter"
+    },
+    {
+      "id": "TASK-05",
+      "titulo": "Bloco 'Controle de qualidade' no painel geral, linha na revbar, rótulo 'Acerto nas que vocês conferiram' (6 lugares), aviso de calibração do auto-aceite",
+      "modulo_arquivo": "tabulador/static/app.js, tabulador/static/app.css",
+      "depende_de": ["TASK-03"],
+      "role": "Engineer (ui_ux)",
+      "modelo_sugerido": "Antigravity (Gemini Flash) ou Claude Code (Sonnet)",
+      "status": "TODO",
+      "criterio_verificacao": "grep por 'a IA acertou' / 'Acerto da IA' em static/app.js vazio; ponto nunca sem intervalo; abaixo de CONTROLE_MIN_DESTAQUE mostra 'ainda pouco medido'"
+    },
+    {
+      "id": "TASK-06",
+      "titulo": "Confirmação de aprovar com erro estimado (abrirJanela no lugar do confirm()) + 'Conferir 5 desta pergunta agora' / 'Aprovar assim mesmo'",
+      "modulo_arquivo": "tabulador/static/app.js",
+      "depende_de": ["TASK-04"],
+      "role": "Engineer (ui_ux)",
+      "modelo_sugerido": "Claude Code (Sonnet)",
+      "status": "TODO",
+      "criterio_verificacao": "aprovar com zero conferências funciona em 2 cliques; com conferências mostra ponto + IC"
+    },
+    {
+      "id": "TASK-07",
+      "titulo": "Linha metodológica no relatório da pergunta (com/sem/preliminar)",
+      "modulo_arquivo": "tabulador/src/report.py",
+      "depende_de": ["TASK-01"],
+      "role": "Engineer",
+      "modelo_sugerido": "Claude Code (Haiku/Sonnet)",
+      "status": "TODO",
+      "criterio_verificacao": "relatório renderiza nos 3 casos; texto traz N, n, período e IC"
+    },
+    {
+      "id": "TASK-08",
+      "titulo": "QA: suíte completa, node --check, roteiro no navegador (modo teste) e conservação (diff de codificacao.json restrito aos rids conferidos)",
+      "modulo_arquivo": ".brain/ciclos/2026-10-01_amostra_controle/04_QA_REPORT.md",
+      "depende_de": ["TASK-04", "TASK-05", "TASK-06", "TASK-07"],
+      "role": "QA Auditor",
+      "modelo_sugerido": "Modelo diferente do que implementou",
+      "status": "TODO",
+      "criterio_verificacao": "04_QA_REPORT.md com veredito APROVADO"
+    }
+  ]
+}

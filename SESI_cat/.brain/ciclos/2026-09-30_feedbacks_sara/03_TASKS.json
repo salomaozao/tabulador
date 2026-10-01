@@ -1,0 +1,29 @@
+{
+  "ciclo_id": "2026-09-30_feedbacks_sara",
+  "versao": "1.0",
+  "descricao": "Estabilidade de IA, Volumetria, Ergonomia e Métricas (Feedbacks Sara 30/09)",
+  "data_criacao": "2026-09-30",
+  "fase": "DEV",
+  "tarefas": [
+    {
+      "id": "TASK-01",
+      "titulo": "Implementar contrato de backend",
+      "modulo_arquivo": "caminho/do/arquivo_1.py",
+      "depende_de": [],
+      "role": "Engineer",
+      "modelo_sugerido": "Claude Code (Sonnet) ou Antigravity (Gemini Pro)",
+      "status": "TODO",
+      "criterio_verificacao": "python -m unittest tests/test_arquivo_1.py"
+    },
+    {
+      "id": "TASK-02",
+      "titulo": "Adaptar frontend conforme contrato de API",
+      "modulo_arquivo": "static/app.js",
+      "depende_de": ["TASK-01"],
+      "role": "Engineer",
+      "modelo_sugerido": "Antigravity (Gemini Flash)",
+      "status": "TODO",
+      "criterio_verificacao": "node --check static/app.js"
+    }
+  ]
+}
