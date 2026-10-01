@@ -72,6 +72,10 @@ def _bloco(df: pd.DataFrame, cfg: dict) -> dict:
     return out
 
 
+def _kws(c: dict) -> dict:
+    return {"keywords": c.get("keywords") or [], "keywords_auto": c.get("keywords_auto") or []}
+
+
 def perfil(qid: str) -> dict:
     """Uma entrada por categoria: contagens, exemplos, pendentes e o perfil vs. a base da pergunta."""
     frame = CF._exigir_frame(qid)
@@ -81,7 +85,7 @@ def perfil(qid: str) -> dict:
     if not cod:  # antes de classificar: só definição e exemplos da IA
         return {"qid": qid, "classificada": False, "config": _rotulos(cfg),
                 "categorias": [{"codigo": c["codigo"], "nome": c["nome"], "definicao": c.get("definicao", ""),
-                                "fixa": bool(c.get("fixa")), "exemplos": (c.get("exemplos") or [])[:5]} for c in cats]}
+                                "fixa": bool(c.get("fixa")), "exemplos": (c.get("exemplos") or [])[:5], **_kws(c)} for c in cats]}
     df, _ = load.carregar_base()
     df = df.set_index("respondent_id", drop=False)
     resp = {r["rid"]: r for r in CF.respostas(qid)["respostas"]}
@@ -102,7 +106,7 @@ def perfil(qid: str) -> dict:
         # confirmação em bloco nunca passa por cima de uma discordância do auditor: essas ficam para olhar uma a uma
         pend = [i for i in a_conferir if (i.get("auditoria") or {}).get("ok") is not False]
         exemplos = sorted((i for i in seus if i.get("primaria") == k), key=lambda i: -resp[i["rid"]]["n"])[:5]
-        cat = {"codigo": k, "nome": c["nome"], "definicao": c.get("definicao", ""), "fixa": bool(c.get("fixa")),
+        cat = {"codigo": k, "nome": c["nome"], "definicao": c.get("definicao", ""), "fixa": bool(c.get("fixa")), **_kws(c),
                "n": len(set(ids)), "pct": round(100 * len(set(ids)) / total_classificados, 1) if total_classificados else None,
                "exemplos": [{"texto": resp[i["rid"]]["texto"], "n": resp[i["rid"]]["n"]} for i in exemplos],
                "pendentes": [i["rid"] for i in pend],

@@ -13,6 +13,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
+import aprendizado
 import codeframe as CF
 import coding as CD
 import config
@@ -109,12 +110,12 @@ SCHEMA_AUDITORIA = {
 }
 
 
-def _prompt_auditoria(qid: str, frame: dict, enunciado: str, lote: list[dict]) -> tuple[str, str]:
+def _prompt_auditoria(qid: str, frame: dict, enunciado: str, lote: list[dict], ensino: dict | None = None) -> tuple[str, str]:
     system = ("Você é o SEGUNDO codificador (auditor) de uma pesquisa de mercado. Confere, resposta por resposta, "
               "a classificação feita por outro codificador contra um code frame fechado. Seja criterioso mas não "
               "implique com escolhas razoáveis: só discorde quando a categoria estiver errada. Português do Brasil.")
     nomes = {c["codigo"]: c["nome"] for c in frame["categorias"]}
-    cats = "\n".join(f"  {c['codigo']}: {c['nome']} - {c['definicao']}" for c in frame["categorias"])
+    cats = aprendizado.bloco_categorias(frame, ensino)
     linhas = "\n".join(
         f"  rid {r['rid']}: \"{r['texto']}\" -> primária {r['primaria']} ({nomes.get(r['primaria'], '?')})"
         + (f", secundária {r['secundaria']} ({nomes.get(r['secundaria'], '?')})" if r.get("secundaria") else "")
@@ -152,6 +153,7 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
     lotes = [[{**i, "texto": textos.get(i["rid"], "")} for i in alvo[k:k + lote_n]] for k in range(0, len(alvo), lote_n)]
     enunciado = V.por_id(qid).get("rotulo")
     validos = {c["codigo"] for c in frame["categorias"]}
+    ensino = aprendizado.ensino(qid, frame)
     with llm.usando(provedor, modelo):
         por = f"{config.OPENAI_PROVEDOR}:{config.OPENAI_MODEL}"
         progresso.atualizar(feitos=0, total=len(alvo), lotes_feitos=0, lotes_total=len(lotes), erros=0)
@@ -160,14 +162,17 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
         t0, resultados, falhas = time.time(), {}, []
 
         def _um(k):
-            system, user = _prompt_auditoria(qid, frame, enunciado, lotes[k])
+            system, user = _prompt_auditoria(qid, frame, enunciado, lotes[k], ensino)
             return llm.chamar_json(system, user, SCHEMA_AUDITORIA, nome=f"audit_{qid}_{k + 1}")
 
+        parado_usuario = False
         with ThreadPoolExecutor(max_workers=config.paralelo()) as ex:
             futuros = {ex.submit(_um, k): k for k in range(len(lotes))}
             feitos = 0
             for fut in as_completed(futuros):
                 k = futuros[fut]
+                if fut.cancelled():
+                    continue  # cancelado antes de começar (parada pedida): fica sem auditoria
                 try:
                     resultados[k] = fut.result()
                 except Exception as e:  # noqa: BLE001 - lote com erro fica sem auditoria
@@ -175,6 +180,12 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
                 feitos += len(lotes[k])
                 progresso.atualizar(feitos=feitos, lotes_feitos=len(resultados) + len(falhas), erros=len(falhas))
                 progresso.evento(f"Lote {k + 1} de {len(lotes)} {'com ERRO' if k not in resultados else 'auditado'} · {time.time() - t0:.0f} s")
+                if not parado_usuario and progresso.parada_pedida():
+                    parado_usuario = True  # o que já foi auditado fica salvo; o resto fica sem auditoria
+                    for outro in futuros:
+                        if outro is not fut:
+                            outro.cancel()
+                    progresso.evento("Parando a pedido — o que já foi auditado fica salvo.")
     if falhas and not resultados:
         raise falhas[0]
     progresso.etapa("gravar", "gravando a auditoria")
@@ -196,7 +207,7 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
                 n["discorda"] += 1
     CF._gravar(qid, "codificacao.json", cod)
     return {"auditadas": n["concorda"] + n["discorda"], "concorda": n["concorda"], "discorda": n["discorda"],
-            "lotes_com_erro": len(falhas), "por": por}
+            "lotes_com_erro": len(falhas), "por": por, "parado_usuario": parado_usuario}
 
 
 # ----------------------------------------------------------------------------- quem conferiu

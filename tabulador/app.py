@@ -17,6 +17,7 @@ import traceback
 import webbrowser
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import unquote
 
 _DIR = Path(__file__).resolve().parent
 _SRC = _DIR / "src"
@@ -25,6 +26,7 @@ if str(_SRC) not in sys.path:
 
 from flask import Flask, abort, jsonify, request, send_file, send_from_directory
 
+import aprendizado
 import backcoding
 import codebook
 import codeframe as CF
@@ -32,6 +34,7 @@ import coding as CD
 import config
 import crosstabs
 import exportar
+import historico
 import llm
 import llm_cli
 import load
@@ -95,7 +98,25 @@ def _payload_pergunta(qid: str) -> dict:
         "n_comentarios_pendentes": sum(1 for r in itens if r.get("comentario_pendente")),
         "revisao": CD.resumo_revisao(qid) if cod else None,
         "conferencia": SUP.conferencia(cod["itens"]) if cod else None,
+        "saude": _saude(frame, resp, cod),
     }
+
+
+def _saude(frame, resp, cod) -> list:
+    """Alertas de categoria ruim (aprendizado.saude_de). Nunca derruba a tela da pergunta."""
+    if not (frame and resp and cod and cod.get("itens")):
+        return []
+    try:
+        return aprendizado.saude_de(frame, aprendizado.dossie_de(frame, resp["respostas"], cod["itens"]))
+    except Exception:  # noqa: BLE001
+        traceback.print_exc()
+        return []
+
+
+def _por() -> str | None:
+    """Nome de quem está usando esta aba (autodeclarado na tela inicial; vem codificado no cabeçalho)."""
+    nome = unquote(request.headers.get("X-Tabulador-Usuario", "")).strip()
+    return nome[:60] or None
 
 
 def _status_base() -> dict:
@@ -177,6 +198,7 @@ def api_status():
             "base": _status_base(),
             "nuvem": nuvem.status(config.PROJETO),
             "perguntas": perguntas,
+            "historico": historico.resumo(perguntas),
             "resultados": _resultados(),
         })
     except Exception as e:
@@ -287,6 +309,14 @@ def api_usage():
 @app.get("/api/progresso")
 def api_progresso():
     return jsonify(progresso.ler())
+
+
+@app.post("/api/parar")
+def api_parar():
+    """Pede para a operação em curso (classificar/auditar) parar assim que puder. Não usa o `_lock`
+    de propósito — ele está ocupado pela própria operação que estamos tentando parar."""
+    progresso.pedir_parada()
+    return jsonify({"ok": True})
 
 
 @app.post("/api/gerar/<tipo>")
@@ -682,10 +712,49 @@ def api_frame_categoria(qid):
         d = request.get_json() or {}
         with _lock:
             if d.get("codigo") is None:
-                CF.adicionar(qid, d["nome"], d.get("definicao", ""))
+                CF.adicionar(qid, d["nome"], d.get("definicao", ""), por=_por())
             else:
-                CF.renomear(qid, d["codigo"], d.get("nome") or CF._cat(CF.frame(qid), d["codigo"])["nome"], d.get("definicao"))
+                CF.renomear(qid, d["codigo"], d.get("nome") or CF._cat(CF.frame(qid), d["codigo"])["nome"], d.get("definicao"), por=_por())
         return jsonify(_payload_pergunta(qid))
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/pergunta/<qid>/frame/keywords")
+def api_frame_keywords(qid):
+    """{codigo, adicionar?: [..], remover?: [..], fixar?: [..]} — coluna de palavras-chave da categoria."""
+    try:
+        d = request.get_json() or {}
+        with _lock:
+            CF.editar_keywords(qid, d["codigo"], d.get("adicionar") or [], d.get("remover") or [], d.get("fixar") or [], por=_por())
+        return jsonify(_payload_pergunta(qid))
+    except Exception as e:
+        return _erro(e)
+
+
+@app.get("/api/pergunta/<qid>/aprendizado")
+def api_aprendizado(qid):
+    """Dossiê por categoria (volume, confusões, auditor, âncoras, keywords sugeridas) + alertas de saúde."""
+    try:
+        frame, respostas, itens = aprendizado._dados(qid)
+        if not frame:
+            return jsonify({"dossie": {}, "alertas": [], "keywords_sugeridas": {}})
+        dos = aprendizado.dossie_de(frame, respostas, itens)
+        return jsonify({"dossie": {str(k): v for k, v in dos.items()}, "alertas": aprendizado.saude_de(frame, dos),
+                        "keywords_sugeridas": {str(k): v for k, v in aprendizado.keywords_sugeridas_de(frame, respostas, itens).items()}})
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/pergunta/<qid>/frame/aprender")
+def api_frame_aprender(qid):
+    """Aprende agora com a revisão (keywords), sem esperar a próxima classificação."""
+    try:
+        with _lock:
+            r = aprendizado.aprender(qid, forcar=True)
+        out = _payload_pergunta(qid)
+        out["aprendizado"] = r
+        return jsonify(out)
     except Exception as e:
         return _erro(e)
 
@@ -757,6 +826,8 @@ def api_codificar(qid):
         out = _payload_pergunta(qid)
         out["limite_atingido"] = cod.get("_limite_atingido")
         out["nao_tentados"] = cod.get("_nao_tentados")
+        out["parado_usuario"] = cod.get("_parado_usuario")
+        out["n_erro"] = cod.get("_n_erro")
         return jsonify(out)
     except Exception as e:
         return _erro(e, 500)
@@ -768,7 +839,7 @@ def api_validar(qid):
     try:
         d = request.get_json() or {}
         with _lock:
-            n = CD.validar(qid, d.get("rids") or [], bool(d.get("valor", True)))
+            n = CD.validar(qid, d.get("rids") or [], bool(d.get("valor", True)), por=_por())
         out = _payload_pergunta(qid)
         out["alterados"] = n
         return jsonify(out)
@@ -846,6 +917,8 @@ def api_recodificar(qid):
         out["recodificados"] = cod.get("_recodificados")
         out["limite_atingido"] = cod.get("_limite_atingido")
         out["nao_tentados"] = cod.get("_nao_tentados")
+        out["parado_usuario"] = cod.get("_parado_usuario")
+        out["n_erro"] = cod.get("_n_erro")
         return jsonify(out)
     except Exception as e:
         return _erro(e, 500)
@@ -863,6 +936,7 @@ def api_item(qid, rid):
                 secundaria=d["secundaria"] if "secundaria" in d else "__manter__",
                 comentario=d["comentario"] if "comentario" in d else "__manter__",
                 validado=d.get("validado"),
+                por=_por(),
             )
         return jsonify({"ok": True, "item": item})
     except Exception as e:

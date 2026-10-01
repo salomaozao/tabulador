@@ -10,6 +10,7 @@ Para testes, `set_cliente(func)` injeta uma função `func(system, user, schema)
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 from datetime import datetime
@@ -69,7 +70,7 @@ def _openai():
 
         # base_url explícita: um OPENAI_BASE_URL vazio no ambiente quebraria o padrão do SDK
         _client = OpenAI(api_key=config.OPENAI_API_KEY, base_url=config.OPENAI_BASE_URL or OPENAI_URL_PADRAO,
-                         max_retries=3, timeout=180)
+                         max_retries=3, timeout=int(os.getenv("TABULADOR_LLM_TIMEOUT", "240")))
     return _client
 
 

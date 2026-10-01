@@ -212,8 +212,9 @@ SCHEMA_FRAME = {
                     "nome": {"type": "string"},
                     "definicao": {"type": "string"},
                     "exemplos": {"type": "array", "items": {"type": "string"}},
+                    "keywords": {"type": "array", "items": {"type": "string"}},
                 },
-                "required": ["nome", "definicao", "exemplos"],
+                "required": ["nome", "definicao", "exemplos", "keywords"],
             },
         },
     },
@@ -259,6 +260,7 @@ Regras:
 4. NÃO crie categorias 'Outros' nem 'Não sabe / não respondeu': elas serão adicionadas automaticamente.
 5. Liste 2 a 4 exemplos LITERAIS (copiados das respostas) por categoria.
 6. Ordene as categorias da mais frequente para a menos frequente.
+7. `keywords`: 3 a 8 palavras ou expressões curtas, típicas das respostas da categoria (como aparecem nas respostas).
 {('Instruções específicas desta pergunta: ' + instr) if instr else ''}
 
 RESPOSTAS (frequência x texto){nota}:
@@ -291,7 +293,8 @@ def induzir(qid: str, min_cat: int = 6, max_cat: int = 15, forcar: bool = False)
     progresso.etapa("gravar", f"{len(saida['categorias'])} categorias + Outros e NS/NR")
     categorias = []
     for i, c in enumerate(saida["categorias"], start=1):
-        categorias.append({"codigo": i, "nome": c["nome"].strip(), "definicao": c["definicao"].strip(), "exemplos": c.get("exemplos", []), "fixa": False})
+        categorias.append({"codigo": i, "nome": c["nome"].strip(), "definicao": c["definicao"].strip(), "exemplos": c.get("exemplos", []),
+                           "keywords": _limpar_keywords(c.get("keywords")), "fixa": False})
     frame = {
         "pergunta": qid,
         "enunciado": dados.get("enunciado"),
@@ -302,6 +305,7 @@ def induzir(qid: str, min_cat: int = 6, max_cat: int = 15, forcar: bool = False)
         "raciocinio": saida.get("raciocinio", ""),
         "categorias": categorias + [dict(f) for f in FIXAS],
         "historico": [],
+        "versao": 1,
     }
     _gravar(qid, "frame_proposto.json", frame)
     _gravar(qid, "frame.json", frame)
@@ -325,8 +329,9 @@ SCHEMA_REFINO = {
                     "nome": {"type": "string"},
                     "definicao": {"type": "string"},
                     "exemplos": {"type": "array", "items": {"type": "string"}},
+                    "keywords": {"type": "array", "items": {"type": "string"}, "description": "3 a 8 palavras/expressões típicas das respostas da categoria."},
                 },
-                "required": ["codigo_anterior", "incorpora", "nome", "definicao", "exemplos"],
+                "required": ["codigo_anterior", "incorpora", "nome", "definicao", "exemplos", "keywords"],
             },
         },
     },
@@ -370,7 +375,7 @@ Regras:
 1. Altere apenas o necessário para atender ao pedido; mantenha as demais categorias como estão.
 2. `codigo_anterior` = código da categoria atual que a nova continua (mesmo que renomeada); null se for nova.
 3. `incorpora` = códigos de categorias atuais que foram FUNDIDAS nesta (lista vazia se nenhuma).
-4. Nome curto (1 a 4 palavras), definição de 1 frase, 2 a 4 exemplos LITERAIS das respostas.
+4. Nome curto (1 a 4 palavras), definição de 1 frase, 2 a 4 exemplos LITERAIS das respostas e 3 a 8 keywords (palavras típicas das respostas da categoria).
 5. NÃO inclua 'Outros' nem 'NS/NR': são fixas.
 {('Instruções gerais desta pergunta: ' + instr) if instr else ''}
 
@@ -389,12 +394,18 @@ RESPOSTAS (frequência x texto){nota}:
         cod = c.get("codigo_anterior")
         if cod in antigos and cod not in usados:
             usados.add(cod)
-            novas.append({"codigo": cod, "nome": c["nome"].strip(), "definicao": c["definicao"].strip(), "exemplos": c.get("exemplos", []), "fixa": False, "_inc": c.get("incorpora") or []})
+            ant = antigos[cod]
+            # o que a revisão já ensinou à categoria continua valendo (keywords fixadas, bloqueadas e aprendidas)
+            kws = _limpar_keywords((ant.get("keywords") or []) + (c.get("keywords") or []), ant.get("keywords_bloqueadas"))
+            novas.append({**{k: v for k, v in ant.items() if k in ("keywords_auto", "keywords_bloqueadas", "inclui", "nao_inclui")},
+                          "codigo": cod, "nome": c["nome"].strip(), "definicao": c["definicao"].strip(), "exemplos": c.get("exemplos", []),
+                          "keywords": kws, "fixa": False, "_inc": c.get("incorpora") or []})
         else:
             pendentes.append(c)
     prox = max(list(antigos) + [0]) + 1
     for c in pendentes:
-        novas.append({"codigo": prox, "nome": c["nome"].strip(), "definicao": c["definicao"].strip(), "exemplos": c.get("exemplos", []), "fixa": False, "_inc": c.get("incorpora") or []})
+        novas.append({"codigo": prox, "nome": c["nome"].strip(), "definicao": c["definicao"].strip(), "exemplos": c.get("exemplos", []),
+                      "keywords": _limpar_keywords(c.get("keywords")), "fixa": False, "_inc": c.get("incorpora") or []})
         prox += 1
     remap = {}
     for c in novas:
@@ -490,19 +501,74 @@ def _status_apos_edicao(qid: str) -> str:
 
 
 def _registrar(f: dict, acao: str, **kw) -> None:
-    f.setdefault("historico", []).append({"quando": datetime.now().isoformat(timespec="seconds"), "acao": acao, **kw})
+    """Toda mudança no frame entra no histórico e gera uma versão nova (cada resposta classificada
+    guarda a versão do frame com que foi feita, em `frame_versao`)."""
+    f["versao"] = int(f.get("versao") or 1) + 1
+    f.setdefault("historico", []).append({"quando": datetime.now().isoformat(timespec="seconds"), "acao": acao, "versao": f["versao"], **kw})
     if f.get("status") == "aprovado":
         f["status"] = _status_apos_edicao(f["pergunta"]) if f.get("pergunta") else "rascunho"
 
 
-def renomear(qid: str, ref, novo_nome: str, nova_definicao: str | None = None) -> dict:
+def renomear(qid: str, ref, novo_nome: str, nova_definicao: str | None = None, por: str | None = None) -> dict:
+    """Muda nome e/ou definição. O histórico guarda o antes e o depois dos dois."""
     f = _exigir_frame(qid)
     c = _cat(f, ref)
-    antigo = c["nome"]
+    antigo, def_antiga = c["nome"], c.get("definicao", "")
     c["nome"] = novo_nome.strip()
     if nova_definicao:
         c["definicao"] = nova_definicao.strip()
-    _registrar(f, "renomear", codigo=c["codigo"], de=antigo, para=c["nome"])
+    if (c["nome"], c["definicao"]) == (antigo, def_antiga):
+        return f
+    extra = {"definicao_de": def_antiga, "definicao_para": c["definicao"]} if c["definicao"] != def_antiga else {}
+    _marcar_edicao(c, por)
+    _registrar(f, "renomear" if c["nome"] != antigo else "definir", codigo=c["codigo"], de=antigo, para=c["nome"], por=por, **extra)
+    _gravar(qid, "frame.json", f)
+    return f
+
+
+def _limpar_keywords(kws, bloqueadas=None) -> list[str]:
+    """Sem vazias, sem repetidas (ignorando acento e caixa) e sem as que alguém bloqueou."""
+    bloq = {V.norm(k) for k in bloqueadas or []}
+    vistas, saida = set(), []
+    for k in kws or []:
+        k = " ".join(str(k).split()).strip(" ,;.").lower()
+        n = V.norm(k)
+        if n and n not in vistas and n not in bloq:
+            vistas.add(n)
+            saida.append(k)
+    return saida
+
+
+def _marcar_edicao(c: dict, por: str | None) -> None:
+    c["atualizado_em"] = datetime.now().isoformat(timespec="seconds")
+    c["atualizado_por"] = f"humano:{por}" if por else "humano"
+
+
+def editar_keywords(qid: str, ref, adicionar=(), remover=(), fixar=(), por: str | None = None) -> dict:
+    """Coluna de palavras-chave da categoria.
+    adicionar: vira keyword fixa (e sai das bloqueadas);
+    remover  : sai das fixas e das aprendidas e fica BLOQUEADA (o aprendizado não a traz de volta);
+    fixar    : uma keyword aprendida (keywords_auto) passa a ser fixa."""
+    f = _exigir_frame(qid)
+    c = _cat(f, ref)
+    campos = ("keywords", "keywords_auto", "keywords_bloqueadas")
+    antes = {k: list(c.get(k) or []) for k in campos}
+    novas = _limpar_keywords(adicionar)
+    n_novas, tira, fix = {V.norm(k) for k in novas}, {V.norm(k) for k in remover}, {V.norm(k) for k in fixar}
+    auto = list(c.get("keywords_auto") or [])
+    fixas = _limpar_keywords((c.get("keywords") or []) + [k for k in auto if V.norm(k) in fix] + novas)
+    c["keywords"] = [k for k in fixas if V.norm(k) not in tira]
+    c["keywords_auto"] = [k for k in auto if V.norm(k) not in tira | fix | n_novas]
+    bloq = _limpar_keywords([k for k in c.get("keywords_bloqueadas") or [] if V.norm(k) not in n_novas] + list(remover))
+    if bloq:
+        c["keywords_bloqueadas"] = bloq
+    else:
+        c.pop("keywords_bloqueadas", None)
+    depois = {k: list(c.get(k) or []) for k in campos}
+    if depois == antes:
+        return f
+    _marcar_edicao(c, por)
+    _registrar(f, "keywords", codigo=c["codigo"], antes=antes, depois=depois, por=por)
     _gravar(qid, "frame.json", f)
     return f
 
@@ -520,6 +586,8 @@ def fundir(qid: str, destino, *origens) -> dict:
         if c.get("fixa"):
             raise ValueError("categorias fixas (Outros, NS/NR) não podem ser fundidas")
         d["exemplos"] = (d.get("exemplos") or []) + (c.get("exemplos") or [])
+        if c.get("keywords"):
+            d["keywords"] = _limpar_keywords((d.get("keywords") or []) + c["keywords"], d.get("keywords_bloqueadas"))
         remap[c["codigo"]] = d["codigo"]
         f["categorias"].remove(c)
     _registrar(f, "fundir", destino=d["codigo"], origens=list(remap))
@@ -528,12 +596,14 @@ def fundir(qid: str, destino, *origens) -> dict:
     return f
 
 
-def adicionar(qid: str, nome: str, definicao: str = "") -> dict:
+def adicionar(qid: str, nome: str, definicao: str = "", por: str | None = None) -> dict:
     f = _exigir_frame(qid)
     usados = [c["codigo"] for c in f["categorias"] if not c.get("fixa")]
     codigo = (max(usados) + 1) if usados else 1
-    f["categorias"].insert(len(usados), {"codigo": codigo, "nome": nome.strip(), "definicao": definicao.strip(), "exemplos": [], "fixa": False})
-    _registrar(f, "adicionar", codigo=codigo, nome=nome)
+    nova = {"codigo": codigo, "nome": nome.strip(), "definicao": definicao.strip(), "exemplos": [], "keywords": [], "fixa": False}
+    _marcar_edicao(nova, por)
+    f["categorias"].insert(len(usados), nova)
+    _registrar(f, "adicionar", codigo=codigo, nome=nome, por=por)
     _gravar(qid, "frame.json", f)
     return f
 
@@ -581,5 +651,6 @@ def texto_frame(qid: str) -> str:
     linhas = [f"{qid} - frame [{f['status']}] {f.get('enunciado') or ''}"]
     for c in f["categorias"]:
         ex = "; ".join(c.get("exemplos") or [])
-        linhas.append(f"  {c['codigo']:>3}  {c['nome']:<40} {c['definicao']}" + (f"  ex.: {ex}" if ex else ""))
+        kws = ", ".join((c.get("keywords") or []) + [f"{k}*" for k in c.get("keywords_auto") or []])  # * = aprendida
+        linhas.append(f"  {c['codigo']:>3}  {c['nome']:<40} {c['definicao']}" + (f"  [{kws}]" if kws else "") + (f"  ex.: {ex}" if ex else ""))
     return "\n".join(linhas)

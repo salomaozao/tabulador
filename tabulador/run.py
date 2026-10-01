@@ -12,6 +12,9 @@
   python run.py frame <QID> adicionar "Nome" ["definição"]
   python run.py frame <QID> remover <cod>
   python run.py frame <QID|all> aprovar
+  python run.py frame <QID> keywords <cod> adicionar|remover|fixar "termo" [...]   palavras-chave (remover bloqueia; fixar = aprendida vira fixa)
+  python run.py frame <QID|all> saude                    alertas do quadro tirados da revisão (confusão, ampla, rara, Outros...)
+  python run.py frame <QID|all> aprender                 recalcula já as keywords aprendidas com a revisão humana
   python run.py code <QID|all> [--forcar]                codifica contra o frame aprovado (+ revisao.xlsx + relatório)
   python run.py code <QID> exportar                      gera revisao.xlsx
   python run.py code <QID> importar                      aplica as correções do revisao.xlsx
@@ -85,6 +88,17 @@ def cmd_frame(a):
         elif a.acao == "aprovar":
             CF.aprovar(qid)
             print(f"  {qid}: frame aprovado")
+        elif a.acao == "keywords":  # keywords <cod> adicionar|remover|fixar termo [termo...]
+            if len(a.args) < 3 or a.args[1] not in ("adicionar", "remover", "fixar"):
+                sys.exit('uso: frame <QID> keywords <cod> adicionar|remover|fixar "termo" ["termo"...]')
+            CF.editar_keywords(qid, a.args[0], **{a.args[1]: a.args[2:]})
+            print(CF.texto_frame(qid))
+        elif a.acao in ("saude", "aprender"):
+            import aprendizado
+            if a.acao == "aprender":
+                r = aprendizado.aprender(qid, forcar=True)
+                print(f"  {qid}: {len(r.get('mudancas') or [])} categoria(s) com keywords aprendidas atualizadas" if r.get("rodou") else f"  {qid}: {r['motivo']}")
+            print(aprendizado.texto_saude(qid))
         else:
             sys.exit(f"ação desconhecida: {a.acao}")
 

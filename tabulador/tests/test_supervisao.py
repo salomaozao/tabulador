@@ -171,12 +171,12 @@ class TestSupervisao(unittest.TestCase):
     def test_8_erro_conta_como_faltante(self):
         cod = CD.codificacao(QID)
         alvo = [i for i in cod["itens"] if not i.get("validado") and i.get("origem") == "llm"][:3]
-        for i in alvo:  # simula lotes que falharam por cota esgotada
+        for i in alvo:  # simula o legado: versões antigas gravavam lote que falhou como 'Outros' (origem 'erro')
             i.update(primaria=CF.CODIGO_OUTROS, origem="erro", confianca=0.0)
         CF._gravar(QID, "codificacao.json", cod)
         r = CD.resumo_revisao(QID)
-        self.assertEqual(r["n_erros"], 3)
-        self.assertGreaterEqual(r["n_faltantes"], 3)
+        self.assertEqual(r["n_erros"], 0)  # a leitura limpa o legado: voltam a 'não classificadas'…
+        self.assertGreaterEqual(r["n_faltantes"], 3)  # …e contam como faltantes (não como Outros)
         with self.assertRaises(RuntimeError):
             CD.aprovar(QID)
         CD.codificar(QID, somente_faltantes=True)  # "Classificar as restantes" refaz as com erro

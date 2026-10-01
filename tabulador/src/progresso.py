@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from datetime import datetime
 
 _lock = threading.Lock()
+_parar_evento = threading.Event()
 ESTADO: dict = {"ativo": False, "id": 0}
 
 
@@ -28,15 +29,29 @@ def _agora() -> float:
 def iniciar(titulo: str, etapas: list, **extra) -> None:
     """etapas: [(chave, nome) | (chave, nome, peso)] — o peso define quanto da barra a etapa ocupa."""
     with _lock:
+        _parar_evento.clear()
         ident = ESTADO.get("id", 0) + 1
         ESTADO.clear()
         ESTADO.update(
-            ativo=True, id=ident, titulo=titulo, inicio=_agora(), fim=None, erro=None,
+            ativo=True, id=ident, titulo=titulo, inicio=_agora(), fim=None, erro=None, parando=False,
             etapas=[{"chave": e[0], "nome": e[1], "peso": e[2] if len(e) > 2 else 1, "estado": "pendente",
                      "detalhe": "", "inicio": None, "fim": None, "estimativa": None} for e in etapas],
             feitos=0, total=0, unidade="respostas", lotes_feitos=0, lotes_total=0, erros=0, limite_atingido=False,
             ia_ativas=0, ia_feitas=0, ia_erros=0, tokens=0, eventos=[], **extra,
         )
+
+
+def pedir_parada() -> None:
+    """Chamado por /api/parar: pede para a operação em curso parar assim que puder (lotes já
+    disparados terminam; os que ainda não começaram são cancelados). Sem efeito se nada está ativo."""
+    with _lock:
+        if ESTADO.get("ativo"):
+            ESTADO["parando"] = True
+    _parar_evento.set()
+
+
+def parada_pedida() -> bool:
+    return _parar_evento.is_set()
 
 
 def _achar(chave: str) -> dict | None:

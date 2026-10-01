@@ -18,6 +18,7 @@ from datetime import datetime
 
 import pandas as pd
 
+import aprendizado
 import codeframe as CF
 import config
 import progresso
@@ -51,15 +52,13 @@ SCHEMA_CODIFICACAO = {
 }
 
 
-def _prompt(qid: str, frame: dict, enunciado: str, lote: list[dict]) -> tuple[str, str]:
+def _prompt(qid: str, frame: dict, enunciado: str, lote: list[dict], ensino: dict | None = None) -> tuple[str, str]:
+    """`ensino` = aprendizado.ensino(qid): exemplos conferidos por humano e casos já corrigidos por categoria."""
     system = (
         "Você é um codificador sênior de pesquisa de mercado. Classifica respostas abertas contra um "
         "code frame FECHADO e aprovado. Nunca inventa categorias. Responde em português do Brasil."
     )
-    cats = "\n".join(
-        f"  {c['codigo']}: {c['nome']} - {c['definicao']}" + (f" (ex.: {'; '.join(c['exemplos'][:3])})" if c.get("exemplos") else "")
-        for c in frame["categorias"]
-    )
+    cats = aprendizado.bloco_categorias(frame, ensino)
     def _linha(r):
         obs = r.get("comentario")
         return f"  rid {r['rid']}: \"{r['texto']}\"" + (f"   [OBSERVAÇÃO DO PESQUISADOR - siga obrigatoriamente: {obs}]" if obs else "")
@@ -100,13 +99,14 @@ def _progresso(**kw) -> None:
 
 def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], itens: dict, codigos_validos: dict) -> dict:
     """Codifica `pendentes` via LLM em lotes (config.LLM_PARALELO chamadas simultâneas) e preenche
-    `itens` (rid -> item). Lote que falha vira origem 'erro' (alerta); se TODOS falharem, levanta o erro.
-    Se algum lote falhar por cota/limite do provedor esgotado, os lotes ainda não iniciados são
-    cancelados (não vale insistir) e ficam pendentes — não entram em `itens` nem viram 'erro' — para
-    serem retomados na próxima classificação. Retorna {'limite_atingido', 'nao_tentados'}."""
+    `itens` (rid -> item). Lote que falha NÃO entra em `itens` (nada de 'Outros' falso): a resposta
+    continua sem classificação e volta em "Classificar as restantes"; se TODOS falharem, levanta o erro.
+    Idem para resposta que a IA não devolveu. Se algum lote falhar por cota/limite do provedor, ou a
+    pessoa pedir para parar (/api/parar), os lotes ainda não iniciados são cancelados e também ficam
+    pendentes. Retorna {'limite_atingido', 'parado_usuario', 'nao_tentados', 'n_erro'}."""
     lotes = [pendentes[i:i + config.LLM_LOTE] for i in range(0, len(pendentes), config.LLM_LOTE)]
     if not lotes:
-        return {"limite_atingido": False, "nao_tentados": 0}
+        return {"limite_atingido": False, "parado_usuario": False, "nao_tentados": 0, "n_erro": 0}
     _progresso(ativo=True, qid=qid, feitos=0, total=len(pendentes), erros=0, limite_atingido=False)
     par = min(config.paralelo(), len(lotes))
     media = progresso.tempo_medio("code_")
@@ -115,14 +115,15 @@ def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], i
     progresso.etapa("ia", f"{len(pendentes)} respostas em {len(lotes)} lote(s) de até {config.LLM_LOTE} · {par} chamada(s) ao mesmo tempo · modelo {config.OPENAI_MODEL}",
                     estimativa=media * -(-len(lotes) // par) if media else None)
     t_ini = time.time()
+    ensino = aprendizado.ensino(qid, frame)  # uma vez por rodada: o que a revisão humana já ensinou
 
     def _um(k_lote):
         k, lote = k_lote
-        system, user = _prompt(qid, frame, enunciado, lote)
+        system, user = _prompt(qid, frame, enunciado, lote, ensino)
         return llm.chamar_json(system, user, SCHEMA_CODIFICACAO, nome=f"code_{qid}_{k + 1}")
 
     resultados, falhas = {}, []
-    limite_atingido = False
+    limite_atingido = parado_usuario = False
     with ThreadPoolExecutor(max_workers=config.paralelo()) as ex:
         futuros = {ex.submit(_um, (k, lote)): k for k, lote in enumerate(lotes)}
         for fut in as_completed(futuros):
@@ -144,31 +145,30 @@ def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], i
                                 erros=len(falhas), limite_atingido=limite_atingido)
             progresso.evento(f"Lote {k + 1} de {len(lotes)} {'com ERRO' if resultados[k] is None else 'concluído'} "
                              f"({len(lotes[k])} respostas) · {PROGRESSO['feitos']} de {len(pendentes)} prontas em {time.time() - t_ini:.0f} s")
+            if not limite_atingido and not parado_usuario and progresso.parada_pedida():
+                parado_usuario = True  # o que já rodou fica salvo; o resto continua pendente p/ a próxima vez
+                for outro in futuros:  # só cancela quem ainda não começou a rodar
+                    if outro is not fut:
+                        outro.cancel()
+                progresso.evento("Parando a pedido — o que já foi classificado fica salvo.")
     progresso.etapa("gravar", "juntando as respostas classificadas e salvando")
     _progresso(ativo=False)
     nao_tentados = sum(len(lote) for k, lote in enumerate(lotes) if k not in resultados)
     if falhas and len(falhas) == len(resultados) and resultados:
         raise falhas[0]
-    if not resultados and limite_atingido:
-        # nenhum lote chegou a rodar (limite já esgotado desde o primeiro) — nada para gravar aqui
-        return {"limite_atingido": True, "nao_tentados": nao_tentados}
+    n_erro = 0
     for k, lote in enumerate(lotes):
         if k not in resultados:
-            continue  # cancelado por limite: permanece pendente para a próxima tentativa
+            continue  # cancelado por limite ou parada: permanece pendente para a próxima tentativa
         saida = resultados[k]
         if saida is None:
-            for r in lote:
-                itens[r["rid"]] = {"rid": r["rid"], "primaria": CF.CODIGO_OUTROS, "secundaria": None, "confianca": 0.0,
-                                   "justificativa": f"erro na chamada à IA: {str(falhas[0])[:120]}", "origem": "erro"}
-                if r.get("comentario"):
-                    itens[r["rid"]]["comentario"] = r["comentario"]
+            n_erro += len(lote)  # erro na chamada: permanece pendente (não vira 'Outros')
             continue
         devolvidos = {c["rid"]: c for c in saida["codificacoes"]}
         for r in lote:
             c = devolvidos.get(r["rid"])
             if c is None:
-                itens[r["rid"]] = {"rid": r["rid"], "primaria": CF.CODIGO_OUTROS, "secundaria": None, "confianca": 0.0,
-                                   "justificativa": "LLM não devolveu esta resposta", "origem": "erro"}
+                n_erro += 1  # a IA pulou esta resposta: permanece pendente
                 continue
             prim = c["primaria"] if c["primaria"] in codigos_validos else CF.CODIGO_OUTROS
             sec = c["secundaria"] if c["secundaria"] in codigos_validos and c["secundaria"] != prim else None
@@ -176,13 +176,13 @@ def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], i
             if c["primaria"] not in codigos_validos:
                 conf = 0.0
             novo = {"rid": r["rid"], "primaria": prim, "secundaria": sec, "confianca": round(max(0.0, min(1.0, conf)), 2),
-                    "justificativa": c.get("justificativa", ""), "origem": "llm"}
+                    "justificativa": c.get("justificativa", ""), "origem": "llm", "frame_versao": int(frame.get("versao") or 1)}
             if r.get("comentario"):
                 novo["comentario"] = r["comentario"]
                 novo["origem"] = "llm+comentario"
                 novo["comentario_aplicado_em"] = datetime.now().isoformat(timespec="seconds")
             itens[r["rid"]] = novo
-    return {"limite_atingido": limite_atingido, "nao_tentados": nao_tentados}
+    return {"limite_atingido": limite_atingido, "parado_usuario": parado_usuario, "nao_tentados": nao_tentados, "n_erro": n_erro}
 
 
 def _protegido(item: dict, codigos_validos: dict) -> bool:
@@ -201,6 +201,18 @@ def _amostra(pendentes: list[dict], limite: int) -> list[dict]:
     return topo + random.Random(0).sample(resto, limite - len(topo))
 
 
+def _aprender_antes(qid: str) -> None:
+    """Antes de mandar respostas à IA, atualiza o que o quadro aprendeu com a revisão humana
+    (keywords aprendidas; só roda se a revisão avançou: aprendizado.aprender). Nunca impede a classificação."""
+    try:
+        r = aprendizado.aprender(qid)
+    except Exception as e:  # noqa: BLE001
+        progresso.evento(f"O aprendizado do quadro não rodou ({e}); a classificação segue com o quadro atual.")
+        return
+    if r.get("mudancas"):
+        progresso.evento(f"Quadro atualizado com a revisão: palavras-chave aprendidas em {len(r['mudancas'])} categoria(s) · versão {r['versao']}")
+
+
 def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
               limite: int | None = None, somente_faltantes: bool = False) -> dict:
     """Codifica as respostas únicas. Se já houver codificação, mantém as correções/confirmações do
@@ -209,6 +221,7 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
     limite            : classifica só uma amostra de `limite` respostas (para validar antes de rodar tudo)
     somente_faltantes : mantém tudo que já foi classificado e envia à IA só o que falta
     """
+    _aprender_antes(qid)
     frame = CF.frame(qid)
     if not frame or frame.get("status") != "aprovado":
         raise RuntimeError(f"{qid}: frame não aprovado. Rode: python run.py frame {qid} aprovar")
@@ -241,6 +254,10 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
                 itens[rid] = anteriores[rid]
         pendentes = escolhidos
     info = _chamar_lote(qid, frame, dados.get("enunciado") or V.por_id(qid).get("rotulo"), pendentes, itens, codigos_validos)
+    for r in pendentes:  # lote que falhou ou foi parado: não apaga o que a IA já tinha classificado antes
+        ant = anteriores.get(r["rid"])
+        if r["rid"] not in itens and ant and ant.get("primaria") in codigos_validos and ant.get("origem") != "erro":
+            itens[r["rid"]] = ant
     cod = {
         "pergunta": qid,
         "status": "rascunho",
@@ -252,6 +269,8 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
     CF._gravar(qid, "codificacao.json", cod)
     cod["_limite_atingido"] = info["limite_atingido"]
     cod["_nao_tentados"] = info["nao_tentados"]
+    cod["_parado_usuario"] = info["parado_usuario"]
+    cod["_n_erro"] = info["n_erro"]
     return cod
 
 
@@ -260,6 +279,7 @@ def recodificar(qid: str, rids: list[int] | None = None, apenas_comentados: bool
     ainda não aplicado). O comentário vai no prompt como instrução obrigatória.
     nao_revisados=True: todas as já classificadas que o pesquisador ainda não corrigiu/confirmou
     (o 'Reclassificar tudo' da interface; não classifica as que estão fora da amostra)."""
+    _aprender_antes(qid)
     frame = CF.frame(qid)
     if not frame or frame.get("status") != "aprovado":
         raise RuntimeError(f"{qid}: frame não aprovado")
@@ -290,13 +310,17 @@ def recodificar(qid: str, rids: list[int] | None = None, apenas_comentados: bool
     cod["_recodificados"] = len(novos)
     cod["_limite_atingido"] = info["limite_atingido"]
     cod["_nao_tentados"] = info["nao_tentados"]
+    cod["_parado_usuario"] = info["parado_usuario"]
+    cod["_n_erro"] = info["n_erro"]
     return cod
 
 
-def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", comentario="__manter__", validado=None) -> dict:
+def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", comentario="__manter__", validado=None,
+                   por: str | None = None) -> dict:
     """Correção manual de uma resposta (vinda da interface): categoria primária/secundária,
     comentário para a IA e/ou confirmação ('validado': a IA acertou). Mudança de categoria marca
-    origem='humano'; correções e confirmações ficam protegidas em reclassificações."""
+    origem='humano'; correções e confirmações ficam protegidas em reclassificações.
+    `por` = nome de quem revisou (vai em `revisado_por`)."""
     frame = CF._exigir_frame(qid)
     cod = codificacao(qid)
     if not cod:
@@ -313,7 +337,9 @@ def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", c
         ordem = {r["rid"]: k for k, r in enumerate(CF.respostas(qid)["respostas"])}
         cod["itens"].sort(key=lambda i: ordem.get(i["rid"], 0))
     anterior = item.get("primaria")
-    mudou = False
+    # item com erro de IA (versões antigas gravavam 'Outros' com origem 'erro'): escolher ou confirmar a
+    # categoria à mão é decisão humana. Antes ele ficava preso como 'erro' e nunca contava como conferido.
+    mudou = item.get("origem") == "erro" and (primaria is not None or bool(validado))
     if primaria is not None:
         novo = CF._cat(frame, primaria)["codigo"]
         if novo != item["primaria"]:
@@ -335,16 +361,18 @@ def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", c
                 item.pop("comentario", None)
     agora = datetime.now().isoformat(timespec="seconds")
     if mudou:
-        if item.get("origem") not in ("humano", None) and "corrigido_de" not in item:
+        if item.get("origem") not in ("humano", "erro", None) and "corrigido_de" not in item:
             item["corrigido_de"] = anterior  # a IA tinha classificado diferente (entra na taxa de acerto)
         item["origem"] = "humano"
         item["confianca"] = 1.0
         item["revisado_em"] = agora
+        _quem(item, por)
         for c in ("validado", "validado_em", "validado_por"):
             item.pop(c, None)
     elif validado is not None:
         if validado:
             item["validado"], item["validado_em"], item["validado_por"] = True, agora, "humano"
+            _quem(item, por)
         else:
             for c in ("validado", "validado_em", "validado_por"):
                 item.pop(c, None)
@@ -353,7 +381,14 @@ def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", c
     return item
 
 
-def validar(qid: str, rids: list[int], valor: bool = True) -> int:
+def _quem(item: dict, por: str | None) -> None:
+    if por:
+        item["revisado_por"] = por
+    else:
+        item.pop("revisado_por", None)
+
+
+def validar(qid: str, rids: list[int], valor: bool = True, por: str | None = None) -> int:
     """Confirma (ou desfaz a confirmação de) várias respostas de uma vez. Retorna quantas mudaram."""
     cod = codificacao(qid)
     if not cod:
@@ -364,8 +399,13 @@ def validar(qid: str, rids: list[int], valor: bool = True) -> int:
     for item in cod["itens"]:
         if item["rid"] not in alvo or item.get("primaria") is None or item.get("origem") == "humano":
             continue
-        if valor and not item.get("validado"):
+        if valor and item.get("origem") == "erro":  # confirmar um item com erro de IA = decisão humana
+            item.update(origem="humano", confianca=1.0, revisado_em=agora)
+            _quem(item, por)
+            n += 1
+        elif valor and not item.get("validado"):
             item["validado"], item["validado_em"], item["validado_por"] = True, agora, "humano"
+            _quem(item, por)
             n += 1
         elif not valor and item.get("validado"):
             for c in ("validado", "validado_em", "validado_por"):
@@ -417,7 +457,23 @@ def resumo_revisao(qid: str) -> dict:
 
 
 def codificacao(qid: str) -> dict | None:
-    return CF._ler(qid, "codificacao.json")
+    """Lê a codificação já limpando o legado de erro de IA. Versões antigas gravavam a resposta cuja
+    chamada falhou como 'Outros' (origem 'erro'), o que inflava Outros no painel e nos resultados. Agora ela
+    volta a 'não classificada' (é refeita em "Classificar as restantes"). A exceção é a que alguém
+    confirmou à mão, que passa a contar como decisão humana. Na próxima gravação o arquivo sai limpo."""
+    cod = CF._ler(qid, "codificacao.json")
+    if not cod:
+        return cod
+    itens = []
+    for i in cod.get("itens", []):
+        if i.get("origem") == "erro":
+            if i.get("validado"):
+                i.update(origem="humano", confianca=1.0)
+            elif not i.get("comentario"):
+                continue  # sem comentário para guardar: some, e a resposta fica para classificar
+        itens.append(i)
+    cod["itens"] = itens
+    return cod
 
 
 def alertas_item(item: dict, frame: dict) -> list[str]:
