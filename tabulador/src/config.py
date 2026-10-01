@@ -168,6 +168,25 @@ LLM_LOTE = int(os.getenv("ASSERTIVA_LOTE", "30"))  # respostas únicas por chama
 LLM_PARALELO = int(os.getenv("TABULADOR_PARALELO", "4"))  # chamadas simultâneas à OpenAI
 MAX_RESPOSTAS_INDUCAO = int(os.getenv("TABULADOR_MAX_INDUCAO", "1500"))  # amostra lida ao propor categorias
 
+# loop de aprendizado do quadro (src/aprendizado.py): o que a revisão humana ensina a cada categoria.
+# 0 em FEWSHOT_ANCORAS/FEWSHOT_LIMITE desliga o bloco correspondente no prompt.
+FEWSHOT_ANCORAS = int(os.getenv("TABULADOR_FEWSHOT_ANCORAS", "3"))  # respostas conferidas por humano por categoria
+FEWSHOT_LIMITE = int(os.getenv("TABULADOR_FEWSHOT_LIMITE", "2"))  # casos-limite ("é X, não Y") por categoria
+FEWSHOT_MAX_CHARS = 140  # texto de exemplo mais longo que isso é cortado no prompt
+KEYWORDS_MIN_FREQ = 3  # respostas conferidas que precisam ter o termo para ele virar keyword aprendida
+KEYWORDS_MAX = 6  # keywords aprendidas por categoria
+APRENDIZADO_A_CADA = 25  # revisões humanas novas na pergunta para reaprender antes de classificar
+# alertas de saúde do quadro (sobrescrevíveis pelo projeto.py com o mesmo nome: ver aprendizado._limiar)
+SAUDE_CONFUSAO_MIN = 5  # correções X -> Y para acusar confusão entre as duas
+SAUDE_CONFUSAO_PCT = 0.20  # ... ou esta fração das correções que saíram de X
+SAUDE_AMPLA_PCT = 0.25  # categoria com mais que isto das respostas classificadas...
+SAUDE_AMPLA_CONF = 0.75  # ... e confiança média da IA abaixo disto: candidata a separar
+SAUDE_AMPLA_DESTINOS = 3  # correções saindo de X para tantas categorias diferentes: candidata a separar
+SAUDE_RARA_PCT = 0.01  # categoria com menos que isto das respostas...
+SAUDE_RARA_MIN_BASE = 300  # ... depois de pelo menos tantas classificadas: candidata a mesclar
+SAUDE_OUTROS_PCT = 0.05  # Outros acima disto: falta categoria
+SAUDE_AUDITOR_PCT = 0.05  # auditor discordando de mais que isto: definição com buraco
+
 
 def carregar_env_extra(caminho: Path | None) -> None:
     global OPENAI_API_KEY

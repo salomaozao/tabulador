@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Protótipo · topo limpo + progresso cronológico</title>
+<style>
+  :root{
+    --surface:#fcfcfb; --surface-2:#f1f0ee; --surface-3:#e6e4df; --border:#dedcd7;
+    --text:#0b0b0b; --text-2:#52514e; --text-3:#7d7b76;
+    --accent:#2a78d6; --accent-2:#9ec5f4; --ok:#1b7f4d; --ok-bg:#e3f5ea;
+    --warn:#8a5300; --warn-bg:#fff4e0; --human:#4a3aa7; --human-bg:#ebe8fb;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#eeedea;color:var(--text);
+       font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 22px 60px}
+  .h1{font-size:19px;font-weight:650;margin:0 0 4px}
+  .lead{color:var(--text-2);margin:0 0 6px;max-width:74ch}
+  h2.sec{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-3);
+         margin:34px 0 10px;font-weight:600}
+  .app{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--surface);
+       box-shadow:0 1px 2px rgba(0,0,0,.05),0 12px 32px rgba(0,0,0,.06)}
+  .note{display:flex;gap:8px;background:var(--surface-2);border:1px solid var(--border);
+        border-radius:8px;padding:10px 12px;margin:8px 0;font-size:13px;color:var(--text-2)}
+  .note b{color:var(--text)}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--surface-3);
+       padding:1px 5px;border-radius:4px}
+  .small{font-size:12px;color:var(--text-3)}
+  .btn{font:inherit;padding:6px 12px;border-radius:7px;border:1px solid var(--border);
+       background:var(--surface-2);color:var(--text);cursor:pointer;white-space:nowrap}
+  .btn:hover{background:var(--surface-3)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .btn.ghost{background:transparent}
+
+  /* ---------------- topo */
+  .top{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--border);
+       background:var(--surface);position:relative;z-index:3}
+  .brand{font-weight:600;font-size:14px;color:var(--text-2);flex:none}
+  .proj{position:relative}
+  .proj-btn{display:flex;align-items:center;gap:8px;font:inherit;font-size:16px;font-weight:650;
+            padding:6px 11px;border:1px solid var(--border);border-radius:8px;background:var(--surface);
+            cursor:pointer}
+  .proj-btn:hover{background:var(--surface-2)}
+  .proj-btn .chev{font-size:11px;color:var(--text-3);transition:transform .15s}
+  .proj.aberto .proj-btn .chev{transform:rotate(180deg)}
+  .proj-panel{position:absolute;top:calc(100% + 6px);left:0;min-width:320px;background:var(--surface);
+              border:1px solid var(--border);border-radius:10px;padding:6px;
+              box-shadow:0 10px 30px rgba(0,0,0,.14);z-index:9}
+  .proj-panel.hidden{display:none}
+  .proj-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13.5px}
+  .proj-item:hover{background:var(--surface-2)}
+  .proj-item .tick{width:15px;color:var(--accent);font-weight:700}
+  .proj-item .slug{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--text-3)}
+  .proj-foot{border-top:1px solid var(--border);margin-top:6px;padding-top:6px}
+  .proj-foot .btn{width:100%;justify-content:center;text-align:center}
+  .grow{flex:1}
+  .ia-status{font-size:12px;color:var(--text-2);white-space:nowrap}
+  .nuvem{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-2);white-space:nowrap}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px var(--ok-bg);flex:none}
+
+  /* faixa de teste (só aparece com o modo teste ligado) */
+  .faixa-teste{background:var(--warn-bg);color:var(--warn);border-bottom:1px solid var(--border);
+               padding:7px 16px;font-size:12.5px;display:flex;align-items:center;gap:10px}
+
+  /* ---------------- cabeçalho do projeto */
+  main{padding:18px 20px 26px}
+  .cab{display:grid;grid-template-columns:minmax(230px,300px) 1fr;gap:26px;align-items:center;
+       border:1px solid var(--border);border-radius:12px;padding:16px 20px;background:var(--surface-2)}
+  .pct-grande{font-family:var(--mono);font-size:76px;font-weight:600;line-height:.92;letter-spacing:-.03em}
+  .pct-grande small{font-size:30px;color:var(--text-3)}
+  .pct-lab{font-size:13px;color:var(--text-2);margin-top:4px}
+  .pct-sec{font-size:12.5px;color:var(--text-3);margin-top:6px}
+  .pilha{display:flex;height:9px;border-radius:5px;overflow:hidden;background:var(--surface-3);margin-top:10px}
+  .pilha i{display:block;height:100%}
+  .pilha .rev{background:var(--ok)} .pilha .cls{background:var(--accent-2)} .pilha .nada{background:var(--surface-3)}
+  .legenda{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--text-3);margin-top:7px}
+  .legenda span{display:flex;align-items:center;gap:6px}
+  .sw{width:14px;height:3px;border-radius:2px;display:inline-block}
+  .sw.ok{background:var(--ok)} .sw.acc{background:var(--accent)}
+  .chart{border-left:1px solid var(--border);padding-left:22px}
+
+  /* ---------------- perguntas (cards do painel) */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+  .card{position:relative;border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface)}
+  .card .rot{font-weight:600;padding-right:96px}
+  .contador{position:absolute;top:10px;right:12px;text-align:right;font-family:var(--mono)}
+  .contador .n{font-size:20px;font-weight:600;line-height:1}
+  .contador .n i{color:var(--text-3);font-style:normal;font-size:14px}
+  .contador .lab{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);margin-top:2px}
+  .contador .bar{width:84px;height:4px;border-radius:3px;background:var(--surface-3);margin-top:5px;margin-left:auto;overflow:hidden}
+  .contador .bar i{display:block;height:100%;background:var(--ok)}
+  .pill{font-size:11px;padding:1px 7px;border-radius:20px;background:var(--surface-3);color:var(--text-2)}
+  .pill.ok{background:var(--ok-bg);color:var(--ok)} .pill.acc{background:#e8f1fd;color:var(--accent)}
+
+  /* ---------------- perguntas: badge sticky */
+  .vitrine{height:300px;overflow:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+  .q-cab{position:sticky;top:0;z-index:2;background:var(--surface);border-bottom:1px solid var(--border);
+         padding:12px 16px;display:flex;align-items:flex-start;gap:16px}
+  .q-cab .txt{flex:1;min-width:0}
+  .q-cab h3{margin:0;font-size:17px}
+  .q-cab .sub{font-size:12.5px;color:var(--text-2);margin-top:3px}
+  .sticky-num{position:sticky;top:12px;float:right;text-align:right;font-family:var(--mono);
+              background:var(--surface-2);border:1px solid var(--border);border-radius:10px;
+              padding:8px 12px;margin-left:14px}
+  .sticky-num .n{font-size:26px;font-weight:600;line-height:1}
+  .sticky-num .n i{color:var(--text-3);font-style:normal;font-size:17px}
+  .sticky-num .lab{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-3);margin-top:3px}
+  .sticky-num .bar{width:118px;height:5px;border-radius:3px;background:var(--surface-3);margin-top:6px;overflow:hidden}
+  .sticky-num .bar i{display:block;height:100%;background:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--border)}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-3);font-weight:600;background:var(--surface-2)}
+  td.num{font-family:var(--mono)}
+  .dlg{border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:14px 16px;max-width:520px}
+  .dlg h4{margin:0 0 10px;font-size:15px}
+  .campo{display:block;margin:10px 0;font-size:13px}
+  .campo select,.campo input{display:block;width:100%;margin-top:4px;padding:6px 8px;
+        border:1px solid var(--border);border-radius:6px;background:var(--surface);font:inherit}
+  .switch{display:flex;align-items:center;gap:9px;border:1px solid var(--border);border-radius:8px;
+          padding:9px 11px;background:var(--surface-2);font-size:13px;margin-top:12px}
+  .row{display:flex;align-items:center;gap:12px;border:1px solid var(--border);border-radius:8px;
+       padding:10px 12px;background:var(--surface);margin-top:8px}
+  .duas{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:820px){.cab{grid-template-columns:1fr}.chart{border-left:0;padding-left:0}.duas{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="h1">Protótipo — topo enxuto e leitura cronológica do projeto</div>
+  <p class="lead">Mockup estático do Tabulador com as mudanças pedidas: o topo fica só com o essencial, a seleção
+  de projeto vira um menu no próprio título, e o andamento passa a ser lido em % de perguntas com um gráfico de
+  progressão. Nada aqui é o app real — é para bater o olho e dizer o que fica.</p>
+
+  <h2 class="sec">1 · Topo enxuto — o que sai e para onde vai</h2>
+  <div class="note"><span>🧪</span><div><b>Modo teste</b> → para dentro de <code>⚙ Configurar IA</code> (e a faixa amarela
+    continua aparecendo no topo só enquanto ele estiver ligado, porque é estado, não botão).</div></div>
+  <div class="note"><span>↻</span><div><b>Recarregar planilha</b> → para dentro de <code>🛠 Gerenciar projeto</code>:
+    é ação rara e é lá que vivem as ações de base.</div></div>
+  <div class="note"><span>▾</span><div><b>Seletor de projeto</b> + <b>+ Novo projeto</b> → viram um menu no título
+    do projeto. O topo deixa de ter um <code>&lt;select&gt;</code> anônimo no meio da barra.</div></div>
+
+  <h2 class="sec">2 · O topo depois</h2>
+  <div class="app">
+    <header class="top">
+      <div class="brand">Tabulador</div>
+      <div class="proj aberto" id="proj">
+        <button class="proj-btn" id="proj-btn">SESI Minas <span class="chev">▼</span></button>
+        <div class="proj-panel" id="proj-panel">
+          <div class="proj-item"><span class="tick">✓</span>SESI Minas<span class="slug">sesi</span></div>
+          <div class="proj-item"><span class="tick"></span>Assertiva — colaboradores<span class="slug">assertiva</span></div>
+          <div class="proj-item"><span class="tick"></span>AE onco — 2ª onda<span class="slug">ae_onco</span></div>
+          <div class="proj-foot"><button class="btn">+ Novo projeto</button></div>
+        </div>
+      </div>
+      <div class="grow"></div>
+      <div class="ia-status">IA: gemini-2.5-flash</div>
+      <div class="nuvem"><span class="dot"></span>sincronizado 29/09 15:42</div>
+      <button class="btn ghost">⚙ Configurar IA</button>
+    </header>
+    <div class="faixa-teste">🧪 <b>MODO TESTE</b> — categorias e classificações são simuladas. Os resultados ficam em pasta separada.
+      <span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" style="padding:3px 9px">Apagar dados de teste</button><button class="btn primary" style="padding:3px 9px">Sair do modo teste</button></span></div>
+    <main>
+      <div class="small">Planilha-fonte: <code>base_processamento.xlsx</code> · Base: <b>3.743</b> respondentes · atualizada 29/09 14:10</div>
+    </main>
+  </div>
+
+  <h2 class="sec">3 · Cabeçalho do projeto — quanto já foi revisado, e como chegou aqui</h2>
+  <div class="app">
+    <main>
+      <div class="cab">
+        <div>
+          <div class="pct-grande" id="pct-grande">62<small>%</small></div>
+          <div class="pct-lab"><b>das perguntas revisadas</b></div>
+          <div class="pct-sec">5 de 8 perguntas com revisão concluída · 1.240 de 2.180 respostas conferidas</div>
+          <div class="pilha" title="5 revisadas · 2 classificadas · 1 a iniciar">
+            <i class="rev" style="width:62.5%"></i><i class="cls" style="width:25%"></i><i class="nada" style="width:12.5%"></i>
+          </div>
+          <div class="legenda">
+            <span><i class="sw ok"></i>revisadas 5</span>
+            <span><i class="sw acc"></i>classificadas, a conferir 2</span>
+            <span><i class="sw" style="background:var(--surface-3)"></i>a iniciar 1</span>
+          </div>
+        </div>
+        <div class="chart">
+          <svg viewBox="0 0 560 220" width="100%" height="200" role="img"
+               aria-label="Progressão: percentual de perguntas classificadas e revisadas ao longo dos dias">
+            <!-- grade -->
+            <g stroke="#dedcd7" stroke-dasharray="3 4">
+              <line x1="46" y1="20" x2="548" y2="20"/><line x1="46" y1="65" x2="548" y2="65"/>
+              <line x1="46" y1="110" x2="548" y2="110"/><line x1="46" y1="155" x2="548" y2="155"/>
+            </g>
+            <line x1="46" y1="200" x2="548" y2="200" stroke="#dedcd7"/>
+            <g font-size="11" fill="#7d7b76" font-family="ui-monospace,monospace">
+              <text x="8" y="24">100%</text><text x="14" y="69">75%</text><text x="14" y="114">50%</text>
+              <text x="14" y="159">25%</text><text x="20" y="204">0%</text>
+            </g>
+            <!-- série classificadas (% das 8 perguntas) -->
+            <polyline id="l-cls" fill="none" stroke="#2a78d6" stroke-width="2.4" stroke-linejoin="round"/>
+            <g id="d-cls" fill="#2a78d6"></g>
+            <!-- série revisadas -->
+            <polyline id="l-rev" fill="none" stroke="#1b7f4d" stroke-width="2.4" stroke-linejoin="round"/>
+            <g id="d-rev" fill="#1b7f4d"></g>
+            <g id="x-lab" font-size="10.5" fill="#7d7b76" font-family="ui-monospace,monospace"></g>
+          </svg>
+          <div class="legenda" style="margin-top:2px">
+            <span><i class="sw acc"></i>perguntas classificadas</span>
+            <span><i class="sw ok"></i>perguntas revisadas</span>
+            <span class="small">% de 8 perguntas · o denominador é fixo, então a linha não sobe e desce quando a base cresce</span>
+          </div>
+        </div>
+      </div>
+
+      <h2 style="font-size:15px;margin:26px 0 10px;font-weight:600">Perguntas abertas
+        <span class="small" style="font-weight:400">· 5 de 8 aprovadas</span></h2>
+      <div class="cards">
+        <div class="card">
+          <div class="rot">Q33 · Qualidade do ensino e professores</div>
+          <div class="contador"><div class="n">412<i>/420</i></div><div class="lab">revisadas / total</div>
+            <div class="bar"><i style="width:98%"></i></div></div>
+          <div class="small" style="margin-top:6px">420 responderam · 386 respostas únicas</div>
+          <div style="margin-top:6px"><span class="pill ok">aprovada</span> <span class="pill">98% revisado</span></div>
+        </div>
+        <div class="card">
+          <div class="rot">Q35 · O que a escola deveria melhorar</div>
+          <div class="contador"><div class="n">180<i>/402</i></div><div class="lab">revisadas / total</div>
+            <div class="bar"><i style="width:45%"></i></div></div>
+          <div class="small" style="margin-top:6px">402 responderam · 371 respostas únicas</div>
+          <div style="margin-top:6px"><span class="pill acc">amostra classificada</span> <span class="pill">45% revisado</span></div>
+        </div>
+        <div class="card">
+          <div class="rot">Q32 · Comunicação da escola</div>
+          <div class="contador"><div class="n">0<i>/298</i></div><div class="lab">revisadas / total</div>
+            <div class="bar"><i style="width:1%"></i></div></div>
+          <div class="small" style="margin-top:6px">298 responderam · 0 respostas únicas</div>
+          <div style="margin-top:6px"><span class="pill">categorias ok</span></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <h2 class="sec">4 · Dentro da pergunta — contador sticky no canto direito</h2>
+  <p class="lead" style="margin-bottom:10px">O número fica preso no canto direito enquanto a pessoa rola a tabela de
+  revisão (a área abaixo tem rolagem própria: role dentro dela para ver o contador parado). Rótulo fixo
+  <b>revisadas / total</b> em monoespaçada, com a barrinha embaixo.</p>
+  <div class="vitrine">
+    <div class="q-cab">
+      <div class="txt">
+        <h3>Q35 · O que a escola deveria melhorar <span class="small">Q35</span></h3>
+        <div class="sub">Na sua opinião, o que a escola deveria melhorar? · Quem respondeu: pais e responsáveis (N=402)</div>
+      </div>
+      <div class="sticky-num">
+        <div class="n">180<i> / 402</i></div>
+        <div class="lab">revisadas / total</div>
+        <div class="bar"><i style="width:45%"></i></div>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th style="width:52px">OK</th><th style="width:110px">Situação</th><th>Resposta</th><th style="width:56px">Conf.</th></tr></thead>
+      <tbody>
+        <tr><td>☐</td><td><span class="pill">IA</span></td><td>Deveria ter mais aulas de educação física e menos prova.</td><td class="num">0,72</td></tr>
+        <tr><td>☐</td><td><span class="pill">IA</span></td><td>A merenda melhorou, mas o pátio é muito pequeno para todos.</td><td class="num">0,74</td></tr>
+        <tr><td>☑</td><td><span class="pill ok">✓ confirmada</span></td><td>Os professores são bons, falta só comunicação com os pais.</td><td class="num">0,91</td></tr>
+        <tr><td>☑</td><td><span class="pill" style="background:var(--human-bg);color:var(--human)">✎ corrigida</span></td><td>Poderiam avisar com antecedência quando acaba a aula.</td><td class="num">0,68</td></tr>
+        <tr><td>☐</td><td><span class="pill">IA</span></td><td>Menos alunos por sala, a professora não consegue dar atenção.</td><td class="num">0,77</td></tr>
+        <tr><td>☑</td><td><span class="pill ok">⚡ auto</span></td><td>Reuniões de pais com mais frequência.</td><td class="num">0,95</td></tr>
+        <tr><td>☐</td><td><span class="pill">IA</span></td><td>A quadra está sempre ocupada, a gente não joga nada.</td><td class="num">0,81</td></tr>
+        <tr><td>☐</td><td><span class="pill">IA</span></td><td>Mais atividades depois da aula no contraturno.</td><td class="num">0,83</td></tr>
+        <tr><td>☐</td><td><span class="pill">IA</span></td><td>Biblioteca aberta no fim de semana.</td><td class="num">0,79</td></tr>
+        <tr><td>☑</td><td><span class="pill ok">✓ confirmada</span></td><td>Professores deveriam usar mais o laboratório de informática.</td><td class="num">0,88</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="sec">5 · Onde os botões foram parar</h2>
+  <div class="duas">
+    <div class="dlg">
+      <h4>⚙ Configurar IA</h4>
+      <label class="campo">Provedor<select><option>Google Gemini</option><option>OpenAI</option></select></label>
+      <label class="campo">Chave<input value="••••••••••••" type="password"></label>
+      <label class="campo">Modelo<select><option>gemini-2.5-flash</option></select></label>
+      <div class="switch"><input type="checkbox" id="mt" checked>
+        <label for="mt"><b>🧪 Modo teste</b> <span class="small">— a IA vira valores simulados: telas e fluxo sem custo, resultados em pasta separada.</span></label>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+        <button class="btn">Cancelar</button><button class="btn primary">Salvar</button>
+      </div>
+    </div>
+    <div>
+      <div class="dlg">
+        <h4>🛠 Gerenciar projeto</h4>
+        <div class="small" style="margin-bottom:8px">Base e planilha</div>
+        <div class="row"><div style="flex:1"><b>↻ Recarregar planilha</b><div class="small">Relê a planilha-fonte e reconstrói a base.
+          O que já foi classificado e conferido continua (casamento por texto).</div></div><button class="btn">Recarregar</button></div>
+        <div class="small" style="margin:12px 0 8px">Zona de perigo</div>
+        <div class="row"><div style="flex:1"><b>Apagar a classificação de uma pergunta</b><div class="small">Mantém as categorias aprovadas.</div></div><button class="btn" style="border-color:#e2c9cc;color:#b00020">Apagar</button></div>
+        <div class="row"><div style="flex:1"><b>Excluir o projeto da lista</b><div class="small">Nada é apagado de verdade: vai para <code>_lixeira</code>.</div></div><button class="btn" style="border-color:#e2c9cc;color:#b00020">Excluir</button></div>
+      </div>
+    </div>
+  </div>
+
+  <h2 class="sec">6 · Como cada número é calculado</h2>
+  <div class="note"><span>①</span><div><b>% das perguntas revisadas</b> = perguntas com <code>n_revisadas = n_codificadas</code>
+    (revisão concluída) ÷ total de perguntas abertas do projeto. Denominador fixo — não muda quando a base cresce.</div></div>
+  <div class="note"><span>②</span><div><b>Contador sticky</b> = respostas conferidas ÷ respostas únicas daquela pergunta.
+    Vale a leitura "já olhei X de Y respostas"; a barra é essa fração.</div></div>
+  <div class="note"><span>③</span><div><b>Gráfico</b> — as duas séries saem de dados que já existem:
+    <i>revisadas</i> de <code>validado_em</code>/<code>revisado_em</code> item a item no <code>codificacao.json</code>;
+    <i>classificadas</i> dos timestamps de <code>output/llm_log/</code> (as chamadas <code>code_*</code>), que a aba
+    Consumo já lê. Cada ponto é cumulativo até o fim do dia, e a pergunta entra na série no dia em que a última
+    resposta dela atinge aquele estado. É reconstruível do histórico atual — sem precisar começar a medir do zero.</div></div>
+</div>
+
+<script>
+  // menu de projeto
+  const proj = document.getElementById("proj"), painel = document.getElementById("proj-panel");
+  document.getElementById("proj-btn").onclick = () => {
+    proj.classList.toggle("aberto");
+    painel.classList.toggle("hidden", !proj.classList.contains("aberto"));
+  };
+  document.addEventListener("click", (e) => {
+    if (!proj.contains(e.target)) { proj.classList.remove("aberto"); painel.classList.add("hidden"); }
+  });
+
+  // séries do gráfico: % de 8 perguntas, cumulativo por dia
+  const dias = ["22/09","23/09","24/09","25/09","26/09","27/09","28/09","29/09"];
+  const classificadas = [12.5, 25, 37.5, 50, 62.5, 75, 87.5, 87.5];
+  const revisadas     = [0, 12.5, 12.5, 25, 37.5, 37.5, 50, 62.5];
+  const X0 = 46, X1 = 548, Y0 = 200, Y1 = 20;
+  const px = (i) => X0 + (X1 - X0) * (i / (dias.length - 1));
+  const py = (v) => Y0 - (Y0 - Y1) * (v / 100);
+  const d = (v) => `M${px(v[0][0]).toFixed(1)},${py(v[0][1]).toFixed(1)}`;
+  const linha = (s) => s.map((v, i) => `${i ? "L" : "M"}${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(" ");
+  document.getElementById("l-cls").setAttribute("d", linha(classificadas));
+  document.getElementById("l-rev").setAttribute("d", linha(revisadas));
+  for (const [id, serie] of [["d-cls", classificadas], ["d-rev", revisadas]])
+    document.getElementById(id).innerHTML = serie.map((v, i) =>
+      `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="3.2"><title>${dias[i]}: ${v}%</title></circle>`).join("");
+  document.getElementById("x-lab").innerHTML = dias.map((s, i) =>
+    i % 2 === 0 ? `<text x="${(px(i) - 16).toFixed(1)}" y="216">${s}</text>` : "").join("");
+</script>
+</body>
+</html>
