@@ -454,16 +454,8 @@ table.perfil th{font-weight:500;color:var(--text-3)}
 .grupo-banner-membros { color: #555; margin-top: 2px; font-size: 0.82rem; }
 .grupo-membro-atual { font-weight: 700; color: #2a4cc7; }
 
-.grupo-pendente-badge {
-  background: #fff3cd;
-  border: 1px solid #ffc107;
-  border-radius: 4px;
-  padding: 2px 7px;
-  font-size: 0.78rem;
-  color: #856404;
-}
-
 .grupo-btn-editar {
+  text-decoration: none;
   background: none;
   border: 1px solid #aaa;
   border-radius: 4px;
@@ -473,27 +465,6 @@ table.perfil th{font-weight:500;color:var(--text-3)}
   color: #444;
 }
 .grupo-btn-editar:hover { background: #eee; }
-
-.grupo-editor {
-  background: #f9faff;
-  border: 1px solid #c5d0f5;
-  border-radius: 6px;
-  padding: 12px;
-  margin-bottom: 14px;
-  font-size: 0.88rem;
-}
-
-.grupo-pendente {
-  background: #fff3cd;
-  border: 1px solid #ffc107;
-  border-radius: 6px;
-  padding: 10px 14px;
-  margin-bottom: 14px;
-  font-size: 0.88rem;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
 
 /* dark mode: adapta o banner e os badges ao esquema de cores */
 @media (prefers-color-scheme: dark) {
@@ -508,22 +479,24 @@ table.perfil th{font-weight:500;color:var(--text-3)}
   }
   :root:not([data-theme=light]) .grupo-banner-membros { color: #9aabb5; }
   :root:not([data-theme=light]) .grupo-membro-atual { color: #7ba7f5; }
-  :root:not([data-theme=light]) .grupo-pendente-badge {
-    background: #3a2a08;
-    border-color: #8a5300;
-    color: #f2c46d;
-  }
   :root:not([data-theme=light]) .grupo-btn-editar { color: #ccc; border-color: #555; }
   :root:not([data-theme=light]) .grupo-btn-editar:hover { background: #2a2a2a; }
-  :root:not([data-theme=light]) .grupo-editor {
-    background: #16192a;
-    border-color: #3a4a80;
-  }
-  :root:not([data-theme=light]) .grupo-pendente {
-    background: #3a2a08;
-    border-color: #8a5300;
-  }
 }
 
 /* card de pergunta: garante que o badge de grupo não seja cortado por altura fixa */
 .card { height: auto; min-height: 0; }
+
+/* ---- aba Grupos de perguntas ---- */
+.gr-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px}
+.gr-cab{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.gr-and{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.gr-lab{display:block;font-weight:600;margin:10px 0 4px}
+.gr-lab input,.gr-lab textarea{display:block;width:100%;margin-top:4px;font-weight:400}
+.gr-qs{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:4px 14px}
+.gr-q-lin{display:flex;align-items:baseline;gap:6px;font-weight:400;font-size:13px}
+.gr-q-lin.ocupada{opacity:.55}
+.gr-avisos .aviso ul{margin:6px 0 10px 18px;padding:0}
+.gr-av-alto{color:var(--warn);font-weight:600}
+.gr-acoes{display:flex;gap:8px;margin-top:12px}
+.gr-sugs{display:flex;flex-direction:column;gap:6px;margin-bottom:6px}
+.gr-sug{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface-2);border-radius:8px;padding:8px 12px}

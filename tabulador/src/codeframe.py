@@ -668,6 +668,12 @@ def editar_keywords(qid: str, ref, adicionar=(), remover=(), fixar=(), por: str 
     adicionar: vira keyword fixa (e sai das bloqueadas);
     remover  : sai das fixas e das aprendidas e fica BLOQUEADA (o aprendizado não a traz de volta);
     fixar    : uma keyword aprendida (keywords_auto) passa a ser fixa."""
+    import grupos_frame
+    nome_grupo, _ = grupos_frame.grupo_de(qid)
+    if nome_grupo:
+        raise NotImplementedError(
+            f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
+        )
     f = _exigir_frame(qid)
     c = _cat(f, ref)
     campos = ("keywords", "keywords_auto", "keywords_bloqueadas")

@@ -159,6 +159,7 @@ function pillStatus(s) {
 }
 function renderSidebar() {
   $("#li-painel").className = state.view === "painel" ? "ativa" : "";
+  $("#li-grupos").className = state.view === "grupos" ? "ativa" : "";
   $("#li-usage").className = state.view === "usage" ? "ativa" : "";
   $("#li-resultados").className = state.view === "resultados" ? "ativa" : "";
   $("#li-gerenciar").className = state.view === "gerenciar" ? "ativa" : "";
@@ -363,7 +364,7 @@ let presencaProjT = null;
 function nomeExibicao() { return localStorage.getItem("tabulador_nome") || ""; }
 function localizacaoAtual() {
   if (state.view === "pergunta" && state.qid) return `Pergunta ${state.qid}`;
-  const nomes = { painel: "Painel geral", resultados: "Resultados", usage: "Consumo da IA", gerenciar: "Gerenciar projeto", novo: "Criando projeto novo" };
+  const nomes = { painel: "Painel geral", resultados: "Resultados", grupos: "Grupos de perguntas", usage: "Consumo da IA", gerenciar: "Gerenciar projeto", novo: "Criando projeto novo" };
   return nomes[state.view] || state.view || "—";
 }
 async function presencaProjTick() {
@@ -559,7 +560,7 @@ function render() {
   $("#b-janela-cat")?.addEventListener("click", () => abrirJanelaCategorias());
   $("#b-saude-quadro")?.addEventListener("click", () => abrirJanelaSaudeQuadro());
   $("#b-reabrir")?.addEventListener("click", async () => refresh(await post(`/api/pergunta/${P.qid}/reabrir`, {}, "Reabrindo…")));
-  bindFrame(); bindAcoesCod(); bindCodificacao(); bindAprovarBar(); bindGrupo();
+  bindFrame(); bindAcoesCod(); bindCodificacao(); bindAprovarBar();
 }
 
 // ---------------------------------------------------------------- frame
@@ -1486,13 +1487,11 @@ function bindCodificacao() {
 // Renderiza o banner que aparece no topo da página da pergunta quando ela pertence a um grupo.
 function renderGrupoBanner(dados) {
   if (!dados.grupo) return '';
-  const { nome, rotulo, membros, pendente } = dados.grupo;
+  const { nome, rotulo, membros } = dados.grupo;
   const lista = (membros || []).map((qid) => {
     const ativo = qid === dados.qid ? ' class="grupo-membro-atual"' : '';
     return `<span${ativo}>${esc(qid)}</span>`;
   }).join(' · ');
-  const badgePendente = pendente
-    ? `<span class="grupo-pendente-badge">⚠️ alteração pendente</span>` : '';
   return `
     <div class="grupo-banner" data-grupo="${esc(nome)}">
       <span class="grupo-banner-icon">🔗</span>
@@ -1500,127 +1499,100 @@ function renderGrupoBanner(dados) {
         <strong>${esc(rotulo)}</strong>
         <div class="grupo-banner-membros">${lista}</div>
       </div>
-      ${badgePendente}
-      <button class="grupo-btn-editar" data-grupo-nome="${esc(nome)}" data-grupo-qid="${esc(dados.qid)}">
-        Editar grupo ▾
-      </button>
+      <a class="grupo-btn-editar" href="#grupos">Gerenciar grupos</a>
     </div>`;
 }
 
-// Abre o painel de edição de grupo inline, logo após o banner.
-function abrirEdicaoGrupo(nomeGrupo, qidAtual) {
-  // fecha o editor se já estiver aberto (toggle)
-  const existente = document.querySelector('.grupo-editor');
-  if (existente) { existente.remove(); return; }
+// ---------------------------------------------------------------- aba Grupos de perguntas
+// Perguntas de um grupo dividem o MESMO quadro de categorias (ex.: Q32 + Q33). Aqui o grupo é criado,
+// editado e desfeito à mão. Antes de gravar, o servidor diz o que a mudança faz com o trabalho já feito
+// (avisos de nível "alto" pedem confirmação) — nada é gravado sem a pessoa ver isso.
+const pctBR = (f) => (100 * f).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + "%";
+function cardGrupo(g, D) {
+  // g = { nome, rotulo, instrucoes_frame, membros:[{qid,...}], frame } — ou { nome: null, ... } para um grupo novo
+  const marcadas = new Set((g.membros || []).map((m) => m.qid));
+  const caixas = D.perguntas.map((q) => {
+    const outro = q.grupo && q.grupo !== g.nome ? D.grupos.find((x) => x.nome === q.grupo) : null;
+    return `<label class="gr-q-lin${outro ? " ocupada" : ""}">
+      <input type="checkbox" class="gr-q" value="${esc(q.qid)}" ${marcadas.has(q.qid) ? "checked" : ""} ${outro ? "disabled" : ""}>
+      <b>${esc(q.qid)}</b> ${esc(q.rotulo)}${outro ? ` <span class="small">— já no grupo “${esc(outro.rotulo)}”</span>` : ""}
+    </label>`;
+  }).join("");
+  const andamento = (g.membros || []).map((m) => `<span class="pill">${esc(m.qid)}: ${fmtN(m.n_codificadas)} classificadas · ${fmtN(m.n_revisadas)} conferidas</span>`).join(" ");
+  const quadro = !g.nome ? "" : g.frame
+    ? `<span class="pill ${g.frame.status === "aprovado" ? "ok" : "warn"}">quadro do grupo: ${esc(g.frame.status)} · ${g.frame.n_categorias} categorias</span>`
+    : `<span class="pill">quadro do grupo ainda não gerado — gere em qualquer pergunta do grupo</span>`;
+  return `<div class="gr-card" data-nome="${esc(g.nome || "")}">
+    <div class="gr-cab"><b>${g.nome ? "🔗 " + esc(g.rotulo) : "➕ Novo grupo"}</b> ${quadro}</div>
+    ${andamento ? `<div class="gr-and">${andamento}</div>` : ""}
+    <label class="gr-lab">Nome do grupo<input class="gr-rotulo" value="${esc(g.rotulo || "")}" placeholder="Ex.: Motivo para trocar de escola"></label>
+    <div class="gr-lab">Perguntas do grupo <span class="small">(marque 2 ou mais; só aparecem livres as que não estão em outro grupo)</span></div>
+    <div class="gr-qs">${caixas}</div>
+    <label class="gr-lab">Instruções para a IA montar as categorias do grupo <span class="small">(opcional)</span>
+      <textarea class="gr-instr" rows="3">${esc(g.instrucoes_frame || "")}</textarea></label>
+    <div class="gr-avisos"></div>
+    <div class="gr-acoes">
+      <button class="btn primary gr-salvar">${g.nome ? "Salvar alterações" : "Criar grupo"}</button>
+      ${g.nome ? `<button class="btn gr-dissolver">Dissolver grupo</button>` : ""}
+    </div>
+  </div>`;
+}
+function avisosGrupo(card, r, aoConfirmar, rotuloBotao) {
+  const caixa = card.querySelector(".gr-avisos");
+  caixa.innerHTML = `<div class="aviso"><b>Antes de continuar, veja o que isso muda:</b>
+    <ul>${r.avisos.map((a) => `<li class="gr-av-${a.nivel}">${esc(a.msg)}</li>`).join("")}</ul>
+    <button class="btn primary sm gr-confirmar">${rotuloBotao}</button> <button class="btn sm gr-cancelar">Cancelar</button></div>`;
+  caixa.querySelector(".gr-confirmar").onclick = aoConfirmar;
+  caixa.querySelector(".gr-cancelar").onclick = () => (caixa.innerHTML = "");
+}
+async function renderGrupos() {
+  state.view = "grupos"; state.qid = null; state.P = null; renderSidebar();
+  $("#main").innerHTML = `<div class="empty">Carregando grupos…</div>`;
+  const D = await api("/api/grupos");
+  const sugestoes = D.sugestoes.map((s, i) => `<div class="gr-sug">
+      <span><b>${s.perguntas.map(esc).join(" + ")}</b> — ${s.rotulos.map(esc).join(" / ")}
+      <span class="small">· ${s.em_comum ? `só ${s.em_comum} ${s.em_comum === 1 ? "pessoa respondeu" : "pessoas responderam"} as duas (${pctBR(s.pct)})` : "ninguém respondeu as duas"}</span></span>
+      <button class="btn sm" data-sug="${i}">Criar grupo com estas</button></div>`).join("");
+  $("#main").innerHTML = `
+    <h1>Grupos de perguntas</h1>
+    <div class="info">Um grupo junta perguntas que se complementam — quem responde uma não responde a outra (por exemplo, nota baixa × nota alta) — para que dividam
+      <b>o mesmo quadro de categorias</b>. Cada pergunta continua sendo classificada e conferida separadamente. Mexer num grupo que já tem trabalho feito mostra um aviso antes de gravar.</div>
+    ${sugestoes ? `<h2>Sugestões <small>pares de perguntas que quase ninguém respondeu juntas</small></h2><div class="gr-sugs">${sugestoes}</div>` : ""}
+    <h2>Grupos do projeto <small>${D.grupos.length}</small></h2>
+    <div id="gr-lista">${D.grupos.map((g) => cardGrupo(g, D)).join("") || '<div class="small muted">Nenhum grupo ainda.</div>'}</div>
+    <h2>Novo grupo</h2>
+    <div id="gr-novo">${cardGrupo({ nome: null, rotulo: "", instrucoes_frame: "", membros: [] }, D)}</div>`;
 
-  const banner = document.querySelector(`.grupo-banner[data-grupo="${nomeGrupo}"]`);
-  if (!banner) return;
-
-  const grupo = state.P?.grupo;
-  if (!grupo) return;
-
-  let membrosEditaveis = [...(grupo.membros || [])];
-
-  const buildEditor = () => {
-    const el = document.createElement('div');
-    el.className = 'grupo-editor';
-    el.innerHTML = `
-      <div style="margin-bottom:8px">
-        <label style="font-weight:600;display:block;margin-bottom:4px">Rótulo do grupo</label>
-        <input id="grupo-rotulo-input" value="${esc(grupo.rotulo)}" style="width:100%">
-      </div>
-      <div style="margin-bottom:8px">
-        <label style="font-weight:600;display:block;margin-bottom:4px">Perguntas do grupo</label>
-        <div id="grupo-membros-lista" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">
-          ${membrosEditaveis.map((m) => `
-            <span class="grupo-membro-chip" style="display:inline-flex;align-items:center;gap:4px;background:var(--surface-3);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:0.82rem">
-              ${esc(m)}
-              ${m !== qidAtual ? `<button class="grupo-chip-remover" data-qid="${esc(m)}" style="border:0;background:none;cursor:pointer;font-size:14px;padding:0 2px;color:var(--text-3)" title="Remover">×</button>` : ''}
-            </span>`).join('')}
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn primary sm" id="grupo-btn-salvar">Salvar</button>
-        <button class="btn sm" id="grupo-btn-cancelar">Cancelar</button>
-      </div>
-      <div id="grupo-editor-msg" style="margin-top:8px"></div>`;
-    return el;
+  const ler = (card) => ({
+    nome: card.dataset.nome || null,
+    rotulo: card.querySelector(".gr-rotulo").value.trim(),
+    instrucoes_frame: card.querySelector(".gr-instr").value,
+    perguntas: [...card.querySelectorAll(".gr-q:checked")].map((c) => c.value),
+  });
+  const salvar = async (card, confirmado) => {
+    const r = await post("/api/grupos/salvar", { ...ler(card), confirmado }, "Salvando o grupo…");
+    if (r.precisa_confirmar) return avisosGrupo(card, r, () => salvar(card, true), "Entendi, aplicar mesmo assim");
+    toast((r.avisos || []).length ? "Grupo salvo — veja os avisos na página das perguntas" : "Grupo salvo");
+    await carregarStatus(); renderGrupos();
   };
-
-  const editor = buildEditor();
-  banner.insertAdjacentElement('afterend', editor);
-
-  // remover membro
-  editor.querySelectorAll('.grupo-chip-remover').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      membrosEditaveis = membrosEditaveis.filter((m) => m !== btn.dataset.qid);
-      const lista = document.getElementById('grupo-membros-lista');
-      if (lista) {
-        lista.innerHTML = membrosEditaveis.map((m) => `
-          <span class="grupo-membro-chip" style="display:inline-flex;align-items:center;gap:4px;background:var(--surface-3);border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:0.82rem">
-            ${esc(m)}
-            ${m !== qidAtual ? `<button class="grupo-chip-remover" data-qid="${esc(m)}" style="border:0;background:none;cursor:pointer;font-size:14px;padding:0 2px;color:var(--text-3)" title="Remover">×</button>` : ''}
-          </span>`).join('');
-        // re-bind após reconstrução
-        lista.querySelectorAll('.grupo-chip-remover').forEach((b2) => {
-          b2.addEventListener('click', () => {
-            membrosEditaveis = membrosEditaveis.filter((m) => m !== b2.dataset.qid);
-            b2.closest('.grupo-membro-chip')?.remove();
-          });
-        });
-      }
-    });
+  const dissolver = async (card, confirmado) => {
+    const r = await post(`/api/grupos/${encodeURIComponent(card.dataset.nome)}/dissolver`, { confirmado }, "Desfazendo o grupo…");
+    if (r.precisa_confirmar) return avisosGrupo(card, r, () => dissolver(card, true), "Entendi, dissolver mesmo assim");
+    toast("Grupo dissolvido — a pasta dele foi guardada em grupos/_dissolvidos");
+    await carregarStatus(); renderGrupos();
+  };
+  document.querySelectorAll(".gr-card").forEach((card) => {
+    card.querySelector(".gr-salvar").onclick = () => salvar(card, false);
+    const d = card.querySelector(".gr-dissolver");
+    if (d) d.onclick = () => dissolver(card, false);
   });
-
-  // cancelar
-  document.getElementById('grupo-btn-cancelar')?.addEventListener('click', () => editor.remove());
-
-  // salvar
-  document.getElementById('grupo-btn-salvar')?.addEventListener('click', async () => {
-    const novoRotulo = document.getElementById('grupo-rotulo-input')?.value.trim() || grupo.rotulo;
-    const msgEl = document.getElementById('grupo-editor-msg');
-    try {
-      await api(`/api/grupo/${qidAtual}`, {
-        method: 'POST',
-        body: JSON.stringify({ nome: nomeGrupo, rotulo: novoRotulo, membros: membrosEditaveis }),
-        headers: { 'Content-Type': 'application/json' },
-      });
-      editor.remove();
-      // injeta mensagem de "pendente de confirmação" após o banner
-      const pendente = document.createElement('div');
-      pendente.className = 'grupo-pendente';
-      pendente.innerHTML = `⚠️ Alteração salva — aguardando confirmação
-        <button class="btn sm ok" id="grupo-confirmar-btn">Confirmar e reinduzir frame</button>
-        <button class="btn sm" id="grupo-descartar-btn">Desfazer</button>`;
-      banner.insertAdjacentElement('afterend', pendente);
-      document.getElementById('grupo-confirmar-btn')?.addEventListener('click', () => confirmarGrupo(nomeGrupo, qidAtual));
-      document.getElementById('grupo-descartar-btn')?.addEventListener('click', () => descartarPendenteGrupo(nomeGrupo, qidAtual));
-      toast('Grupo salvo — confirme para reinduzir o frame');
-    } catch (e) {
-      if (msgEl) msgEl.innerHTML = `<span style="color:var(--danger)">Erro ao salvar: ${esc(e.message)}</span>`;
-    }
-  });
-}
-
-// Confirma a alteração pendente do grupo e recarrega a página da pergunta.
-async function confirmarGrupo(nome, qid) {
-  await api(`/api/grupo/${qid}/confirmar`, { method: 'POST' });
-  abrir(qid); // recarrega a página da pergunta
-}
-
-// Descarta a alteração pendente do grupo e recarrega a página da pergunta.
-async function descartarPendenteGrupo(nome, qid) {
-  await api(`/api/grupo/${qid}/pendente`, { method: 'DELETE' });
-  abrir(qid);
-}
-
-// Ativa os botões de edição de grupo injetados pelo renderGrupoBanner.
-function bindGrupo() {
-  document.querySelectorAll('.grupo-btn-editar').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      abrirEdicaoGrupo(btn.dataset.grupoNome, btn.dataset.grupoQid);
-    });
-  });
+  document.querySelectorAll("[data-sug]").forEach((b) => (b.onclick = () => {
+    const s = D.sugestoes[+b.dataset.sug], novo = $("#gr-novo .gr-card");
+    novo.querySelectorAll(".gr-q").forEach((c) => (c.checked = s.perguntas.includes(c.value)));
+    novo.querySelector(".gr-rotulo").value = s.rotulos.join(" / ");
+    novo.scrollIntoView({ behavior: "smooth", block: "center" });
+    novo.querySelector(".gr-rotulo").focus();
+  }));
 }
 
 // ---------------------------------------------------------------- resultados
@@ -2252,6 +2224,7 @@ $("#teste-limpar").onclick = async () => {
 };
 $("#btn-ia").onclick = abrirIA;
 $("#li-painel").onclick = () => irPara(null);
+$("#li-grupos").onclick = () => { if (location.hash === "#grupos") renderGrupos(); else location.hash = "grupos"; };
 $("#li-usage").onclick = () => { if (location.hash === "#usage") renderUsage(); else location.hash = "usage"; };
 $("#li-resultados").onclick = () => { if (location.hash === "#resultados") renderResultados(); else location.hash = "resultados"; };
 $("#li-gerenciar").onclick = () => { if (location.hash === "#gerenciar") renderGerenciar(); else location.hash = "gerenciar"; };
@@ -2497,6 +2470,7 @@ function rota() {
   const h = decodeURIComponent(location.hash.slice(1));
   if (state.qid && h !== state.qid) pararPresenca();
   if (h === "novo") renderNovo();
+  else if (h === "grupos") renderGrupos();
   else if (h === "usage") renderUsage();
   else if (h === "resultados") renderResultados();
   else if (h === "gerenciar") renderGerenciar();

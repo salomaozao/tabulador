@@ -101,6 +101,7 @@ def _payload_pergunta(qid: str) -> dict:
         "revisao": CD.resumo_revisao(qid) if cod else None,
         "conferencia": SUP.conferencia(cod["itens"]) if cod else None,
         "saude": _saude(frame, resp, cod),
+        "grupo": _info_grupo(qid),
     }
 
 
@@ -193,6 +194,7 @@ def api_status():
         perguntas = [report.status_pergunta(q) for q in V.perguntas_codificaveis()]
         for s in perguntas:
             s["backcoding"] = s["qid"] in V.BACKCODING
+            s["grupo"] = _info_grupo(s["qid"])
         return jsonify({
             "projeto": {"slug": config.PROJETO, "nome": config.NOME_PROJETO, "pasta": str(config.PROJETO_PASTA), "saida": str(config.OUTPUT_DIR)},
             "projetos": projetos.listar(),
@@ -1083,68 +1085,88 @@ VERSAO = _versao_codigo()
 
 
 
-# ----------------------------------------------------------------------------- helper grupos
+# ----------------------------------------------------------------------------- grupos de perguntas
 def _info_grupo(qid: str) -> dict | None:
-    """Retorna metadados do grupo ao qual qid pertence, ou None."""
+    """Metadados do grupo ao qual qid pertence (banner da pergunta e selo nos cards), ou None."""
     nome, cfg = grupos_frame.grupo_de(qid)
     if not nome:
         return None
-    pends = grupos_frame.pendentes()
+    return {"nome": nome, "rotulo": cfg.get("rotulo", nome), "membros": cfg.get("perguntas", [])}
+
+
+def _grupo_completo(nome: str, cfg: dict) -> dict:
+    """Um grupo com o andamento de cada pergunta e o estado do quadro (aba Grupos)."""
+    f = grupos_frame.frame(nome)
+    membros = []
+    for q in cfg.get("perguntas", []):
+        s = grupos_frame._situacao(q)
+        membros.append({"qid": q, "rotulo": V.por_id(q).get("rotulo"), "n_codificadas": s["n_cod"], "n_revisadas": s["n_rev"]})
     return {
-        "nome": nome,
-        "rotulo": cfg.get("rotulo", nome),
-        "membros": cfg.get("perguntas", []),
-        "pendente": pends.get(nome),
+        "nome": nome, "rotulo": cfg.get("rotulo", nome), "instrucoes_frame": cfg.get("instrucoes_frame", ""),
+        "membros": membros,
+        "frame": {"status": f.get("status"), "n_categorias": len([c for c in f["categorias"] if not c.get("fixa")])} if f else None,
     }
 
 
-# ----------------------------------------------------------------------------- API: grupos
-@app.post("/api/grupo/<qid>")
-def api_grupo_editar(qid):
-    """{rotulo?, membros?} — salva alteração de grupo como pendente (não aplica ainda)."""
+def _corpo_grupo() -> tuple[str | None, str, list, str]:
+    d = request.get_json() or {}
+    return d.get("nome"), d.get("rotulo", ""), d.get("perguntas") or [], d.get("instrucoes_frame", "")
+
+
+@app.get("/api/grupos")
+def api_grupos():
     try:
-        V.por_id(qid)
-        d = request.get_json() or {}
-        nome, _ = grupos_frame.grupo_de(qid)
-        if not nome:
-            raise ValueError(f"{qid} não pertence a nenhum grupo declarado no projeto.")
+        grupos = grupos_frame.todos()
+        usadas = {q for g in grupos.values() for q in g.get("perguntas", [])}
+        return jsonify({
+            "grupos": [_grupo_completo(n, g) for n, g in grupos.items()],
+            "perguntas": [{"qid": q, "rotulo": V.por_id(q).get("rotulo"), "grupo": (grupos_frame.grupo_de(q)[0] if q in usadas else None)}
+                          for q in V.perguntas_codificaveis()],
+            "sugestoes": [{**s, "rotulos": [V.por_id(q).get("rotulo") for q in s["perguntas"]]} for s in grupos_frame.sugerir()],
+        })
+    except Exception as e:
+        return _erro(e, 500)
+
+
+@app.post("/api/grupos/salvar")
+def api_grupos_salvar():
+    """Cria ou atualiza o grupo. Avisos de nível 'alto' exigem `confirmado: true` (a tela mostra antes)."""
+    try:
+        nome, rotulo, perguntas, instr = _corpo_grupo()
+        res = grupos_frame.impacto(nome, rotulo, perguntas, instr)
+        if res["erros"]:
+            return jsonify({"ok": False, "erro": " ".join(res["erros"]), **res}), 400
+        if any(a["nivel"] == "alto" for a in res["avisos"]) and not (request.get_json() or {}).get("confirmado"):
+            return jsonify({"ok": False, "precisa_confirmar": True, **res})
         with _lock:
-            grupos_frame.salvar_pendente(nome, {
-                "rotulo": d.get("rotulo", grupos_frame.rotulo(nome)),
-                "membros": d.get("membros", grupos_frame.membros(nome)),
-            })
-        return jsonify({"ok": True, "grupo": _info_grupo(qid)})
+            nome = grupos_frame.salvar(nome, rotulo, perguntas, instr)
+        return jsonify({"ok": True, "nome": nome, "avisos": res["avisos"]})
     except Exception as e:
         return _erro(e)
 
 
-@app.post("/api/grupo/<qid>/confirmar")
-def api_grupo_confirmar(qid):
-    """Confirma alteração pendente e reinduz o frame do grupo."""
+@app.post("/api/grupos/<nome>/dissolver")
+def api_grupos_dissolver(nome):
+    """Desfaz o grupo (as perguntas voltam ao quadro próprio). Exige `confirmado: true` se houver trabalho feito."""
     try:
-        V.por_id(qid)
-        nome, _ = grupos_frame.grupo_de(qid)
-        if not nome:
-            raise ValueError(f"{qid} não pertence a nenhum grupo.")
+        cfg = grupos_frame.todos().get(nome)
+        if not cfg:
+            raise KeyError(f"Grupo '{nome}' não existe.")
+        avisos = []
+        for q in cfg.get("perguntas", []):
+            s = grupos_frame._situacao(q)
+            if s["n_cod"]:
+                volta = "volta ao quadro próprio" if s["frame_proprio"] else "fica sem quadro (não tem um próprio)"
+                avisos.append({"nivel": "alto", "msg": f"{q} tem {s['n_cod']} respostas classificadas ({s['n_rev']} conferidas) com o quadro do grupo e {volta}."})
+        if avisos and not (request.get_json(silent=True) or {}).get("confirmado"):
+            return jsonify({"ok": False, "precisa_confirmar": True, "erros": [], "avisos": avisos})
         with _lock:
-            frame = grupos_frame.confirmar_pendente(nome)
-        return jsonify({"ok": True, "frame": frame})
+            liberadas = grupos_frame.dissolver(nome)
+        return jsonify({"ok": True, "liberadas": liberadas})
     except Exception as e:
         return _erro(e)
 
 
-@app.delete("/api/grupo/<qid>/pendente")
-def api_grupo_descartar(qid):
-    """Descarta alteração pendente de grupo sem aplicar."""
-    try:
-        V.por_id(qid)
-        nome, _ = grupos_frame.grupo_de(qid)
-        if not nome:
-            raise ValueError(f"{qid} não pertence a nenhum grupo.")
-        grupos_frame.descartar_pendente(nome)
-        return jsonify({"ok": True})
-    except Exception as e:
-        return _erro(e)
 @app.get("/api/versao")
 def api_versao():
     return jsonify({"versao": VERSAO, "pid": os.getpid()})
