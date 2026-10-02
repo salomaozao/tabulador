@@ -612,10 +612,15 @@ function render() {
 }
 
 // ---------------------------------------------------------------- frame
+// Categorias nos menus de escolha: ordem alfabética (Outros e NS/NR no fim) e sem o número, que não ajuda o analista.
+// O número continua valendo no atalho de teclado (digitar o código na linha da resposta).
+const catsAlfabetica = (cats) => [...cats].sort((a, b) => (!!a.fixa - !!b.fixa) || a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }));
+const optsCategorias = (cats, { excluir = null, sel = null } = {}) => catsAlfabetica(cats).filter((c) => c.codigo !== excluir)
+  .map((c) => `<option value="${c.codigo}" ${c.codigo === sel ? "selected" : ""}>${esc(c.nome)}</option>`).join("");
 function renderFrame() {
   const P = state.P, F = P.frame, n = P.respostas?.n_respondeu || 0, cats = F.categorias;
   // destino pode ser Outros (97) ou NS/NR (98); só a ORIGEM não pode ser fixa (a linha fixa não tem o menu)
-  const opts = (excl) => cats.filter((c) => c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  const opts = (excl) => optsCategorias(cats, { excluir: excl });
   const rows = cats.map((c) => {
     const k = P.contagens[c.codigo] || { primaria: 0, secundaria: 0 }, m = k.primaria + k.secundaria;
     const ro = c.fixa || F.fixo;
@@ -896,7 +901,7 @@ async function abrirJanelaCategorias() {
   const D = await api(`/api/pergunta/${qid}/perfil`, {}, "Montando o perfil das categorias…");
   const F = P.frame, frameOk = F && F.status === "aprovado", locked = P.codificacao?.status === "aprovado";
   const podeEditar = !F?.fixo && !locked;
-  const catsOpc = (excl) => catsValidas().filter((c) => c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  const catsOpc = (excl) => optsCategorias(catsValidas(), { excluir: excl });
   const b = D.base || {};
   const cats = D.classificada ? [...D.categorias].sort((x, y) => (y.n || 0) - (x.n || 0)) : D.categorias;
   const catOutros = D.classificada ? cats.find((c) => (c.codigo === 97 || String(c.codigo) === "97" || (c.nome || "").toLowerCase().includes("outros")) && (c.pct || 0) > 5.0) : null;
@@ -951,7 +956,7 @@ async function abrirJanelaSaudeQuadro() {
   const raras = diag.categorias_raras || [];
   const saudaveis = diag.categorias_saudaveis || [];
   const catsFrame = P.frame?.categorias || [];
-  const opts = (excl) => catsFrame.filter((c) => c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  const opts = (excl) => optsCategorias(catsFrame, { excluir: excl });
 
   const placarHtml = `
     <div class="sq-placar">
@@ -1358,7 +1363,7 @@ function renderCodificacao() {
   const ordem = [...cats].map((c) => ({ c, m: (P.contagens[c.codigo]?.primaria || 0) + (P.contagens[c.codigo]?.secundaria || 0) })).sort((a, b) => b.m - a.m);
   const maxm = Math.max(1, ...ordem.map((o) => o.m));
   const chart = ordem.map(({ c, m }) => `<div class="row"><div class="n" title="${esc(c.nome)}">${esc(c.nome)}</div><div class="bar"><i style="width:${(100 * m) / maxm}%"></i><span>${m} · ${pct(m, n)}</span></div></div>`).join("");
-  const optCat = (sel, vazio) => (vazio ? `<option value="">${esc(vazio)}</option>` : "") + cats.map((c) => `<option value="${c.codigo}" ${c.codigo === sel ? "selected" : ""}>${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  const optCat = (sel, vazio) => (vazio ? `<option value="">${esc(vazio)}</option>` : "") + optsCategorias(cats, { sel });
   const todas = filtrarItens(), vis = todas.slice(0, state.mostrar);
   // sub-filtro por categoria (visível ao ordenar por confiança): conta ignorando o filtro de categoria em si
   const chipsCat = (() => {
@@ -1447,7 +1452,7 @@ function renderCodificacao() {
         <option value="corrigida" ${f.situacao === "corrigida" ? "selected" : ""}>corrigidas por você</option>
         <option value="nao" ${f.situacao === "nao" ? "selected" : ""}>não classificadas</option>
       </select>
-      <select id="c-cat"><option value="">todas as categorias</option>${cats.map((c) => `<option value="${c.codigo}" ${String(c.codigo) === f.cat ? "selected" : ""}>${c.codigo} · ${esc(c.nome)}</option>`).join("")}</select>
+      <select id="c-cat"><option value="">todas as categorias</option>${optsCategorias(cats, { sel: +f.cat || null })}</select>
       <label><input type="checkbox" id="c-al" ${f.alertas ? "checked" : ""}> só alertas</label>
       <label><input type="checkbox" id="c-com" ${f.comentarios ? "checked" : ""}> só comentadas</label>
       <select id="c-ord"><option value="conf" ${f.ordem === "conf" ? "selected" : ""}>ordenar: menor confiança</option><option value="n" ${f.ordem === "n" ? "selected" : ""}>ordenar: mais frequentes</option><option value="cat" ${f.ordem === "cat" ? "selected" : ""}>ordenar: categoria</option></select>
