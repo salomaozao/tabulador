@@ -506,3 +506,9 @@ table.perfil th{font-weight:500;color:var(--text-3)}
 .card-q-grupo{border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--surface)}
 .card-q-grupo .cab{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px}
 .card-q-grupo .tools{margin-top:8px}
+
+/* painel geral e barra lateral: grupos */
+.bloco-grupo{border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin:12px 0;background:var(--surface-2,transparent)}
+.bloco-grupo-cab{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:8px}
+#lista-perguntas li.grupo-li{border-left:3px solid var(--accent,#4c8bf5)}
+#lista-perguntas li.no-grupo{margin-left:14px}

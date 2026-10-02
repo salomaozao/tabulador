@@ -3,6 +3,9 @@
 Plano de implementação no formato MetaGPT (PM → Arquiteto → Gerente de Projeto → Engenheiro → QA).
 Data: 2026-10-02 · Origem: conversa com o Gabriel · Memória: `tabulador-grupos-redesenho`.
 
+**Status (2026-10-02): fases 1 a 4 implementadas e testadas** (commits `a9aa5ac`, `a8c4202`, `ceecabb` e o da fase 4; ponto de retorno: tag `pre-pivot-grupos`).
+Desvio do plano: a página do grupo reaproveita `renderFrame`/`renderCodificacao` com uma "pergunta virtual" (rid composto + `_q` de origem) em vez de reescrever a tabela; a supervisão (auditar, aceite automático, revisão por categoria) continua na página de cada pergunta.
+
 ---
 
 ## 1. Requisitos originais (PM)

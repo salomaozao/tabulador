@@ -172,14 +172,27 @@ function renderSidebar() {
   $("#li-resultados").className = state.view === "resultados" ? "ativa" : "";
   $("#li-gerenciar").className = state.view === "gerenciar" ? "ativa" : "";
   const ul = $("#lista-perguntas"); ul.innerHTML = "";
-  for (const s of state.status.perguntas) {
+  const itemPergunta = (s, noGrupo) => {
     const li = document.createElement("li");
-    li.className = s.qid === state.qid ? "ativa" : "";
+    li.className = (s.qid === state.qid ? "ativa" : "") + (noGrupo ? " no-grupo" : "");
     const badges = [pillStatus(s)];
     if (s.codificacao && s.n_codificadas) badges.push(`<span class="pill">${pct(s.n_revisadas, s.n_codificadas)} revisado</span>`);
     li.innerHTML = `<span class="t">${esc(s.rotulo)}</span><span class="small">${esc(s.qid)}${s.backcoding ? " · back-coding" : ""}${s.respondeu ? " · " + s.respondeu + " resp." : ""}</span><span class="b">${badges.join("")}</span>`;
     li.onclick = () => irPara(s.qid);
+    return li;
+  };
+  const vistos = new Set();
+  for (const s of state.status.perguntas) {
+    if (!s.grupo) { ul.appendChild(itemPergunta(s, false)); continue; }
+    if (vistos.has(s.grupo.nome)) continue;  // o grupo aparece uma vez, com as perguntas dele logo abaixo
+    vistos.add(s.grupo.nome);
+    const li = document.createElement("li");
+    li.className = "grupo-li" + (state.view === "grupo" && state.grupo === s.grupo.nome ? " ativa" : "");
+    li.innerHTML = `<span class="t">🔗 ${esc(s.grupo.rotulo)}</span><span class="small">grupo · ${esc(s.grupo.membros.join(" + "))}</span>
+      <span class="b">${s.grupo.fechado ? '<span class="pill ok">fechado</span>' : '<span class="pill warn">em andamento</span>'}</span>`;
+    li.onclick = () => { location.hash = "grupo/" + encodeURIComponent(s.grupo.nome); };
     ul.appendChild(li);
+    for (const m of state.status.perguntas.filter((x) => x.grupo?.nome === s.grupo.nome)) ul.appendChild(itemPergunta(m, true));
   }
 }
 function irPara(qid) { location.hash = qid || "painel"; }
@@ -276,7 +289,7 @@ function renderPainel() {
   if (!b.fonte_existe) avisos.push(`<div class="aviso">Planilha-fonte não encontrada: <code>${esc(b.fonte)}</code></div>`);
   else if (!b.carregada) avisos.push(`<div class="aviso">A planilha ainda não foi lida. <button class="btn sm primary" data-acao="load">Ler a planilha agora</button></div>`);
 
-  const cards = S.perguntas.map((s) => {
+  const cardPergunta = (s, dentroDoGrupo) => {
     const cod = s.n_codificadas || 0, tot = s.n_unicas || s.respostas || 0, rev = s.n_revisadas || 0;
     const barra = (v, d, cls = "") => `<div class="prog ${cls}"><i style="width:${d ? (100 * v) / d : 0}%"></i></div>`;
     const pctRev = tot ? Math.round((100 * rev) / tot) : 0;
@@ -285,7 +298,7 @@ function renderPainel() {
         <div class="n">${fmtN(rev)}<i> / ${fmtN(tot)}</i></div><div class="lab">revisadas / total</div>
         <div class="bar"><i style="width:${pctRev}%"></i></div></div>` : "";
     // badge de grupo: aparece logo abaixo do título do card quando a pergunta pertence a um grupo
-    const grupoBadge = s.grupo
+    const grupoBadge = s.grupo && !dentroDoGrupo
       ? (() => {
           const outros = (s.grupo.membros || []).filter((m) => m !== s.qid).join(', ');
           return `<span class="grupo-badge" title="Grupo: ${esc(s.grupo.rotulo)}">🔗 ${esc(s.grupo.rotulo)}${outros ? ` (+${esc(outros)})` : ''}</span>`;
@@ -305,7 +318,24 @@ function renderPainel() {
         ${s.top && s.top.length ? `<div class="small top">Mais citadas: ${s.top.slice(0, 3).map((t) => esc(t.nome)).join(" · ")}</div>` : ""}` : ""}
       <button class="btn sm ${s.codificacao === "aprovado" ? "" : "primary"}">${s.codificacao === "aprovado" ? "Ver" : s.frame ? "Continuar" : "Começar"}</button>
     </div>`;
-  }).join("");
+  };
+  // perguntas de um grupo ficam juntas num bloco com o andamento do grupo; as demais, em cartões soltos
+  const blocos = [], gruposVistos = new Map();
+  for (const s of S.perguntas) {
+    if (!s.grupo) {
+      const ult = blocos[blocos.length - 1];
+      if (ult && ult.solta) ult.itens.push(s); else blocos.push({ solta: true, itens: [s] });
+    } else if (gruposVistos.has(s.grupo.nome)) gruposVistos.get(s.grupo.nome).itens.push(s);
+    else { const b = { grupo: s.grupo, itens: [s] }; gruposVistos.set(s.grupo.nome, b); blocos.push(b); }
+  }
+  const andamentoGrupo = (g) => g.andamento.map((a) => `<span class="pill ${a.classificacao === "aprovado" ? "ok" : a.quadro_aprovado ? "" : "warn"}" title="${a.classificacao === "aprovado" ? "concluída" : a.quadro_aprovado ? "categorias aprovadas; classificação em andamento" : "categorias ainda não aprovadas"}">${esc(a.qid)} ${a.classificacao === "aprovado" ? "✓ concluída" : a.quadro_aprovado ? "em revisão" : "categorias a aprovar"}</span>`).join(" ");
+  const cards = blocos.map((b) => b.solta
+    ? `<div class="cards">${b.itens.map((s) => cardPergunta(s, false)).join("")}</div>`
+    : `<div class="bloco-grupo">
+        <div class="bloco-grupo-cab"><div><b>🔗 ${esc(b.grupo.rotulo)}</b> ${b.grupo.fechado ? '<span class="pill ok">✓ grupo fechado</span>' : ""}
+          <div class="small">${b.grupo.tem_quadro ? "Um quadro de categorias para as perguntas do grupo" : "Ainda sem quadro de categorias: gere no grupo"} · ${andamentoGrupo(b.grupo)}</div></div>
+          <button class="btn ${b.grupo.fechado ? "" : "primary"} b-abrir-grupo" data-grupo="${esc(b.grupo.nome)}">${b.grupo.tem_quadro ? "Abrir o grupo" : "Gerar categorias do grupo"}</button></div>
+        <div class="cards">${b.itens.map((s) => cardPergunta(s, true)).join("")}</div></div>`).join("");
 
   const aprovadas = S.perguntas.filter((s) => s.codificacao === "aprovado").length;
   const nArq = Object.values(R).filter((r) => r.existe).length;
@@ -315,11 +345,12 @@ function renderPainel() {
     ${b.carregada ? `<div class="small">Base: <b>${b.n}</b> respondentes · atualizada ${b.atualizada_em}</div>` : ""}
     ${cabecalhoProjeto(S)}
     ${avisos.join("")}
-    <h2>Perguntas abertas <small>${aprovadas} de ${S.perguntas.length} aprovadas</small></h2>
-    <div class="cards">${cards}</div>
+    <h2>Perguntas abertas <small>${aprovadas} de ${S.perguntas.length} aprovadas${gruposVistos.size ? ` · ${[...gruposVistos.values()].filter((b) => b.grupo.fechado).length} de ${gruposVistos.size} grupos fechados` : ""}</small></h2>
+    ${cards}
     <h2>Resultados</h2>
     <div class="info">📦 ${aprovadas} pergunta(s) aprovada(s) · ${nArq} arquivo(s) gerado(s). O resumo das categorias e os downloads (planilha final, codebook, cruzamentos) ficam na aba <a href="#resultados"><b>Resultados</b></a>.</div>`;
   document.querySelectorAll(".card").forEach((c) => (c.onclick = () => irPara(c.dataset.qid)));
+  document.querySelectorAll(".b-abrir-grupo").forEach((b) => (b.onclick = () => { location.hash = "grupo/" + encodeURIComponent(b.dataset.grupo); }));
   document.querySelectorAll("[data-acao=ia]").forEach((b) => (b.onclick = abrirIA));
   document.querySelectorAll("[data-acao=load]").forEach((b) => (b.onclick = recarregarPlanilha));
 }

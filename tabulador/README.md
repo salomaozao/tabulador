@@ -249,6 +249,21 @@ Testes (não chamam a OpenAI; escrevem em pasta temporária): `python -m unittes
 | `app.py` + `templates/` + `static/` | interface web (Flask + JS puro, sem build) |
 | `iniciar.bat` | instalador/lançador (ambiente em `%LOCALAPPDATA%\Tabulador\venv`) |
 
+## Grupos de perguntas (quadro único)
+
+Perguntas que se complementam (ex.: Q32 "provavelmente vai trocar" + Q33 "certamente vai trocar") podem formar
+um **grupo** (aba *Grupos de perguntas*). O grupo tem **uma página própria** (`#grupo/<nome>`, também pelo Painel geral
+e pela barra lateral):
+
+- **Quadro único:** a IA gera as categorias lendo as respostas de **todas** as perguntas; a página mostra a
+  *cobertura* ("Q32: 374 de 374 · Q33: 132 de 132"; acima de `TABULADOR_MAX_INDUCAO` é amostra, com todas as
+  repetidas e cota mínima por pergunta). Ajustes (renomear, mesclar, "Pedir ajuste à IA"…) valem para o grupo e
+  remapeiam a classificação de todas as perguntas; mudanças que afetam respostas já classificadas pedem confirmação.
+- **Uma categoria = um atributo:** a IA recusa juntar dois atributos numa categoria e explica em *avisos*.
+- **Tabela única** de revisão com a coluna *Questão* (filtro por pergunta); cada ação vai para a pergunta de origem.
+- **Aprovação por pergunta:** cada pergunta aprova as categorias e a classificação por conta própria; o grupo
+  fica *fechado* quando todas estão concluídas. Plano e decisões: `docs/IP_grupos_de_perguntas.md`.
+
 Variáveis de ambiente úteis: `OPENAI_MODEL` (padrão `gpt-4.1`), `TABULADOR_PARALELO` (chamadas
 simultâneas, padrão 4), `ASSERTIVA_LOTE` (respostas por chamada, padrão 30), `TABULADOR_MAX_INDUCAO`
 (máx. de respostas únicas lidas ao propor categorias, padrão 1500 — acima disso usa amostra),
