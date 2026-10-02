@@ -144,6 +144,7 @@ select.cat{width:100%;max-width:230px}
 .legenda span{display:flex;align-items:center;gap:6px}
 .sw{width:14px;height:3px;border-radius:2px;display:inline-block;flex:none}
 .sw.ok{background:var(--ok)}.sw.auto{background:var(--ok);opacity:0.72}.sw.acc{background:var(--accent)}.sw.total{background:var(--text-3);border-top:1px dashed var(--text-3)}.sw.nada{background:var(--surface-3)}
+.sw.proj{background:none;border-top:1px dotted var(--text-3);opacity:.7}.legenda .prev{color:var(--text-3)}.legenda .prev b{color:var(--text-2);font-weight:600}
 .grafico{border-left:1px solid var(--border);padding-left:20px;min-width:0}
 .grafico svg{display:block;max-width:100%}
 @media(max-width:860px){.cab{grid-template-columns:1fr}.grafico{border-left:0;padding-left:0}}
