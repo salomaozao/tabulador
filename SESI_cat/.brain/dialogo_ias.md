@@ -682,3 +682,162 @@ Depois vem uma única porta de gravação: PEND-31 + PEND-24 + a parte de grava�
 - PEND-34 concluída e testada.
 - Código pronto e homologado para o fluxo de revisão do SESI CAT.
 - Próximas prioridades: PEND-31 (concorrência e lock otimista no Turso) ou PEND-32 (amostra de controle contínua).
+
+---
+
+## 2026-10-02 12:40 — docs(brain): PEND-35 planejado — Assistente de IA na criação de grupos (rótulo, escopo, instrucoes_frame e compatibilidade)
+
+**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+
+**Contexto:**
+Gabriel instruiu: *"temos outra ia mexendo no projeto, apenas planeje: Queremos aumentar o input da IA na hora de criar grupos; Não sugerir grupos, mas ao criar um grupo, ela inputar detalhes, nome do grupo, etc... apenas documente tudo... coloque no brain, nao use manage brain"*.
+
+**Feito:**
+- **Plano de Implementação (IP) Completo:**
+  - Criado `tabulador/docs/IP_criacao_grupos_input_ia.md` no padrão MetaGPT cobrindo PM, PRD, Arquitetura, Schema da LLM, Prompts, UX e QA.
+  - A decisão de agrupamento passa a ser 100% humana (a sugestão automática cega de pares por sobreposição estatística de bases é descontinuada da interface).
+  - A IA passa a atuar sob demanda com o botão `✨ Analisar e preencher com IA`, lendo enunciados e micro-amostras reais de respostas para propor: (1) nome executivo do grupo; (2) descrição de escopo; (3) diretrizes temáticas para o quadro unificado (`instrucoes_frame`) respeitando "uma categoria = um atributo"; e (4) diagnóstico de compatibilidade semântica.
+- **Registro no Brain (PEND-35 / OBJ-01):**
+  - Criado `SESI_cat/.brain/pendencias/35_assistente_ia_criacao_grupos.md`.
+  - Atualizado `SESI_cat/.brain/pendencias.md` com a linha da PEND-35 (aberta, prioridade média).
+  - Não executado `manage_brain.py sync`, conforme ordem explícita do usuário.
+- **Coordenação Multi-Agente:**
+  - Registrado em `jumppi/COMUNICACAO_IAS.md` timeline.
+  - Nenhum código executável do Tabulador foi tocado, garantindo isolamento total do trabalho concorrente da outra IA em `worktrees/tabulador-grupos-f1`.
+
+**Próxima IA / Handoff:**
+- PEND-35 pronta para ser puxada para execução em branch isolada (`feat/grupos-ia-input`) quando a Fase 1 do motor de grupos (`feat/grupos-fase1`) for concluída pela outra IA.
+
+---
+
+## 2026-10-02 12:45 — docs(brain): PEND-36 planejado — Relatório síntese visual na aba Resultados (ideias, perfis e verbatins)
+
+**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+
+**Contexto:**
+Gabriel orientou: *"temos outra ia mexendo no projeto, apenas planeje: Queremos uma página dentro de resultados que sintetiza um relatório, com base nas respostas. Queremos no momento uma coisa simples, criando um relatorio visual, sem pdf nem nada; Oq queremos sintetizar? Perfis de respondentes? de ideias e planeje"*. Em seguida, instruiu: *"anote no brain"*.
+
+**Feito:**
+- **Plano de Implementação (IP) Completo:**
+  - Criado `tabulador/docs/IP_relatorio_sintese_resultados.md` no formato MetaGPT.
+  - Alinhamento da dor: a aba de Resultados foca hoje na entrega fria de arquivos Excel/brutos. Falta uma camada executiva visual que conecte a categorização ao insight acionável.
+  - Resolução do dilema *Perfis vs. Ideias*: o relatório une os dois conectando `[Perfil / Demografia / NPS] -> [Temática / Dor aberta] -> [Verbatim representativo]`.
+  - Arquitetura 100% web: desenhado para rodar no navegador usando os componentes CSS nativos do Tabulador (`app.css`), permitindo impressão nativa (Ctrl+P) ou prints de cards limpos para apresentações, dispensando geradores de PDF pesados.
+  - Quatro blocos da tela: (1) Sumário Estratégico (Alavanca Principal, Alerta Crítico, Narrativa Global); (2) Mapa de Ideias & Polaridade (Elogios, Dores, Sugestões); (3) Perfis de Respondentes (cruzamento das abertas com banners de corte ou NPS); (4) A Voz do Respondente (mural de verbatins curados).
+  - Cache econômico: salvo em `output/relatorio_sintese.json`, atualizado apenas sob demanda.
+- **Registro no Brain (PEND-36 / OBJ-01):**
+  - Criado `SESI_cat/.brain/pendencias/36_relatorio_sintese_resultados.md`.
+  - Atualizado `SESI_cat/.brain/pendencias.md` com a linha da PEND-36 (aberta, prioridade média).
+  - Respeitada a diretriz de não rodar `manage_brain.py sync`.
+- **Coordenação Multi-Agente:**
+  - Nenhuma linha de código de execução do Tabulador foi tocada (isolamento total do Claude / branch em worktree).
+
+**Próxima IA / Handoff:**
+- PEND-36 planejada e aguardando janela de implementação em branch dedicada (`feat/relatorio-sintese`).
+
+---
+
+## 2026-10-02 12:46 — docs(brain): PEND-37 registrado como ideia futura (telemetria de tokens, modelo e custo por pergunta e no consolidado)
+
+**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+
+**Contexto:**
+Gabriel instruiu: *"salve como ideia a gente colocar dados de uso de modelo, tokens, custo estimado, etc..."*.
+
+**Feito:**
+- **Registro de Pensamento / Ideia Futura (PEND-37 / OBJ-03):**
+  - Criado `SESI_cat/.brain/pendencias/37_telemetria_tokens_custo_por_pergunta_e_projeto.md`.
+  - Registrada a dor: hoje o consumo de IA fica restrito à aba técnica `/api/usage` e invisível no dia a dia do pesquisador e nas entregas executivas.
+  - Desenho conceitual: (1) pílula de telemetria no card da pergunta e cabeçalho interno (`⚡ gemini-2.5-flash · 42k tokens · ~R$ 0,18`); (2) seção de "Investimento Computacional / IA" na aba Resultados e entregáveis; (3) custo acumulado por pergunta na barra de revisão; (4) persistência estruturada do resumo de uso em `codificacao.json` (`telemetria_ia`).
+  - Atualizado `SESI_cat/.brain/pendencias.md` com status `aberto`, prioridade `baixa` e tag `(Ideia futura)`.
+  - Respeitada a regra de não executar `manage_brain.py sync`.
+- **Coordenação Multi-Agente:**
+  - Zero arquivos de código alterados; ambiente de execução 100% isolado.
+
+**Próxima IA / Handoff:**
+- PEND-37 salva como ideia para amadurecimento junto da telemetria de auditoria (PEND-26/27).
+
+---
+
+## 2026-10-02 — docs(brain): PEND-38 registrado (grupos: categorias base + próprias; revisar lógica do quadro único)
+
+**Autor:** Claude Sonnet 5.5 · operador: Gabriel Nascimento
+
+**Contexto:**
+Depois das fases 1-4 dos grupos de perguntas (main, `a9aa5ac`..`4ee87fd`; plano em `tabulador/docs/IP_grupos_de_perguntas.md`), o Gabriel testou e não gostou da lógica: confusão sobre o que difere ao aprovar categorias em Q4 e Q5, categoria gerada com dois assuntos (deve ser barrado no prompt) e categorias que só existem em uma das perguntas. Pediu para **guardar como pendência, sem mexer agora**.
+
+**Feito:**
+- Criado `pendencias/38_grupos_categorias_base_e_proprias.md` e linha em `pendencias.md` (`Aberto`, criticidade média, OBJ-01).
+- Nenhum código alterado. Não rodei `manage_brain.py sync` nem o sincronizador de calendário (sem datas novas).
+
+**Próxima IA / Handoff:**
+- PEND-38 está só registrada: ideia = categorias BASE do grupo (aparecem na página de cada pergunta) + categorias PRÓPRIAS por pergunta. Antes de implementar, passar o desenho pelo conselho de IAs e fechar as perguntas em aberto listadas na pendência.
+
+---
+
+## 2026-10-02 13:55 — docs(brain): PEND-40 registrado — Gráfico de evolução com degradê verde, % no eixo Y e projeção de ritmo
+
+**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+
+**Contexto:**
+Gabriel instruiu: *"vamos adicionar uma pendência: O gráfico de respostas conferidas deve ter uma linha mostrando a evolução, verde com degradê escurecendo; Queremos ter porcentagem no eixo y também e uma projeção (linha cinza, 3 cenários: otimista, neutro e pessimista) do ritmo de respostas, informando uma data estimada ded conclusão dado o ritmo atual; Essas informações são secundárias então não devem ocupar muito espaço, sendo relativamente discretas"*.
+
+**Feito:**
+- **Registro no Brain (PEND-40 / OBJ-01):**
+  - Criado `SESI_cat/.brain/pendencias/40_grafico_respostas_degrade_eixo_pct_projecao.md` com requisitos detalhados:
+    1. Linha verde com área de degradê escurecendo em SVG (`linearGradient`).
+    2. Eixo Y com porcentagens associadas aos volumes absolutos.
+    3. Projeção de ritmo em 3 cenários (otimista, neutro e pessimista) em linhas cinzas pontilhadas discretas e cálculo de data estimada de conclusão.
+    4. Tratamento visual como informação secundária (discreta, sem disputar atenção nem poluir o painel).
+  - Atualizado `SESI_cat/.brain/pendencias.md` com a linha da PEND-40 (`Aberto`, criticidade média, OBJ-01).
+- **Coordenação Multi-Agente:**
+  - Nenhum código alterado. Apenas documentação no `.brain`.
+
+**Próxima IA / Handoff:**
+- PEND-40 pronta para especificação e implementação em `tabulador/static/app.js` (`graficoProgresso`) e `tabulador/static/app.css` quando o Gabriel priorizar.
+
+---
+
+## 2026-10-02 14:07 — docs(brain): PEND-41 registrado — Desambiguação visual e feedback ao parar classificação
+
+**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+
+**Contexto:**
+Ao clicar em "⏹ Parar" durante a classificação da Q29, Gabriel reportou: *"O botão de parar classificação não está parando, parece que ele classifica tudo mas não carrega? Pelo menos o log na mensagem de carregamento está ambígua"*.
+
+**Diagnóstico & Fatos:**
+- O backend de fato parou (apenas 3 de 32 lotes foram executados e salvos; os 29 lotes seguintes foram cancelados).
+- Falha de UX: ao entrar na etapa de gravação pós-parada, `progresso.etapa("gravar")` marca a etapa da IA como concluída com `✓` verde e a barra dispara para 100%, gerando a ilusão de que "classificou tudo". Ao carregar a tela e ver apenas 90 respostas classificadas (860 pendentes), surge a sensação de que "não carregou".
+- Ambiguidade de logs: o modal mantinha o tempo estimado para os 32 lotes (`faltam ~X min`) e workers paralelos que já haviam iniciado emitiam logs após o clique.
+
+**Feito:**
+- **Registro no Brain (PEND-41 / OBJ-01):**
+  - Criado `SESI_cat/.brain/pendencias/41_feedback_interrupcao_parar_classificacao.md` detalhando os requisitos: checagem de parada em `_um`, não promover etapa interrompida para `estado = "feito"` (manter indicador de parada sem `✓` verde), travar a barra no progresso real, ocultar estimativas futuras de tempo e mensagens claras de quantas foram salvas e quantas ficaram pendentes.
+  - Atualizado `SESI_cat/.brain/pendencias.md` com a PEND-41 (`Aberto`, criticidade média, OBJ-01).
+- **Coordenação Multi-Agente:**
+  - Nenhum código alterado. Apenas documentação no `.brain`.
+
+**Próxima IA / Handoff:**
+- PEND-41 documentada e pronta para ser implementada em `src/progresso.py`, `src/coding.py`, `src/supervisao.py` e `static/app.js`.
+
+
+---
+
+## 2026-10-02 — feat(tabulador): PEND-23 (ganho da auditoria), PEND-24 (tela Versões) e PEND-26 (telemetria); PEND-39 e prazos registrados
+
+**Autor:** Claude Sonnet 5.5 · operador: Gabriel Nascimento
+
+**Contexto:**
+Gabriel pediu: nova pendência (trocar de projeto exige F5), prazo de 07/10 para PEND-01/03 (entram mais respostas na segunda 05/10), fazer PEND-24 e 26, e custo estimado "como API" para as IAs por CLI.
+
+**Feito (main, commits `aa169f4`, `0cab9d9`, `38f5059`, `97a7c17`):**
+- **PEND-39** criada (não investigada). **PEND-01/03:** `prazo: 2026-10-07`. Calendário sincronizado.
+- **PEND-37:** requisito do custo estimado das IAs por CLI (já há tokens do Claude e do Antigravity em `llm_cli.py`; falta preço na tabela `PRECOS` e rótulo "estimado").
+- **PEND-23 resolvida:** `supervisao.auditar(..., limiar)` devolve `ganho`; janela mostra passaram pelo auditor antes→depois e calibração da confiança.
+- **PEND-24:** botão `🕘 Versões` (lista e restaura versões). Backup manual da nuvem rodado (`tabulador/projetos/sesi_cat/output/_backup/nuvem_20261002_135625.json`). Falta validar snapshot/restauração contra o Turso real e o clique no navegador.
+- **PEND-26:** `classificado_por/em`, `revisado_em`, `criada_por/em/com`, `por` no histórico do quadro, log de eventos (`src/eventos.py`, tabela `eventos`), `entrega_manifesto.json`, backfill (`src/telemetria_backfill.py`). Detalhes na própria pendência. Suíte: 179 passam.
+
+**Próxima IA / Handoff:**
+- **Backfill não aplicado na base real:** rodar `python src/telemetria_backfill.py -p sesi --aplicar` só com OK do Gabriel (simulação: ~5.800 de ~7.300 casam).
+- PEND-24: validar contra o Turso real; PEND-26 segue `aberto` até o backfill. PEND-27 (painel) consome `eventos`.
+- Antes da entrega de 07/10: recarregar a planilha com as respostas de segunda e rodar "Classificar as restantes" (PEND-01).
