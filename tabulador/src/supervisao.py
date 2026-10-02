@@ -138,7 +138,16 @@ CLASSIFICAÇÕES A CONFERIR
     return system, user
 
 
-def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, escopo: str = "pendentes") -> dict:
+def _ganho(itens: list[dict], limiar: float) -> dict:
+    """Entre as respostas ainda não conferidas por pessoa com confiança >= limiar: quantas, e quantas já passaram
+    pelo auditor (outra IA concordou). 'Passou pelo auditor' não é 'está certa' (PEND-23, ressalva metodológica)."""
+    alta = [i for i in itens if i.get("primaria") is not None and not i.get("validado")
+            and i.get("origem") not in ("humano", "regra", "erro") and (i.get("confianca") or 0) >= limiar]
+    return {"alta": len(alta), "passaram": sum(1 for i in alta if (i.get("auditoria") or {}).get("ok") is True)}
+
+
+def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, escopo: str = "pendentes",
+            limiar: float = LIMIAR_PADRAO) -> dict:
     """Pede a outra IA (provedor/modelo escolhidos na tela) que confira a classificação.
     escopo: 'pendentes' = ainda não conferidas e não auditadas; 'todas' = todas as não conferidas."""
     CF.snapshot_antes(qid, "auditar")
@@ -152,6 +161,7 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
             and (escopo == "todas" or not i.get("auditoria"))]
     if not alvo:
         return {"auditadas": 0, "concorda": 0, "discorda": 0, "por": None}
+    antes = _ganho(cod["itens"], limiar)
     lote_n = config.LLM_LOTE
     lotes = [[{**i, "texto": textos.get(i["rid"], "")} for i in alvo[k:k + lote_n]] for k in range(0, len(alvo), lote_n)]
     enunciado = V.por_id(qid).get("rotulo")
@@ -195,6 +205,7 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
     cod = CD.codificacao(qid)  # relê: a pessoa pode ter conferido algo enquanto a IA auditava
     por_rid = {i["rid"]: i for i in cod["itens"]}
     agora, n = _agora(), Counter()
+    conf = {"concorda": [], "discorda": []}  # confiança da IA onde o auditor concordou x discordou (calibração)
     for saida in resultados.values():
         for a in saida.get("auditoria", []):
             i = por_rid.get(a.get("rid"))
@@ -203,14 +214,21 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
             if a.get("ok") or a.get("primaria") == i.get("primaria"):
                 i["auditoria"] = {"por": por, "ok": True, "em": agora}
                 n["concorda"] += 1
+                conf["concorda"].append(i.get("confianca") or 0)
             elif a.get("primaria") in validos:
                 sec = a.get("secundaria") if a.get("secundaria") in validos and a.get("secundaria") != a["primaria"] else None
                 i["auditoria"] = {"por": por, "ok": False, "em": agora, "primaria": a["primaria"], "secundaria": sec,
                                   "nota": (a.get("nota") or "")[:200]}
                 n["discorda"] += 1
+                conf["discorda"].append(i.get("confianca") or 0)
     CF._gravar(qid, "codificacao.json", cod)
+    media = lambda v: round(sum(v) / len(v), 2) if v else None  # noqa: E731
+    depois = _ganho(cod["itens"], limiar)
     return {"auditadas": n["concorda"] + n["discorda"], "concorda": n["concorda"], "discorda": n["discorda"],
-            "lotes_com_erro": len(falhas), "por": por, "parado_usuario": parado_usuario}
+            "lotes_com_erro": len(falhas), "por": por, "parado_usuario": parado_usuario,
+            "ganho": {"limiar": limiar, "alta": depois["alta"], "passaram_antes": antes["passaram"],
+                      "passaram_depois": depois["passaram"], "conf_media_concorda": media(conf["concorda"]),
+                      "conf_media_discorda": media(conf["discorda"])}}
 
 
 # ----------------------------------------------------------------------------- quem conferiu

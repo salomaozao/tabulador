@@ -954,7 +954,8 @@ def api_auditar(qid):
         d = request.get_json(silent=True) or {}
         passos = [("ia", "O auditor (outra IA) confere cada resposta classificada", 12), ("gravar", "Gravar a auditoria")]
         with _lock, progresso.operacao(f"Auditando com outra IA · {qid}", passos):
-            r = SUP.auditar(qid, d.get("provedor") or None, d.get("modelo") or None, d.get("escopo", "pendentes"))
+            r = SUP.auditar(qid, d.get("provedor") or None, d.get("modelo") or None, d.get("escopo", "pendentes"),
+                          float(d.get("limiar", SUP.LIMIAR_PADRAO)))
             if d.get("aceitar"):
                 r["auto"] = SUP.auto_aceitar(qid, float(d.get("limiar", SUP.LIMIAR_PADRAO)))
         out = _payload_pergunta(qid)

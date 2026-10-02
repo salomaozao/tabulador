@@ -1246,10 +1246,23 @@ function abrirAuditoria() {
     const A = r.auditoria || {};
     abrirJanela("Auditoria concluída", `<p>Auditor: <b>${esc(A.por || "—")}</b>. ${fmtN(A.auditadas || 0)} resposta(s) conferidas:
       <b>${fmtN(A.concorda || 0)}</b> concordam e <b>${fmtN(A.discorda || 0)}</b> discordam.${A.lotes_com_erro ? ` ${A.lotes_com_erro} lote(s) deram erro (rode de novo depois).` : ""}</p>
+      ${htmlGanhoAuditoria(A.ganho)}
       ${A.parado_usuario ? `<p class="small">⏹ Parada a seu pedido: o que já foi auditado está salvo; o resto continua sem auditoria.</p>` : ""}
       ${A.auto ? `<p><b>${fmtN(A.auto.aceitas)}</b> aceitas sozinhas (confiança alta + auditor concordando).</p>` : ""}
       <p class="small">As discordâncias aparecem na tabela com <b>🔎 auditor sugere…</b>. Filtre por <b>auditor discordou</b> e use o botão ou a tecla <kbd>S</kbd> para aceitar a sugestão.</p>`);
   };
+}
+// PEND-23: o que a auditoria trouxe. "Passou pelo auditor" não é "está certa": só a amostra de controle (PEND-32) mede o erro real.
+function htmlGanhoAuditoria(g) {
+  if (!g) return "";
+  const d = g.passaram_depois - g.passaram_antes;
+  const cc = g.conf_media_concorda, cd = g.conf_media_discorda;
+  const calib = cc == null || cd == null ? "" : (cc - cd < 0.1
+    ? `<p class="small">⚠ Confiança média da IA: ${cc.toFixed(2)} onde o auditor concordou × ${cd.toFixed(2)} onde discordou. A confiança da IA não está separando acerto de erro.</p>`
+    : `<p class="small">Confiança média da IA: ${cc.toFixed(2)} onde o auditor concordou × ${cd.toFixed(2)} onde discordou.</p>`);
+  return `<p>Entre as <b>${fmtN(g.alta)}</b> com confiança ≥ ${g.limiar.toFixed(2)}: <b>${fmtN(g.passaram_antes)}</b> tinham passado pelo auditor antes → <b>${fmtN(g.passaram_depois)}</b> passaram agora
+    (confiança alta e outra IA concordou) · <b>${d >= 0 ? "+" : ""}${fmtN(d)}</b>.</p>${calib}
+    <p class="small">"Passou pelo auditor" não garante que está certa: dois modelos podem errar juntos.</p>`;
 }
 // botão de aprovar fica na revbar-sticky (PEND-15), sempre à mão e visível ao rolar a tabela
 function renderAprovarBtn() {

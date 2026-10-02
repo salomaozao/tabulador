@@ -86,6 +86,11 @@ class TestSupervisao(unittest.TestCase):
         a = SUP.auditar(QID)
         self.assertGreater(a["auditadas"], 0)
         self.assertEqual(a["auditadas"], a["concorda"] + a["discorda"])
+        g = a["ganho"]  # PEND-23: antes x depois dos que passaram pelo auditor
+        self.assertEqual(g["limiar"], SUP.LIMIAR_PADRAO)
+        self.assertEqual(g["passaram_antes"], 0)  # ninguém tinha sido auditado
+        self.assertLessEqual(g["passaram_depois"], g["alta"])
+        self.assertLessEqual(g["passaram_depois"], a["concorda"])
         itens = CD.codificacao(QID)["itens"]
         disc = [i for i in itens if (i.get("auditoria") or {}).get("ok") is False]
         self.assertTrue(all(i["auditoria"]["primaria"] == 2 and i["auditoria"]["nota"] for i in disc))
