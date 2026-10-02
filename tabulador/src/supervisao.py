@@ -40,6 +40,8 @@ def auto_aceitar(qid: str, limiar: float = LIMIAR_PADRAO, exigir_auditoria: bool
     """Confirma sozinho o que tem confiança >= limiar (e auditoria concordando, se exigido).
     Se categoria for informada, restringe a essa categoria.
     Nunca mexe no que uma pessoa já conferiu/corrigiu. Retorna a contagem por motivo."""
+    cod = CD.codificacao(qid)
+    CD._exigir_destravada(qid, cod, "aceitar respostas automaticamente")
     CF.snapshot_antes(qid, "aceite automático")
     cod = CD.codificacao(qid)
     if not cod:

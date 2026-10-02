@@ -936,6 +936,18 @@ def api_auto_aceitar(qid):
         return _erro(e)
 
 
+@app.post("/api/pergunta/<qid>/trava")
+def api_trava(qid):
+    """{travada: bool}: liga/desliga a trava que impede confirmar respostas e aprovar a pergunta (PEND-42)."""
+    try:
+        d = request.get_json(silent=True) or {}
+        with _lock:
+            CD.definir_trava(qid, bool(d.get("travada")), por=_por())
+        return jsonify(_payload_pergunta(qid))
+    except Exception as e:
+        return _erro(e)
+
+
 @app.post("/api/pergunta/<qid>/desfazer-auto")
 def api_desfazer_auto(qid):
     try:
@@ -958,7 +970,10 @@ def api_auditar(qid):
             r = SUP.auditar(qid, d.get("provedor") or None, d.get("modelo") or None, d.get("escopo", "pendentes"),
                           float(d.get("limiar", SUP.LIMIAR_PADRAO)))
             if d.get("aceitar"):
-                r["auto"] = SUP.auto_aceitar(qid, float(d.get("limiar", SUP.LIMIAR_PADRAO)))
+                if (CD.codificacao(qid) or {}).get("confirmacao_travada"):
+                    r["auto_bloqueado"] = True  # trava ligada (PEND-42): a auditoria vale, mas ninguém é aceito sozinho
+                else:
+                    r["auto"] = SUP.auto_aceitar(qid, float(d.get("limiar", SUP.LIMIAR_PADRAO)))
         out = _payload_pergunta(qid)
         out["auditoria"] = r
         return jsonify(out)
