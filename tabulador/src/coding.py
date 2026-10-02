@@ -626,6 +626,8 @@ def exportar_revisao(qid: str):
         renomear["sugestao_sec_nome"] = "sugestao_sec_auditor"
     if renomear:
         df = df.rename(columns=renomear)
+    if "congelada" in df.columns:  # 'sim' em vez do dicionário técnico; a importação ignora a revisão dessas linhas (PEND-42)
+        df["congelada"] = df["congelada"].map(lambda v: "sim" if v else "")
     df["REVISAO_PRIMARIA"] = None
     df["REVISAO_SECUNDARIA"] = None
     df["COMENTARIO"] = None
@@ -652,11 +654,14 @@ def importar_revisao(qid: str) -> dict:
         raise RuntimeError(f"{qid}: não há codificação para revisar")
     rev = pd.read_excel(p, sheet_name="revisao")
     itens = {i["rid"]: i for i in cod["itens"]}
-    n_alt = 0
+    n_alt = n_congeladas = 0
     for _, linha in rev.iterrows():
         rid = int(linha["rid"])
         item = itens.get(rid)
-        if item is None or item.get("congelada"):
+        if item is None:
+            continue
+        if item.get("congelada"):
+            n_congeladas += 1  # congelada: a revisão dessa linha não vale até descongelar (PEND-42)
             continue
         mudou = False
         for campo, col in (("primaria", "REVISAO_PRIMARIA"), ("secundaria", "REVISAO_SECUNDARIA")):
@@ -685,6 +690,7 @@ def importar_revisao(qid: str) -> dict:
     cod["revisao_importada_em"] = datetime.now().isoformat(timespec="seconds")
     CF._gravar(qid, "codificacao.json", cod)
     cod["_alteracoes"] = n_alt
+    cod["_congeladas_ignoradas"] = n_congeladas
     return cod
 
 
