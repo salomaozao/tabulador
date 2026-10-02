@@ -1027,3 +1027,17 @@ Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancor
 **Próxima IA / Handoff:**
 - Semáforo sem worktrees ocupadas. Crie uma worktree nova para cada tarefa (`git worktree add worktrees/<nome> -b <branch> main`).
 - Sobram 7 pastas antigas e já desregistradas em `.claude/worktrees/` (`sesi-cat-autonomo`, `tabulador-doc-chaves-nuvem`, `tabulador-fix-resumo-geral-nan`, `tabulador-pend10/11/12-doc`, `turso-db-poc`). Não toquei nelas.
+
+---
+
+## 2026-10-02 — PEND-42 redesenhada: congelar UMA resposta (substitui a trava por pergunta)
+
+**Autor:** Claude Sonnet 5.5 · operador: Gabriel Nascimento
+
+**Contexto:** ao validar a trava por pergunta (já na main), o Gabriel corrigiu o entendimento: o bloqueio é por resposta. Uma resposta que ele não quer confirmar nem mexer agora não pode ficar nem pendente nem confirmada; a categoria fica congelada.
+
+**Feito (worktree `worktrees/tabulador-congelar`, branch `feat/congelar-resposta`, commit `bddc841`, a partir de `490eab1`):** ver PEND-42 (estado `congelada`, guardas em todas as operações em massa, botão ❄ + tecla F, filtro, pílula, log). Tira a trava por pergunta. Suíte: 191 passam. **Não mergeada** (a main ainda tem a trava por pergunta do merge `c00fcdd`, que fica superada).
+
+**Próxima IA / Handoff:**
+- Falta o Gabriel validar; depois merge na main (sem conflito esperado: parte de `490eab1`; a main só andou com handoffs e o rótulo "(recomendado)").
+- O app em http://127.0.0.1:5000 (se ainda estiver rodando) é da main antiga, com a trava por pergunta.
