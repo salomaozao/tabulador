@@ -572,3 +572,11 @@ def assimetrias(nome_grupo: str, limiar: float | None = None) -> list[dict]:
             })
 
     return alertas
+
+
+def saude(nome_grupo: str) -> list[dict]:
+    """Saúde do quadro do GRUPO: alertas por categoria (dossiê de todas as perguntas juntas) + assimetrias entre perguntas."""
+    import aprendizado
+    f, dossie = dossie_consolidado(nome_grupo)
+    alertas = aprendizado.saude_de(f, dossie) if f and dossie else []
+    return alertas + assimetrias(nome_grupo)

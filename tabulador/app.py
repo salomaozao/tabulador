@@ -1178,7 +1178,16 @@ def _payload_grupo(nome: str) -> dict:
             "perguntas": [grupos_frame._situacao(q) | {"qid": q, "rotulo": V.por_id(q).get("rotulo")} for q in cfg.get("perguntas", [])],
             "frame": f, "cobertura": (f or {}).get("cobertura"),
             "andamento": grupos_frame.andamento(nome), "fechado": grupos_frame.fechado(nome), "avisos_atributo": CF.avisos_atributo(f),
-            "pode_desfazer_refino": bool(f) and (grupos_frame.pasta(nome) / "frame_anterior.json").exists()}
+            "pode_desfazer_refino": bool(f) and (grupos_frame.pasta(nome) / "frame_anterior.json").exists(),
+            "saude": _saude_grupo(nome)}
+
+
+def _saude_grupo(nome: str) -> list:
+    """Saúde do grupo (aprendizado + assimetrias). Nunca derruba a página do grupo."""
+    try:
+        return grupos_frame.saude(nome)
+    except Exception:  # noqa: BLE001
+        return []
 
 
 @app.get("/api/grupo/<nome>")

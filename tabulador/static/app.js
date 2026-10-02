@@ -4,7 +4,7 @@ const esc = (s) => (s == null ? "" : String(s)).replace(/[&<>"']/g, (c) => ({ "&
 const pct = (n, d) => (d ? Math.round((100 * n) / d) + "%" : "–");
 const POR_PAGINA = 100;
 
-const filtroInicial = () => ({ q: "", cat: "", alertas: false, comentarios: false, situacao: "", ordem: "conf" });
+const filtroInicial = () => ({ q: "", cat: "", alertas: false, comentarios: false, situacao: "", ordem: "conf", origem: "" });
 const state = { view: "painel", status: null, qid: null, P: null, filtro: filtroInicial(), mostrar: POR_PAGINA, amostra: 50 };
 
 // ---------------------------------------------------------------- infra
@@ -416,8 +416,12 @@ function iniciarPresencaProjeto() {
   presencaProjT = setInterval(presencaProjTick, 12000);
 }
 async function refresh(payload) {
+  if (state.view === "grupo") return refreshGrupo(payload);  // a tela do grupo junta as perguntas: recarrega tudo
   state.P = payload || (await api(`/api/pergunta/${state.qid}`)); prepararItens();
   manterScroll(render); carregarStatus();
+  avisosDoPayload(payload);
+}
+function avisosDoPayload(payload) {
   if (payload?.limite_atingido) {
     toast(`Limite de uso do provedor atingido: parei a classificação. ${payload.nao_tentados} resposta(s) ficaram pendentes — espere um pouco (ou troque de provedor em '⚙ Configurar IA') e tente de novo.`, true);
   } else if (payload?.parado_usuario) {
@@ -484,7 +488,9 @@ function badgeSaudeQuadro() {
 }
 
 function render() {
+  if (state.view === "grupo") return renderGrupo();
   const P = state.P, R = P.respostas || {}, F = P.frame, C = P.codificacao, V = P.revisao;
+  const noGrupo = !!P.grupo?.tem_quadro;  // o quadro é do grupo: gerar/editar lá, aqui só aprovar
   const frameOk = F && F.status === "aprovado", codOk = C && C.status === "aprovado";
   const faltam = V ? V.n_faltantes : 0;
   const bs = badgeSaudeQuadro();
@@ -534,14 +540,16 @@ function render() {
     <h2>Categorias
       ${F ? `<span class="pill ${frameOk ? "ok" : "warn"}">${frameOk ? "aprovadas" : "rascunho"}${F.fixo ? " · fixo" : ""}</span>` : ""}
       <span class="acoes">
-        ${!F ? `<button class="btn primary" id="b-induzir">✨ Gerar categorias com IA</button>` : ""}
-        ${F && !F.fixo ? `<button class="btn" id="b-induzir">✨ Gerar do zero</button>` : ""}
+        ${P.grupo && !F ? `<a class="btn primary" href="#grupo/${esc(P.grupo.nome)}">✨ Gerar categorias do grupo</a>` : ""}
+        ${noGrupo ? `<a class="btn" href="#grupo/${esc(P.grupo.nome)}">🔗 Editar no grupo</a>` : ""}
+        ${!F && !P.grupo ? `<button class="btn primary" id="b-induzir">✨ Gerar categorias com IA</button>` : ""}
+        ${F && !F.fixo && !noGrupo ? `<button class="btn" id="b-induzir">✨ Gerar do zero</button>` : ""}
         ${F ? `<button class="btn" id="b-janela-cat" title="Cada categoria com definição, exemplos${C ? ", perfil de quem citou e confirmação em bloco" : ""}">🗂 Revisar por categoria</button>` : ""}
         ${F ? `<button class="btn ${bs.classe}" id="b-saude-quadro" title="Saúde do quadro: diagnóstico por categoria e soluções propostas">🩺 Saúde do quadro${bs.texto}</button>` : ""}
         ${F && !frameOk ? `<button class="btn ok" id="b-aprovar-frame">✓ Aprovar categorias</button>` : ""}
       </span>
     </h2>
-    ${F ? renderFrame() : `<div class="info">A IA lê as respostas e propõe uma lista fechada de categorias com definição e exemplos. Você pode renomear, mesclar, excluir, acrescentar ou pedir ajustes à IA antes de aprovar.</div>`}
+    ${F ? (noGrupo ? renderFrameLeitura() : renderFrame()) : `<div class="info">A IA lê as respostas e propõe uma lista fechada de categorias com definição e exemplos. Você pode renomear, mesclar, excluir, acrescentar ou pedir ajustes à IA antes de aprovar.</div>`}
 
     <h2 id="area-revisao">Classificação das respostas
       ${C ? `<span class="pill ${codOk ? "ok" : "warn"}">${codOk ? "aprovada" : "rascunho"}</span>` : ""}
@@ -589,8 +597,10 @@ function renderFrame() {
       <td class="acoes">${ro ? "" : `<select class="f-mesclar sm" title="Mesclar esta categoria em outra"><option value="">mesclar em…</option>${opts(c.codigo)}</select> <button class="btn sm danger f-remover" title="Excluir (respostas vão para Outros)">✕</button>`}</td>
     </tr>`;
   }).join("");
+  const avisos = [...(P.avisos_atributo || []).map((a) => a.msg), ...(F.avisos_ultimo_refino || [])];
   return `
     ${F.raciocinio && !F.fixo ? `<div class="info">💡 ${esc(F.raciocinio)}</div>` : ""}
+    ${avisos.length ? `<div class="aviso">⚠️ Uma categoria = um atributo:<ul>${avisos.map((m) => `<li>${esc(m)}</li>`).join("")}</ul></div>` : ""}
     <table id="tab-frame"><thead><tr><th style="width:44px">Cód.</th><th style="width:16%">Categoria</th><th style="width:24%">Definição</th><th style="width:17%" title="Palavras típicas da categoria. Entram no pedido à IA como pista. Tracejadas = aprendidas com a revisão (📌 fixa, × descarta e não volta).">Palavras-chave</th><th>Exemplos</th><th class="num" style="width:60px">Prim.</th><th class="num" style="width:60px">Sec.</th><th class="num" style="width:90px">Menções</th><th style="width:200px">Ações</th></tr></thead>
     <tbody>${rows}
       ${F.fixo ? "" : `<tr class="frame-add"><td>+</td><td><input class="inline" id="f-novo-nome" placeholder="Nova categoria"></td><td><input class="inline" id="f-novo-def" placeholder="Definição (1 frase)"></td><td colspan="5"></td><td><button class="btn sm" id="f-add">Adicionar</button></td></tr>`}
@@ -604,6 +614,14 @@ function renderFrame() {
       <div class="tools"><button class="btn primary" id="b-refinar">✨ Ajustar categorias com IA</button>${P.pode_desfazer_refino ? `<button class="btn" id="b-desfazer">↶ Desfazer último ajuste</button>` : ""}</div>
     </div>`}`;
 }
+// quadro de pergunta que pertence a um grupo: só leitura (quem edita é o grupo)
+function renderFrameLeitura() {
+  const P = state.P, F = P.frame;
+  const lin = F.categorias.map((c) => `<tr><td class="num">${c.codigo}</td><td><b>${esc(c.nome)}</b></td><td>${esc(c.definicao)}</td>
+    <td class="num">${(P.contagens[c.codigo]?.primaria || 0) + (P.contagens[c.codigo]?.secundaria || 0)}</td></tr>`).join("");
+  return `<div class="info">🔗 Este quadro é do grupo <b>${esc(P.grupo.rotulo)}</b> (${esc(P.grupo.membros.join(" + "))}). Para gerar, ajustar ou pedir mudança à IA, abra <a href="#grupo/${esc(P.grupo.nome)}">a página do grupo</a>; aqui você só aprova as categorias para <b>${esc(P.qid)}</b>.</div>
+    <table id="tab-frame-leitura"><thead><tr><th style="width:44px">Cód.</th><th style="width:22%">Categoria</th><th>Definição</th><th class="num" style="width:90px">Menções</th></tr></thead><tbody>${lin}</tbody></table>`;
+}
 // palavras-chave: fixas (definidas por alguém) e aprendidas com a revisão (tracejadas, dá para fixar ou descartar)
 function renderKeywords(c, ro) {
   const chip = (k, auto) => `<span class="kw${auto ? " auto" : ""}" data-kw="${esc(k)}" title="${auto ? "Aprendida com as respostas conferidas" : "Palavra-chave fixa"}">${esc(k)}${ro ? "" :
@@ -615,7 +633,7 @@ function renderSaude() {
   if (!A.length) return "";
   return `<div class="saude"><b>Saúde do quadro</b> <span class="small">— sinais tirados da revisão; mudar a estrutura (separar, mesclar, criar) é decisão de vocês</span>
     <ul>${A.map((a) => `<li>${esc(a.msg)}</li>`).join("")}</ul>
-    ${state.P.frame?.fixo ? "" : `<div class="tools"><button class="btn sm" id="b-aprender" title="Recalcula agora as palavras-chave aprendidas (isso também acontece sozinho antes de classificar, a cada 25 revisões novas)">🧠 Aprender com a revisão agora</button></div>`}
+    ${state.P.frame?.fixo || state.P._cods ? "" : `<div class="tools"><button class="btn sm" id="b-aprender" title="Recalcula agora as palavras-chave aprendidas (isso também acontece sozinho antes de classificar, a cada 25 revisões novas)">🧠 Aprender com a revisão agora</button></div>`}
   </div>`;
 }
 function bindFrame() {
@@ -1221,6 +1239,9 @@ function bindAprovarBar() {
 }
 
 // ---------------------------------------------------------------- tabela de classificação
+// na tela do grupo cada linha tem a pergunta de origem (r._q) e a trava vale pela classificação DESSA pergunta
+const emGrupo = () => !!state.P?._cods;
+const travada = (r) => (emGrupo() ? state.P._cods[r._q]?.status === "aprovado" : state.P.codificacao?.status === "aprovado");
 const temSugestao = (r) => r.revisao === "pendente" && r.auditoria?.ok === false && r.auditoria.primaria != null && r.auditoria.primaria !== r.primaria;
 function situacaoOk(r, s) {
   if (!s) return true;
@@ -1241,6 +1262,7 @@ function filtrarItens() {
   }
   const f = state.filtro, q = f.q.toLowerCase();
   let rows = state.P.itens.filter((r) =>
+    (!f.origem || r._q === f.origem) &&
     (!q || (r.texto + " " + (r.justificativa || "")).toLowerCase().includes(q)) &&
     (!f.cat || String(r.primaria) === f.cat || String(r.secundaria) === f.cat) &&
     (!f.alertas || (r.alertas && r.alertas !== "não codificado")) &&
@@ -1269,6 +1291,7 @@ function renderCodificacao() {
     if (f.ordem !== "conf") return "";
     const q = f.q.toLowerCase(), conta = new Map();
     P.itens.forEach((r) => {
+      if (f.origem && r._q !== f.origem) return;
       if (q && !(r.texto + " " + (r.justificativa || "")).toLowerCase().includes(q)) return;
       if (f.alertas && !(r.alertas && r.alertas !== "não codificado")) return;
       if (f.comentarios && !r.comentario) return;
@@ -1318,11 +1341,12 @@ function renderCodificacao() {
       : r.origem === "regra" ? '<span class="pill">regra</span>' : r.origem === "llm+comentario" ? '<span class="pill acc">IA + comentário</span>' : r.origem === "erro" ? '<span class="pill warn">erro</span>' : '<span class="pill">IA</span>';
     // justificativa: sugestões já adotadas (supervisor.py) guardam o texto do revisor; mostra rotulado
     const just = r.justificativa ? (r.ia_original_nome ? `<small>revisor: ${esc(r.justificativa.replace(/^\[revisor [^:]*: ?/, "").replace(/\] IA tinha: .*$/, ""))} · a IA tinha posto: ${esc(r.ia_original_nome)}</small>` : `<small>IA: ${esc(r.justificativa)}</small>`) : "";
-    const sugestao = !locked && temSugestao(r) ? `<div class="sugestao">🔎 auditor sugere: <b>${esc(r.sugestao_nome || r.auditoria.primaria)}</b>${r.sugestao_sec_nome ? ` + ${esc(r.sugestao_sec_nome)}` : ""}${r.auditoria.nota ? ` — ${esc(r.auditoria.nota)}` : ""} <button class="btn sm c-sug" title="Aceitar a sugestão do auditor (tecla S)">aceitar sugestão</button></div>` : "";
+    const sugestao = !travada(r) && temSugestao(r) ? `<div class="sugestao">🔎 auditor sugere: <b>${esc(r.sugestao_nome || r.auditoria.primaria)}</b>${r.sugestao_sec_nome ? ` + ${esc(r.sugestao_sec_nome)}` : ""}${r.auditoria.nota ? ` — ${esc(r.auditoria.nota)}` : ""} <button class="btn sm c-sug" title="Aceitar a sugestão do auditor (tecla S)">aceitar sugestão</button></div>` : "";
     const motivoAlt = r.revisao === "alterada" && r.alterada_motivo ? `<br><small style="color:var(--warn);font-weight:600">⚠️ Reconferir: ${esc(r.alterada_motivo)}</small>` : "";
-    const btnOk = nc || locked ? "" : r.revisao === "alterada" ? `<button class="btn sm c-ok alterada" title="Reconfirmar resposta após alteração da categoria">✓</button>` : r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
+    const btnOk = nc || travada(r) ? "" : r.revisao === "alterada" ? `<button class="btn sm c-ok alterada" title="Reconfirmar resposta após alteração da categoria">✓</button>` : r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
     return `<tr class="${cls}" data-rid="${r.rid}" tabindex="0">
       <td>${btnOk}</td>
+      ${emGrupo() ? `<td><span class="pill" title="Pergunta de origem da resposta">${esc(r._q)}</span></td>` : ""}
       <td>${origem}</td>
       <td><div class="txt-resp${r.texto.length > 280 ? " longa" : ""}" title="${r.texto.length > 280 ? "clique para ver a resposta inteira" : ""}">${esc(r.texto)}</div>${just}${sugestao}${motivoAlt}${r.alertas && !nc ? `<br><span class="pill warn">${esc(r.alertas)}</span>` : ""}${r.corrigido_de_nome ? `<br><small>a IA tinha posto: ${esc(r.corrigido_de_nome)}</small>` : ""}</td>
       <td class="num">${r.n}</td>
@@ -1336,6 +1360,7 @@ function renderCodificacao() {
   return `
     <div class="chart">${chart}</div>
     <div class="tools">
+      ${emGrupo() ? `<select id="c-origem"><option value="">todas as questões</option>${Object.keys(P._cods).concat(P._Ps.filter((p) => !P._cods[p.qid]).map((p) => p.qid)).sort().map((q) => `<option value="${esc(q)}" ${f.origem === q ? "selected" : ""}>${esc(q)}</option>`).join("")}</select>` : ""}
       <input id="c-q" placeholder="buscar texto…" value="${esc(f.q)}">
       <select id="c-sit">
         <option value="">todas as situações</option>
@@ -1357,7 +1382,7 @@ function renderCodificacao() {
     </div>
     ${chipsCat}
     ${painelDiscordancias}
-    <table id="tab-cod"><thead><tr><th style="width:44px" title="Confirmar que a IA acertou">OK</th><th style="width:96px">Situação</th><th>Resposta <small>(e justificativa da IA)</small></th><th class="num" style="width:40px">n</th><th style="width:18%">Categoria principal</th><th style="width:16%">Secundária</th><th class="num" style="width:54px">Conf.</th><th style="width:19%">Comentário para a IA</th></tr></thead><tbody>${rows}</tbody></table>
+    <table id="tab-cod"><thead><tr><th style="width:44px" title="Confirmar que a IA acertou">OK</th>${emGrupo() ? `<th style="width:70px" title="Questão de origem">Questão</th>` : ""}<th style="width:96px">Situação</th><th>Resposta <small>(e justificativa da IA)</small></th><th class="num" style="width:40px">n</th><th style="width:18%">Categoria principal</th><th style="width:16%">Secundária</th><th class="num" style="width:54px">Conf.</th><th style="width:19%">Comentário para a IA</th></tr></thead><tbody>${rows}</tbody></table>
     ${todas.length > vis.length ? `<div class="tools"><button class="btn" id="c-mais">Mostrar mais ${Math.min(POR_PAGINA, todas.length - vis.length)}</button><span class="small">${todas.length - vis.length} restantes</span></div>` : ""}
     <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha primeiro): <kbd>↑</kbd>/<kbd>↓</kbd> ou <kbd>J</kbd>/<kbd>K</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>0</kbd>–<kbd>99</kbd> código da categoria · <kbd>C</kbd> comentar (<kbd>Ctrl+Enter</kbd> salva) · <kbd>S</kbd> aceitar sugestão do auditor.</div>
     <div class="small">Mudar a categoria vale na hora (fica marcada como sua). ✓ = a IA acertou. Um comentário não muda nada sozinho: vira instrução obrigatória quando você clica em <b>Reclassificar comentadas</b>.</div>`;
@@ -1382,7 +1407,10 @@ function bindCodificacao() {
   document.querySelectorAll("#tab-cod .txt-resp.longa").forEach((d) => (d.onclick = () => d.classList.toggle("aberta")));
   const mudaFiltro = (k, v) => { state.filtro[k] = v; state.mostrar = POR_PAGINA; rerender(); };
   let tq; $("#c-q").oninput = (e) => { clearTimeout(tq); tq = setTimeout(() => { mudaFiltro("q", e.target.value); const i = $("#c-q"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }, 350); };
+  $("#c-origem")?.addEventListener("change", (e) => mudaFiltro("origem", e.target.value));
   $("#c-sit").onchange = (e) => mudaFiltro("situacao", e.target.value);
+  // a ação de uma linha vai para a pergunta dona dela (no grupo, o rid da tela é composto: _rid é o da pergunta)
+  const alvo = (rid) => { const it = state.P.itens.find((i) => i.rid === rid); return { q: it?._q || P.qid, rid: it?._rid ?? rid }; };
   $("#c-cat").onchange = (e) => mudaFiltro("cat", e.target.value);
   $("#c-al").onchange = (e) => mudaFiltro("alertas", e.target.checked);
   $("#c-com").onchange = (e) => mudaFiltro("comentarios", e.target.checked);
@@ -1395,8 +1423,11 @@ function bindCodificacao() {
       const sit = state.P.itens.find((i) => i.rid === rid)?.revisao;
       return sit === "pendente" || sit === "alterada";
     });
-    const r = await post(`/api/pergunta/${P.qid}/validar`, { rids, valor: true }, "Confirmando…");
-    toast(`${r.alterados} resposta(s) confirmada(s)`); refresh(r);
+    const porQ = {};
+    for (const rid of rids) { const a = alvo(rid); (porQ[a.q] ||= []).push(a.rid); }
+    let r, n = 0;
+    for (const [q, rs] of Object.entries(porQ)) { r = await post(`/api/pergunta/${q}/validar`, { rids: rs, valor: true }, "Confirmando…"); n += r.alterados; }
+    toast(`${n} resposta(s) confirmada(s)`); refresh(r);
   });
   document.querySelectorAll(".b-aceitar-grupo").forEach((btn) => {
     btn.onclick = async () => {
@@ -1406,7 +1437,8 @@ function bindCodificacao() {
       btn.textContent = "Gravando…";
       for (const rid of rids) {
         const item = state.P.itens.find((i) => i.rid === rid);
-        const res = await post(`/api/pergunta/${P.qid}/item/${rid}`, {
+        const a = alvo(rid);
+        const res = await post(`/api/pergunta/${a.q}/item/${a.rid}`, {
           primaria: paraCod,
           secundaria: item?.auditoria?.secundaria ?? null,
           validado: true
@@ -1418,16 +1450,16 @@ function bindCodificacao() {
       manterScroll(render);
     };
   });
-  const locked = P.codificacao.status === "aprovado";
   let numBuf = "", numTimer = null;
   for (const tr of $("#tab-cod tbody").rows) {
     const rid = +tr.dataset.rid, r = state.P.itens.find((i) => i.rid === rid);
     const prim = tr.querySelector(".c-prim"), sec = tr.querySelector(".c-sec"), com = tr.querySelector(".c-com"), ok = tr.querySelector(".c-ok");
-    if (locked) { prim.disabled = sec.disabled = com.disabled = true; continue; }
+    if (travada(r)) { prim.disabled = sec.disabled = com.disabled = true; continue; }
     const salvar = async (body, msg, proxima = false) => {
       const antes = r.revisao, seguinte = proximaLinha(tr, 1)?.dataset.rid;
       tr.classList.add("just-confirmed");
-      const res = await post(`/api/pergunta/${P.qid}/item/${rid}`, body);
+      const a = alvo(rid);
+      const res = await post(`/api/pergunta/${a.q}/item/${a.rid}`, body);
       aplicarItem(r, res.item); recalcular();
       // recém-confirmada vai para o fim e a seguinte sobe para o lugar dela (o mouse não precisa se mexer)
       if (r.revisao === "confirmada" && antes !== "confirmada" && seguinte && state.ordemFixa) {
@@ -1508,8 +1540,138 @@ function renderGrupoBanner(dados) {
         <div class="grupo-banner-membros">${lista}</div>
         ${dados.grupo.tem_quadro ? "" : `<div class="grupo-banner-membros">O grupo ainda não tem quadro de categorias: esta pergunta segue com o quadro dela.</div>`}
       </div>
-      <a class="grupo-btn-editar" href="#grupos">Gerenciar grupos</a>
+      <a class="grupo-btn-editar" href="#grupo/${esc(nome)}">Abrir o grupo</a>
     </div>`;
+}
+
+// ---------------------------------------------------------------- página do grupo
+// Um grupo é UM quadro de categorias e UMA tabela de revisão com as respostas de todas as perguntas
+// (coluna "Questão"). Cada pergunta continua com a própria classificação e aprova o quadro e a
+// classificação por conta própria; o grupo fecha quando todas estão concluídas.
+async function carregarGrupo(nome) {
+  const G = await api(`/api/grupo/${encodeURIComponent(nome)}`);
+  const Ps = await Promise.all(G.perguntas.map((q) => api(`/api/pergunta/${q.qid}`)));
+  const itens = [], cods = {};
+  Ps.forEach((Pq, i) => {
+    if (Pq.codificacao) cods[Pq.qid] = Pq.codificacao;
+    for (const r of Pq.itens || []) itens.push({ ...r, _q: Pq.qid, _rid: r.rid, rid: (i + 1) * 1e6 + r.rid });
+  });
+  state.P = {
+    qid: G.perguntas[0].qid, rotulo: G.rotulo, frame: G.frame, itens, _G: G, _Ps: Ps, _cods: cods,
+    respostas: { n_respondeu: Ps.reduce((a, p) => a + (p.respostas?.n_respondeu || 0), 0), n_unicas: Ps.reduce((a, p) => a + (p.respostas?.n_unicas || 0), 0) },
+    codificacao: Object.keys(cods).length ? { status: Ps.every((p) => p.codificacao?.status === "aprovado") ? "aprovado" : "rascunho" } : null,
+    pode_desfazer_refino: G.pode_desfazer_refino, avisos_atributo: G.avisos_atributo, saude: G.saude,
+    grupo: { nome: G.nome, rotulo: G.rotulo, membros: G.perguntas.map((q) => q.qid), tem_quadro: !!G.frame },
+  };
+  prepararItens(); recalcular();
+}
+async function abrirGrupo(nome) {
+  if (state.grupo !== nome) { state.filtro = filtroInicial(); state.mostrar = POR_PAGINA; }
+  state.view = "grupo"; state.grupo = nome; state.qid = null; renderSidebar();
+  $("#main").innerHTML = `<div class="empty">Carregando o grupo…</div>`;
+  await carregarGrupo(nome);
+  render(); window.scrollTo(0, 0);
+}
+async function refreshGrupo(payload) {
+  await carregarGrupo(state.grupo);
+  manterScroll(render); carregarStatus();
+  avisosDoPayload(payload);
+}
+function cardMembroGrupo(Pq, a) {
+  const C = Pq.codificacao, V = Pq.revisao, F = state.P.frame, q = Pq.qid;
+  const faltam = V ? V.n_faltantes : 0, tot = V ? V.n_unicas : Pq.respostas?.n_unicas || 0;
+  const maxTam = (C ? faltam : Pq.respostas?.n_unicas) || "";
+  const tam = `<input class="tam-amostra g-tam" type="number" min="1" ${maxTam ? `max="${maxTam}"` : ""} value="${maxTam ? Math.min(state.amostra, maxTam) : state.amostra}" title="Quantas respostas mandar para a IA">`;
+  let acoes;
+  if (!a.quadro_aprovado) acoes = `<button class="btn ok g-aprovar-quadro" ${F ? "" : "disabled title='Gere as categorias do grupo primeiro'"}>✓ Aprovar categorias para ${esc(q)}</button>`;
+  else if (!C) acoes = `<button class="btn primary g-amostra">✨ Classificar amostra</button>${tam}<span class="small">respostas</span><button class="btn g-todas">Todas de uma vez</button>`;
+  else if (C.status === "aprovado") acoes = `<span class="pill ok">✓ Classificação aprovada</span><button class="btn g-reabrir">Reabrir para correções</button>`;
+  else acoes = `${faltam ? `<button class="btn primary g-restantes">Classificar as restantes (${faltam})</button>` : ""}
+    <button class="btn g-recod" ${Pq.n_comentarios_pendentes ? "" : "disabled"}>✨ Reclassificar comentadas (${Pq.n_comentarios_pendentes || 0})</button>
+    <button class="btn ok g-aprovar-cod" ${faltam ? `disabled title="Classifique as restantes antes de aprovar"` : ""}>✓ Aprovar classificação</button>`;
+  return `<div class="card-q-grupo" data-q="${esc(q)}">
+    <div class="cab"><b>${esc(q)}</b> ${esc(Pq.rotulo)}
+      <span class="pill ${a.quadro_aprovado ? "ok" : "warn"}">categorias ${a.quadro_aprovado ? "aprovadas" : "a aprovar"}</span>
+      <span class="pill ${C?.status === "aprovado" ? "ok" : ""}">${C ? (C.status === "aprovado" ? "concluída" : "classificação em revisão") : "sem classificação"}</span></div>
+    <div class="small">${V ? `${fmtN(V.n_revisadas)} de ${fmtN(tot)} respostas conferidas · ${fmtN(V.n_codificadas)} classificadas` : `${fmtN(tot)} respostas únicas`} ·
+      <a href="#${esc(q)}">abrir a pergunta (auditoria, aceite automático, revisão por categoria)</a></div>
+    <div class="tools">${acoes}</div></div>`;
+}
+function renderGrupo() {
+  const P = state.P, G = P._G, F = P.frame, V = P.revisao, R = P.respostas;
+  const porQ = Object.fromEntries(G.andamento.map((a) => [a.qid, a]));
+  const cobertura = G.cobertura
+    ? Object.entries(G.cobertura.perguntas).map(([q, c]) => `<b>${esc(q)}</b>: ${fmtN(c.lidas)} de ${fmtN(c.unicas)}`).join(" · ")
+    : "";
+  const totRev = V ? V.n_unicas : 0, nRev = V ? V.n_revisadas : 0, pctRev = totRev ? Math.round((100 * nRev) / totRev) : 0;
+  $("main").innerHTML = `
+    <div class="q-cab">
+      <div class="q-cab-txt">
+        <div class="small"><a href="#painel">← Painel geral</a> · <a href="#grupos">Gerenciar grupos</a></div>
+        <h1>🔗 ${esc(G.rotulo)} <small>${esc(P.grupo.membros.join(" + "))}</small></h1>
+        <div>${G.fechado ? `<span class="pill ok" style="font-weight:600;padding:5px 10px">✓ Grupo fechado: todas as perguntas concluídas</span>`
+          : `<span class="pill warn">Grupo em andamento — ${G.andamento.filter((a) => a.classificacao === "aprovado").length} de ${G.andamento.length} perguntas concluídas</span>`}</div>
+      </div>
+      ${totRev ? `<div class="sticky-num" title="${fmtN(nRev)} de ${fmtN(totRev)} respostas conferidas por pessoas">
+        <div class="n">${fmtN(nRev)}<i> / ${fmtN(totRev)}</i></div><div class="lab">revisadas / total</div><div class="bar"><i style="width:${pctRev}%"></i></div></div>` : ""}
+    </div>
+    <div class="info">Um quadro de categorias para todas as perguntas do grupo. Cada pergunta aprova as categorias e a classificação <b>por conta própria</b>; o grupo fecha quando todas concluem.${G.instrucoes_frame ? `<br><b>Instruções do grupo para a IA:</b> ${esc(G.instrucoes_frame)} <span class="small">(editar em <a href="#grupos">Grupos</a>)</span>` : ""}</div>
+
+    <h2>Categorias do grupo
+      ${F ? `<span class="pill">${esc(String(F.categorias.filter((c) => !c.fixa).length))} categorias</span>` : ""}
+      <span class="acoes"><button class="btn ${F ? "" : "primary"}" id="b-g-induzir">✨ ${F ? "Gerar do zero (grupo)" : "Gerar categorias do grupo"}</button></span>
+    </h2>
+    ${cobertura ? `<div class="info">📊 <b>Respostas lidas pela IA</b> (únicas): ${cobertura}${G.cobertura.amostra ? ` — <b>amostra</b> (limite de ${fmtN(G.cobertura.limite)}): cada pergunta entrou com cota mínima e as respostas repetidas foram incluídas.` : " — a IA leu todas as respostas de todas as perguntas."}</div>` : ""}
+    ${F ? renderFrame() : `<div class="info">A IA lê as respostas de <b>todas as perguntas do grupo</b> e propõe uma lista fechada de categorias (uma ideia por categoria). Depois você ajusta e cada pergunta aprova.</div>`}
+    ${renderSaude()}
+
+    <h2>Perguntas do grupo</h2>
+    <div class="cards-q-grupo">${P._Ps.map((Pq) => cardMembroGrupo(Pq, porQ[Pq.qid])).join("")}</div>
+
+    <h2 id="area-revisao">Revisão das respostas <small>todas as perguntas, uma tabela só</small></h2>
+    ${P.codificacao ? renderCodificacao() : `<div class="info">Aprove as categorias em cada pergunta e classifique uma amostra para liberar a revisão.</div>`}
+  `;
+  bindFrame(); bindGrupo(); bindCodificacao();
+}
+function bindGrupo() {
+  const P = state.P, G = P._G;
+  $("#b-g-induzir")?.addEventListener("click", async () => {
+    if (P.frame && !confirm("Gerar do zero substitui as categorias do grupo (e as aprovações). Para ajustes pontuais, use 'Pedir ajuste à IA'. Continuar?")) return;
+    refresh(await post(`/api/grupo/${encodeURIComponent(G.nome)}/frame/induzir`, {}, "Gerando categorias do grupo…", true));
+  });
+  const lerTam = (card) => {
+    const campo = card.querySelector(".g-tam"), n = Math.floor(+campo.value), max = +campo.max || Infinity;
+    if (!(n >= 1)) { toast("Digite quantas respostas mandar para a IA (1 ou mais).", true); campo.focus(); return null; }
+    state.amostra = Math.min(n, max); return state.amostra;
+  };
+  document.querySelectorAll(".card-q-grupo").forEach((card) => {
+    const q = card.dataset.q, rota = (c) => `/api/pergunta/${q}/${c}`;
+    const Pq = P._Ps.find((p) => p.qid === q);
+    card.querySelector(".g-aprovar-quadro")?.addEventListener("click", async () => refresh(await post(rota("frame/aprovar"), {}, "Aprovando…")));
+    card.querySelector(".g-amostra")?.addEventListener("click", () => {
+      const n = lerTam(card); if (!n || !confirmarVolume(n, `Classificar amostra de ${q}`)) return;
+      post(rota("codificar"), { limite: n }, `A IA está classificando uma amostra de ${n} (${q})…`, true).then(refresh);
+    });
+    card.querySelector(".g-todas")?.addEventListener("click", () => {
+      const n = Pq.respostas?.n_unicas;
+      if (!confirm(`Classificar todas as ${n} respostas de ${q} agora? (Recomendado: testar numa amostra antes.)`)) return;
+      post(rota("codificar"), {}, `A IA está classificando ${q}…`, true).then(refresh);
+    });
+    card.querySelector(".g-restantes")?.addEventListener("click", () => {
+      if (!confirmarVolume(Pq.revisao?.n_faltantes, `Classificar as restantes de ${q}`)) return;
+      post(rota("codificar"), { restantes: true }, `A IA está classificando as restantes (${q})…`, true).then(refresh);
+    });
+    card.querySelector(".g-recod")?.addEventListener("click", async () => {
+      const r = await post(rota("recodificar"), { apenas_comentados: true }, "Reclassificando as comentadas…", true);
+      toast(`${r.recodificados} resposta(s) reclassificada(s)`); refresh(r);
+    });
+    card.querySelector(".g-aprovar-cod")?.addEventListener("click", async () => {
+      const V = Pq.revisao, naoConf = V.n_codificadas - V.n_revisadas;
+      if (!confirm(`Aprovar a classificação de ${q}?${naoConf ? `\n• ${naoConf} resposta(s) não conferidas por você (ficam como a IA classificou)` : ""}`)) return;
+      refresh(await post(rota("aprovar"), {}, "Gravando nos resultados…")); toast(`Classificação de ${q} aprovada`);
+    });
+    card.querySelector(".g-reabrir")?.addEventListener("click", async () => refresh(await post(rota("reabrir"), {}, "Reabrindo…")));
+  });
 }
 
 // ---------------------------------------------------------------- aba Grupos de perguntas
@@ -2498,6 +2660,7 @@ function rota() {
   else if (h === "usage") renderUsage();
   else if (h === "resultados") renderResultados();
   else if (h === "gerenciar") renderGerenciar();
+  else if (h.startsWith("grupo/") && state.status.perguntas.some((s) => s.grupo?.nome === h.slice(6))) abrirGrupo(h.slice(6));
   else if (h && h !== "painel" && state.status.perguntas.some((s) => s.qid === h)) abrir(h);
   else renderPainel();
 }
