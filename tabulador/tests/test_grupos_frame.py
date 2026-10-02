@@ -1,8 +1,11 @@
+import os
 import tempfile
 import unittest
 from unittest.mock import patch
 import sys
 from pathlib import Path
+
+os.environ["TABULADOR_OUTPUT"] = tempfile.mkdtemp(prefix="tabulador_grupos_")  # nuvem desligada nos testes
 
 # Garante import do src
 _DIR = Path(__file__).resolve().parent.parent / "src"

@@ -64,6 +64,9 @@ class TestSesi(unittest.TestCase):
         projetos.ativar("sesi")
         llm.set_cliente(_llm_fake)
         cls.df, cls.registro = load.executar(verbose=False)
+        # a planilha cresce com bases novas: os totais esperados saem dela, não de números fixos
+        bruto = __import__("pandas").read_excel(config.FONTE_XLSX, sheet_name="base")
+        cls.n_linhas, cls.n_q33 = len(bruto), int(bruto["Q33"].notna().sum())
 
     @classmethod
     def tearDownClass(cls):
@@ -76,7 +79,7 @@ class TestSesi(unittest.TestCase):
     def test_1_load_plano(self):
         df = self.df
         self.assertTrue(str(config.OUTPUT_DIR).startswith(_TMP))
-        self.assertEqual(len(df), 3743)
+        self.assertEqual(len(df), self.n_linhas)
         self.assertEqual(df["respondent_id"].nunique(), len(df))
         for pii in ("ip_address", "email_address", "first_name", "last_name"):
             self.assertNotIn(pii, df.columns)
@@ -92,7 +95,7 @@ class TestSesi(unittest.TestCase):
     def test_2_loop_validacao(self):
         qid = "Q33"
         dados = CF.preparar(qid)
-        self.assertEqual(dados["n_respondeu"], 84)
+        self.assertEqual(dados["n_respondeu"], self.n_q33)
         f = CF.induzir(qid, forcar=True)
         self.assertIn("Formatura", [c["nome"] for c in f["categorias"]])
         CF.aprovar(qid)
@@ -140,7 +143,7 @@ class TestSesi(unittest.TestCase):
         CD.aprovar(qid)
         CD.aplicar_na_base(verbose=False)
         df, _ = load.carregar_base()
-        self.assertEqual(int(df["Q33_COD1"].notna().sum()), 84)
+        self.assertEqual(int(df["Q33_COD1"].notna().sum()), self.n_q33)
 
     def test_3_saidas(self):
         if (CD.codificacao("Q33") or {}).get("status") != "aprovado":
@@ -152,7 +155,7 @@ class TestSesi(unittest.TestCase):
         i = cab.index("Q33_CAT")
         self.assertIn("Q33_CAT2", cab)
         valores = [r[i] for r in ws.iter_rows(min_row=2, values_only=True) if r[i] is not None]
-        self.assertEqual(len(valores), 84)
+        self.assertEqual(len(valores), self.n_q33)
         self.assertIn("Categorias", wb.sheetnames)
         wb.close()
         self.assertTrue(codebook.gerar(verbose=False).exists())
