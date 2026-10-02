@@ -1005,3 +1005,25 @@ Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancor
 **Próxima IA / Handoff:**
 - Os donos das 3 worktrees antigas decidem: rebasear e commitar o que ainda vale, ou descartar. Até lá o semáforo continua 🔴 por elas.
 - Validar na tela: trava (PEND-42), ordem alfabética (PEND-43), fusão/alterada, tela Versões (PEND-24).
+
+---
+
+## 2026-10-02 — fechamento das worktrees antigas (a pedido do Gabriel: "ninguém está mexendo nelas, mas considere o que tem nelas")
+
+**Autor:** Claude Sonnet 5.5 · operador: Gabriel Nascimento
+
+**Revisão do conteúdo antes de fechar:**
+- Todas as branches estavam **integradas na main** (0 commits à frente, `git branch --merged`).
+- `melhorias-perpetuas`: a working copy estava ATRÁS do próprio HEAD (o "diff" só desfazia commits que já estão na main, ex.: limpeza de colunas do `exportar_revisao`). Nada único.
+- `modelo-recomendado-parar`: o "parar classificação" (staged, layout antigo sem `src/`) já está na main (`/api/parar`, `progresso.pedir_parada`). **Único item que faltava: o rótulo "(recomendado)" nos menus de modelo → portado para a main (`8d23f65`).**
+- `projeto-embutido`: só versões antigas de `.brain/*` (README, decisões, pendências, `manage_brain.py` de 323 linhas contra 1.289 hoje) e cópias antigas de `objetivos.md`. Nada único.
+- Prova: todos os arquivos das pastas tinham blobs conhecidos pelo git (nenhum conteúdo inédito).
+
+**Feito:**
+- Cópia de segurança dos diffs e arquivos novos das 3 worktrees sujas em `_general/quarentena_worktrees_2026-10-02/` (patch + status + HEAD + untracked; LEIA-ME dentro). Não commitada. Pode apagar depois de conferir.
+- 5 worktrees removidas (`melhorias`, `modelo-recomendado-parar`, `projeto-embutido`, `fusao-alteradas`, `grupos-f1`) e as pastas-resíduo que o OneDrive deixou (inclusive `header-sticky`, `header-sticky-fix`, `trava-ordem`). 5 branches apagadas (todas mergeadas). Sobrou só a `main`.
+- Uma cópia da `base_processamento.xlsx` (idêntica à da main) saiu junto com `grupos-f1`.
+
+**Próxima IA / Handoff:**
+- Semáforo sem worktrees ocupadas. Crie uma worktree nova para cada tarefa (`git worktree add worktrees/<nome> -b <branch> main`).
+- Sobram 7 pastas antigas e já desregistradas em `.claude/worktrees/` (`sesi-cat-autonomo`, `tabulador-doc-chaves-nuvem`, `tabulador-fix-resumo-geral-nan`, `tabulador-pend10/11/12-doc`, `turso-db-poc`). Não toquei nelas.
