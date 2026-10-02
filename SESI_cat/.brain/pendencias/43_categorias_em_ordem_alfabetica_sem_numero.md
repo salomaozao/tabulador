@@ -16,3 +16,6 @@ resumo: "Pedido do Gabriel (02/10): ao escolher a categoria de uma resposta, lis
 - **Onde:** menus de categoria principal e secundária de cada resposta, filtro 'todas as categorias' e os menus 'mesclar em…' (`optsCategorias` em `static/app.js`). Ordem: alfabética (pt-BR, sem distinguir acento) com **Outros e NS/NR no fim**.
 - **Não mudou:** o atalho de teclado que digita o código (0–99) na linha da resposta, a tabela de categorias do quadro e a janela 'Revisar por categoria', que continuam mostrando o número.
 - **Pergunta aberta:** se quiser o número escondido também nesses outros lugares, ou o atalho de teclado trocado por busca por nome.
+
+## Estado no fim de 02/10
+- Mergeada na main (`c00fcdd`, mantida no merge `ba12596`). Falta o Gabriel validar na tela: menus de categoria por resposta, filtro e "mesclar em…" em ordem alfabética, sem número, com Outros e NS/NR no fim.

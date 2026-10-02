@@ -1071,3 +1071,22 @@ Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancor
 **Pendente:** o Gabriel relatou "erros na hora de importar a planilha" sem dizer qual (carregar a base, importar `revisao.xlsx` ou o assistente de projeto novo). `/api/load` com a planilha real funciona em modo isolado (5.624 respondentes, 8 s). Faltam o texto do erro e o ponto da tela.
 
 **Próxima IA / Handoff:** pedir ao Gabriel o texto exato do erro antes de mexer no import.
+
+---
+
+## 2026-10-02 (fechamento do dia) — retomada documentada
+
+**Autor:** Claude Sonnet 5.5 · operador: Gabriel Nascimento
+
+**Leia primeiro:** [`.brain/docs/retomada_2026-10-02.md`](docs/retomada_2026-10-02.md) — mapa completo do dia (commits, a feature de congelar resposta, o que fazer a seguir em ordem, regras e armadilhas, resíduos).
+
+**Estado em uma linha:** `main` integrada (PEND-23, 24, 26, 39–43), sem worktrees, suíte com 192 passando, app em http://127.0.0.1:5000 com o código final; **nada enviado ao GitHub** (main ~49 commits à frente).
+
+**Pendente para a próxima IA (nesta ordem):**
+1. **PEND-44:** perguntar ao Gabriel qual erro apareceu "ao importar a planilha" (botão, mensagem, instância). Não mexer no import antes disso.
+2. **PEND-45:** lembrar o Gabriel de rotacionar a chave da OpenAI que saiu no terminal.
+3. Perguntar se pode **publicar no GitHub** (PEND-22/16) e aplicar o backfill da **Q35** (PEND-26) quando a Sara não estiver nela.
+4. Entrega do cliente na **quarta 07/10** (PEND-01/03; mais respostas entram na segunda 05/10).
+5. Validação do Gabriel na tela: congelar (PEND-42), categorias alfabéticas (PEND-43), tela Versões (PEND-24), fusão/alterada, troca de projeto, gráfico, parar.
+
+**Regras que valem:** código novo em worktree; merge só quando o Gabriel pedir; `git add` cirúrgico; nunca imprimir `.env`; testar em instância isolada (`TABULADOR_OUTPUT` + `TABULADOR_PORTA=5001`); olhar a presença antes de escrever em massa numa pergunta real.

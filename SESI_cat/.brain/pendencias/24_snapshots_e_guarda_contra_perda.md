@@ -47,3 +47,9 @@ resumo: "Com a nuvem ativa, nuvem.gravar faz upsert (substitui) e _remover apaga
 - **Tela "Restaurar versão" feita:** botão `🕘 Versões` na barra de revisão da pergunta (`abrirJanelaVersoes` em `static/app.js`). Lista as versões da classificação e do quadro (quando, antes de quê, conteúdo) e restaura com confirmação que mostra quantas conferidas se perdem. Usa `GET /versoes` e `POST /restaurar` que já existiam. Suíte completa passa.
 - **Backup manual da nuvem rodado** (`python src/nuvem.py -p sesi backup`): `tabulador/projetos/sesi_cat/output/_backup/nuvem_20261002_135625.json`. O backup diário automático não tinha deixado arquivo novo em `SESI_cat/output/_backup` desde 24/09 (conferir para onde o `backup_se_preciso` grava).
 - **Ainda não validado:** snapshot e restauração contra o Turso real (só SQLite local nos testes), e clique na tela em navegador.
+
+## Estado no fim de 02/10
+- **O Gabriel disse que vai validar** a tela 🕘 Versões e a restauração (camada 3). Nada a fazer até ele reportar.
+- Já feito: guarda de gravação, versões (nuvem e local), backup diário ao abrir o app, tela Versões, backup manual da nuvem em `tabulador/projetos/sesi_cat/output/_backup/nuvem_20261002_135625.json` e `..._141754.json`.
+- Ainda não provado: snapshot e restauração contra o **Turso real** (só SQLite local nos testes). O backfill de telemetria (PEND-26) gravou snapshots reais em `blobs_historico` ("telemetria: carimbo estimado do modelo"): dá para usá-los como cobaia da restauração.
+- Dúvida aberta: o backup diário automático não deixou arquivo novo em `SESI_cat/output/_backup` desde 24/09; conferir para onde `protecao.backup_se_preciso` grava (provável: `tabulador/projetos/sesi_cat/output/_backup`).

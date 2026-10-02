@@ -47,3 +47,8 @@ resumo: "Hoje cada item tem origem, frame_versao e revisado_por; o 'modelo' fica
 - **Q35 NÃO aplicada:** a Sara estava revisando nela na hora (presença), e escrever a pergunta inteira ao mesmo tempo pode apagar os ✓ dela (PEND-31). Aplicar quando ninguém estiver em Q35: `python src/telemetria_backfill.py -p sesi Q35 --aplicar` (simulação: 1.244 casam).
 - O projeto `sesi_categorias_novas` não foi tocado.
 - **A PEND-26 fica `aberta` para a finalização** (decisão do Gabriel: guardar para depois).
+
+## Estado no fim de 02/10
+- Código mergeado na main (telemetria, eventos, manifesto, backfill). **Backfill aplicado em Q2, Q4, Q5, Q29, Q30, Q32, Q33; FALTA a Q35** (a Sara estava revisando nela). Para fechar: confirmar pela tabela `presenca` que ninguém está em Q35 e rodar `python src/telemetria_backfill.py -p sesi Q35 --aplicar` (simulação: 1.244 casam).
+- O Gabriel decidiu **guardar a finalização da PEND-26** para outro dia. Ficam pendentes também: guardar o resumo de cada rodada de auditoria no `historico` (PEND-23) e um lugar para ler os eventos (PEND-27).
+- O requisito de custo estimado "como se fosse API" para as IAs por CLI está na PEND-37.

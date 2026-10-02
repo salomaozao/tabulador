@@ -35,3 +35,7 @@ resumo: "A correção de 29/09 (sem timeout nas operações com progresso, 4 min
 - **Commits locais** (3, por camada; os hunks se entrelaçam entre aprendizado, parada e timeout, então não dá para isolar um commit só do timeout): `141e5c7` módulos novos, `161108c` backend, `841a48f` front (sem o corte de 35 s).
 - **Falta:** (1) `git push` — **não feito**, depende de o Gabriel confirmar; (2) passo 3: `progresso=true` em `induzir`, `refinar`, `aprender` e teste de IA; (3) passo 4: conferir o aviso de "recarregue"; (4) critério final: Q35 inteira no navegador da Sara.
 - **Fora dos commits de propósito:** `tabulador/SALVAR.txt`, o `.mp4` e `base_processamento_nova.xlsx` (dado de cliente).
+
+## Andamento (02/10, Claude Sonnet 5.5)
+- O código acumulado de 29-30/09 **já está commitado na main** (`static/app.js` não tem mais `35000`: sem corte no navegador nas operações com progresso, 240 s nas demais; `TABULADOR_LLM_TIMEOUT`). A pendência continua aberta porque **a main está 49 commits à frente do `origin/main`: nada foi enviado ao GitHub**. Quem roda pelo GitHub (Sara, João) ainda vê o erro até o push.
+- Falta: (1) push, com o OK do Gabriel; (2) conferir que toda chamada de IA sem barra de progresso (gerar categorias, "Pedir ajuste à IA") usa progresso, como a pendência pede.

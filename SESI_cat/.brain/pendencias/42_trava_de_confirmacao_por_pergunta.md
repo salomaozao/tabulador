@@ -7,7 +7,7 @@ criticidade: media
 status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
-resumo: "Redesenhada em 02/10 após a validação do Gabriel: a trava NÃO é por pergunta, é por RESPOSTA. Ele vê uma resposta que não quer confirmar nem mexer agora, para voltar a ela mais tarde: ela não fica a conferir nem confirmada, e a categoria fica congelada. Implementado na branch feat/congelar-resposta (worktrees/tabulador-congelar), aguardando validação e merge. Substitui a trava por pergunta que havia entrado na main (merge c00fcdd)."
+resumo: "Redesenhada em 02/10 após a validação do Gabriel: a trava NÃO é por pergunta, é por RESPOSTA. Ele vê uma resposta que não quer confirmar nem mexer agora, para voltar a ela mais tarde: ela não fica a conferir nem confirmada, e a categoria fica congelada. MERGEADA na main em 02/10 (`ba12596`; ajuste da planilha de revisão em `8c80645`); aguarda validação do Gabriel na tela. Substitui a trava por pergunta (merge c00fcdd, removida)."
 ---
 
 # PEND-42: Congelar uma resposta
@@ -22,3 +22,10 @@ resumo: "Redesenhada em 02/10 após a validação do Gabriel: a trava NÃO é po
 - **Log:** eventos `congelar` e `descongelar` (quem, quando, qual resposta).
 - **Testes:** `tests/test_congelar.py` (7). Suíte na worktree: 191 passam.
 - **Verificado em navegador (instância isolada, sem nuvem):** botão ❄ por linha, congelar pela tela, faixa e situação, menus desabilitados, pílula e contagem "5 a conferir", filtro, "Confirmar as N mostradas" pulando a congelada (5 confirmadas, 1 congelada), recusa da API ao mudar categoria. **Não verificado no navegador:** descongelar pelo botão/tecla F (a extensão do navegador perdeu a aba nessa hora); o descongelar foi conferido pela API.
+
+## Estado no fim de 02/10
+- **Mergeada na main.** Suíte: 192 passam. App reiniciado em http://127.0.0.1:5000 com o código final.
+- **Falta o Gabriel validar na tela** (com dados reais): clicar no ❄, tecla **F**, filtro "❄ congeladas", "Confirmar as N mostradas" pulando a congelada, e a planilha de revisão.
+- **Quem roda uma versão antiga** (processo já aberto, ou `iniciar.bat` antes do merge) ignora o campo `congelada` e pode confirmar ou reclassificar uma resposta congelada. Fechar e abrir o app em todas as máquinas (ou publicar no GitHub: PEND-22/16).
+- Decisões de produto que o Gabriel pode reverter: aprovar a pergunta continua permitido com congeladas (só avisa); fundir/excluir categoria ainda remapeia a congelada; só se congela o que está a conferir ou a reconferir.
+- A tecla **F** não foi provada com tecla física (a extensão do Chrome não entrega teclas reais); foi provada com evento enviado por script. O clique no ❄ foi provado nos dois sentidos.
