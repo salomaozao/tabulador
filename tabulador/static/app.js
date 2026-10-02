@@ -30,9 +30,9 @@ function renderProgresso(p) {
   $("#busy-msg").textContent = p.titulo;
   barraBusy(p.indeterminado ? null : p.pct);
   const ativa = (p.etapas || []).find((e) => e.estado === "ativo");
-  $("#busy-sub").textContent = ativa ? ativa.nome + "…" : "";
+  $("#busy-sub").textContent = p.parando && ativa ? "⏹ Cancelando lotes pendentes e gravando os concluídos…" : ativa ? ativa.nome + "…" : "";
   const st = [`⏱ <b>${fmtDur(p.decorrido)}</b> decorridos`];
-  if (p.restante != null) st.push(`${p.restante < 1 ? "<b>quase pronto…</b> <small>(a IA está demorando mais que a média)</small>" : `faltam <b>~${fmtDur(p.restante)}</b>`}${p.restante < 1 ? "" :ativa && ativa.estimativa && !p.feitos ? " <small>(pela média das últimas vezes)</small>" : ""}`);
+  if (p.restante != null && !p.parando) st.push(`${p.restante < 1 ? "<b>quase pronto…</b> <small>(a IA está demorando mais que a média)</small>" : `faltam <b>~${fmtDur(p.restante)}</b>`}${p.restante < 1 ? "" :ativa && ativa.estimativa && !p.feitos ? " <small>(pela média das últimas vezes)</small>" : ""}`);
   if (p.total && ativa && ativa.chave === "ia") st.push(`<b>${p.feitos}</b> de <b>${p.total}</b> ${p.unidade || "respostas"}`);
   if (p.lotes_total) st.push(`lote <b>${p.lotes_feitos}</b>/${p.lotes_total}`);
   if (p.velocidade_min) st.push(`<b>${Math.round(p.velocidade_min)}</b> respostas/min`);
@@ -41,14 +41,14 @@ function renderProgresso(p) {
   if (p.tokens) st.push(`${fmtMil(p.tokens)} tokens`);
   if (p.erros) st.push(`<span class="warn-t">${p.erros} lote(s) com erro</span>`);
   if (p.limite_atingido) st.push(`<span class="warn-t">limite do provedor atingido — parando…</span>`);
-  if (p.parando) st.push(`<span class="warn-t">parando a pedido…</span>`);
+  if (p.parando) st.push(`<span class="warn-t">⏹ parando a pedido: só os lotes já em andamento terminam</span>`);
   $("#busy-stats").innerHTML = st.join("<span>·</span>");
   const btnParar = $("#busy-parar");
   btnParar.classList.toggle("hidden", !p.lotes_total);
   btnParar.disabled = !!p.parando;
   btnParar.textContent = p.parando ? "Parando…" : "⏹ Parar";
   $("#busy-etapas").innerHTML = (p.etapas || []).map((e) => {
-    const ic = e.estado === "feito" ? "✓" : e.estado === "ativo" ? '<span class="mini-spin"></span>' : e.estado === "erro" ? "✕" : "○";
+    const ic = e.estado === "feito" ? "✓" : e.estado === "ativo" ? '<span class="mini-spin"></span>' : e.estado === "erro" ? "✕" : e.estado === "interrompida" ? "⏹" : "○";
     const t = e.estado === "ativo" && e.decorrido != null ? fmtDur(e.decorrido) : e.estado === "feito" && e.fim && e.inicio ? fmtDur(e.fim - e.inicio) : "";
     return `<li class="${e.estado}"><span class="ic">${ic}</span><span>${esc(e.nome)}${e.detalhe && e.estado !== "pendente" ? `<span class="det">${esc(e.detalhe)}</span>` : ""}</span><span class="t">${t}</span></li>`;
   }).join("");
@@ -456,7 +456,7 @@ function avisosDoPayload(payload) {
   if (payload?.limite_atingido) {
     toast(`Limite de uso do provedor atingido: parei a classificação. ${payload.nao_tentados} resposta(s) ficaram pendentes — espere um pouco (ou troque de provedor em '⚙ Configurar IA') e tente de novo.`, true);
   } else if (payload?.parado_usuario) {
-    toast(`Classificação parada a seu pedido. ${payload.nao_tentados} resposta(s) ficaram pendentes — o que já foi classificado está salvo.`);
+    toast(`Classificação interrompida a seu pedido. O que já foi classificado foi salvo; ${payload.nao_tentados} resposta(s) permanecem pendentes.`);
   } else if (payload?.n_erro) {
     toast(`${payload.n_erro} resposta(s) deram erro na IA e continuam sem classificação (não foram para Outros). Use "Classificar as restantes" para tentar de novo.`, true);
   }
@@ -2646,8 +2646,13 @@ function alternarPainelProjeto() {
 async function trocarProjeto(slug) {
   if (!slug || slug === state.status.projeto.slug) return;
   await post("/api/projeto", { slug }, "Trocando de projeto…");
-  state.qid = null; await carregarStatus();
+  // nada do projeto antigo pode sobreviver: heartbeat de presença da pergunta, pergunta aberta, filtros, rascunho de novo projeto
+  pararPresenca();
+  Object.assign(state, { qid: null, P: null, view: "painel", filtro: filtroInicial(), mostrar: POR_PAGINA, novo: null, grupo: null });
+  await carregarStatus();
+  // abas gerais ficam onde estão; a rota antiga (#Q4, #grupo/x) pode não existir no projeto novo e vai ao painel
   if (["#usage", "#resultados", "#gerenciar", "#painel", ""].includes(location.hash)) rota(); else irPara(null);
+  presencaProjTick();
 }
 $("#proj-btn").onclick = (e) => { e.stopPropagation(); alternarPainelProjeto(); };
 $("#proj-panel").onclick = (e) => e.stopPropagation();  // clique dentro do cartão não fecha

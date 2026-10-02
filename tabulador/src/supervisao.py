@@ -152,6 +152,9 @@ def _ganho(itens: list[dict], limiar: float) -> dict:
     return {"alta": len(alta), "passaram": sum(1 for i in alta if (i.get("auditoria") or {}).get("ok") is True)}
 
 
+_PULADO = object()  # devolvido por _um quando a parada foi pedida antes de chamar a IA
+
+
 def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, escopo: str = "pendentes",
             limiar: float = LIMIAR_PADRAO) -> dict:
     """Pede a outra IA (provedor/modelo escolhidos na tela) que confira a classificação.
@@ -181,6 +184,8 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
         t0, resultados, falhas = time.time(), {}, []
 
         def _um(k):
+            if progresso.parada_pedida():
+                return _PULADO  # parada pedida antes desta chamada começar: não gasta a IA
             system, user = _prompt_auditoria(qid, frame, enunciado, lotes[k], ensino)
             return llm.chamar_json(system, user, SCHEMA_AUDITORIA, nome=f"audit_{qid}_{k + 1}")
 
@@ -193,7 +198,10 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
                 if fut.cancelled():
                     continue  # cancelado antes de começar (parada pedida): fica sem auditoria
                 try:
-                    resultados[k] = fut.result()
+                    saida = fut.result()
+                    if saida is _PULADO:
+                        continue
+                    resultados[k] = saida
                 except Exception as e:  # noqa: BLE001 - lote com erro fica sem auditoria
                     falhas.append(e)
                 feitos += len(lotes[k])
@@ -207,6 +215,8 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
                     progresso.evento("Parando a pedido — o que já foi auditado fica salvo.")
     if falhas and not resultados:
         raise falhas[0]
+    if parado_usuario:
+        progresso.interromper("ia", feitos, len(alvo))
     progresso.etapa("gravar", "gravando a auditoria")
     cod = CD.codificacao(qid)  # relê: a pessoa pode ter conferido algo enquanto a IA auditava
     por_rid = {i["rid"]: i for i in cod["itens"]}

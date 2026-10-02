@@ -128,7 +128,10 @@ class TestCancelarETratamentoErros(unittest.TestCase):
         self.assertTrue(info["parado_usuario"])
         self.assertIn(1, itens)
         self.assertNotIn(3, itens)  # cancelado antes de começar: continua pendente
-        self.assertEqual(info["nao_tentados"], 1)
+        self.assertGreaterEqual(info["nao_tentados"], 1)  # o 2º também pode ser pulado pela guarda de _um
+        est = progresso.ler()
+        self.assertEqual([e["estado"] for e in est["etapas"] if e["chave"] == "ia"], ["interrompida"])
+        self.assertLess(est["pct"], 100)  # a barra não salta a 100% quando a operação foi interrompida
 
 
 if __name__ == "__main__":

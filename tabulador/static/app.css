@@ -294,6 +294,7 @@ h3{font-size:14px;margin:16px 0 6px}
 .etapas li{display:grid;grid-template-columns:20px 1fr auto;gap:8px;align-items:start;font-size:13px;color:var(--text-3)}
 .etapas li .ic{text-align:center;line-height:18px}
 .etapas li.feito{color:var(--text-2)}.etapas li.feito .ic{color:var(--ok)}
+.etapas li.interrompida{color:var(--warn)}.etapas li.interrompida .det{color:var(--warn)}
 .etapas li.ativo{color:var(--text);font-weight:600}.etapas li.erro{color:var(--danger)}
 .etapas li .det{display:block;font-weight:400;font-size:12px;color:var(--text-2)}
 .etapas li .t{font-size:12px;font-weight:400;color:var(--text-3);font-variant-numeric:tabular-nums}
