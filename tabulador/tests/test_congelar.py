@@ -105,6 +105,26 @@ class TestCongelar(unittest.TestCase):
         self.assertEqual(por_rid[1]["primaria"], 1)  # a IA falsa mandaria para 2: não mexeu
         self.assertEqual(por_rid[2]["primaria"], 2)  # a não congelada foi refeita
 
+    def test_planilha_de_revisao_nao_vaza_o_dicionario_e_ignora_a_congelada(self):
+        import openpyxl
+        CD.congelar(self.qid, 1, por="Sara")
+        p = CD.exportar_revisao(self.qid)
+        wb = openpyxl.load_workbook(p)
+        ws = wb["revisao"]
+        cab = {c.value: c.column for c in ws[1]}
+        valores = {ws.cell(r, cab["rid"]).value: ws.cell(r, cab["congelada"]).value for r in range(2, ws.max_row + 1)}
+        self.assertEqual(valores[1], "sim")  # legível, não o dicionário técnico
+        self.assertIn(valores[2], ("", None))
+        for r in range(2, ws.max_row + 1):  # a pessoa mexe nas linhas 1 (congelada) e 2
+            if ws.cell(r, cab["rid"]).value in (1, 2):
+                ws.cell(r, cab["REVISAO_PRIMARIA"]).value = "Estrutura"
+        wb.save(p)
+        cod = CD.importar_revisao(self.qid)
+        por_rid = {i["rid"]: i for i in cod["itens"]}
+        self.assertEqual(por_rid[1]["primaria"], 1)  # congelada: ignorada
+        self.assertEqual(por_rid[2]["primaria"], 2)
+        self.assertEqual((cod["_alteracoes"], cod["_congeladas_ignoradas"]), (1, 1))
+
     def test_log_de_eventos(self):
         CD.congelar(self.qid, 1, por="Sara")
         CD.congelar(self.qid, 1, False, por="João")
