@@ -30,9 +30,9 @@ function renderProgresso(p) {
   $("#busy-msg").textContent = p.titulo;
   barraBusy(p.indeterminado ? null : p.pct);
   const ativa = (p.etapas || []).find((e) => e.estado === "ativo");
-  $("#busy-sub").textContent = ativa ? ativa.nome + "…" : "";
+  $("#busy-sub").textContent = p.parando && ativa ? "⏹ Cancelando lotes pendentes e gravando os concluídos…" : ativa ? ativa.nome + "…" : "";
   const st = [`⏱ <b>${fmtDur(p.decorrido)}</b> decorridos`];
-  if (p.restante != null) st.push(`${p.restante < 1 ? "<b>quase pronto…</b> <small>(a IA está demorando mais que a média)</small>" : `faltam <b>~${fmtDur(p.restante)}</b>`}${p.restante < 1 ? "" :ativa && ativa.estimativa && !p.feitos ? " <small>(pela média das últimas vezes)</small>" : ""}`);
+  if (p.restante != null && !p.parando) st.push(`${p.restante < 1 ? "<b>quase pronto…</b> <small>(a IA está demorando mais que a média)</small>" : `faltam <b>~${fmtDur(p.restante)}</b>`}${p.restante < 1 ? "" :ativa && ativa.estimativa && !p.feitos ? " <small>(pela média das últimas vezes)</small>" : ""}`);
   if (p.total && ativa && ativa.chave === "ia") st.push(`<b>${p.feitos}</b> de <b>${p.total}</b> ${p.unidade || "respostas"}`);
   if (p.lotes_total) st.push(`lote <b>${p.lotes_feitos}</b>/${p.lotes_total}`);
   if (p.velocidade_min) st.push(`<b>${Math.round(p.velocidade_min)}</b> respostas/min`);
@@ -41,14 +41,14 @@ function renderProgresso(p) {
   if (p.tokens) st.push(`${fmtMil(p.tokens)} tokens`);
   if (p.erros) st.push(`<span class="warn-t">${p.erros} lote(s) com erro</span>`);
   if (p.limite_atingido) st.push(`<span class="warn-t">limite do provedor atingido — parando…</span>`);
-  if (p.parando) st.push(`<span class="warn-t">parando a pedido…</span>`);
+  if (p.parando) st.push(`<span class="warn-t">⏹ parando a pedido: só os lotes já em andamento terminam</span>`);
   $("#busy-stats").innerHTML = st.join("<span>·</span>");
   const btnParar = $("#busy-parar");
   btnParar.classList.toggle("hidden", !p.lotes_total);
   btnParar.disabled = !!p.parando;
   btnParar.textContent = p.parando ? "Parando…" : "⏹ Parar";
   $("#busy-etapas").innerHTML = (p.etapas || []).map((e) => {
-    const ic = e.estado === "feito" ? "✓" : e.estado === "ativo" ? '<span class="mini-spin"></span>' : e.estado === "erro" ? "✕" : "○";
+    const ic = e.estado === "feito" ? "✓" : e.estado === "ativo" ? '<span class="mini-spin"></span>' : e.estado === "erro" ? "✕" : e.estado === "interrompida" ? "⏹" : "○";
     const t = e.estado === "ativo" && e.decorrido != null ? fmtDur(e.decorrido) : e.estado === "feito" && e.fim && e.inicio ? fmtDur(e.fim - e.inicio) : "";
     return `<li class="${e.estado}"><span class="ic">${ic}</span><span>${esc(e.nome)}${e.detalhe && e.estado !== "pendente" ? `<span class="det">${esc(e.detalhe)}</span>` : ""}</span><span class="t">${t}</span></li>`;
   }).join("");
@@ -202,39 +202,99 @@ function irPara(qid) { location.hash = qid || "painel"; }
 // ---- cabeçalho do projeto: % de respostas revisadas + a curva de progressão (src/historico.py)
 // Destaque primário em RESPOSTAS ÚNICAS (unidade do trabalho), com quebra de humanos e automáticas.
 // O gráfico plota a contagem absoluta de conferidas e o total em degrau (não cai quando entra base nova).
+const DIA_MS = 86400000;
+const diaMs = (iso) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+const msParaIso = (ms) => new Date(ms).toISOString().slice(0, 10);
+// Projeção do ritmo (respostas conferidas/dia, só dias com evolução): neutro = média dos últimos 7 dias ativos,
+// otimista = percentil 75, pessimista = percentil 25. Sem 2 dias com evolução não projeta nada.
+function ritmosProjecao(serie) {
+  const taxas = [];
+  for (let i = 1; i < serie.length; i++) {
+    const dd = (diaMs(serie[i].dia) - diaMs(serie[i - 1].dia)) / DIA_MS;
+    const ganho = (serie[i].respostas_revisadas ?? 0) - (serie[i - 1].respostas_revisadas ?? 0);
+    if (dd > 0 && ganho > 0) taxas.push(ganho / dd);
+  }
+  if (taxas.length < 2) return null;
+  const ord = [...taxas].sort((x, y) => x - y);
+  const pctl = (q) => ord[Math.min(ord.length - 1, Math.round(q * (ord.length - 1)))];
+  const ult = taxas.slice(-7);
+  return { pessimista: pctl(0.25), neutro: ult.reduce((x, y) => x + y, 0) / ult.length, otimista: pctl(0.75) };
+}
 function graficoProgresso(serie, totalUnicas) {
   const dias = (serie || []).map((p) => p.dia);
   if (dias.length < 2) return "";
   const maxResp = totalUnicas || Math.max(...serie.map((p) => Math.max(p.respostas_total || 0, p.respostas_revisadas || 0)), 1);
-  const L = 52, R = 548, T = 16, B = 186;
-  const x = (i) => L + (R - L) * (i / (dias.length - 1));
+  const ultimo = serie[serie.length - 1], rev0 = ultimo.respostas_revisadas ?? 0, faltam = Math.max(0, maxResp - rev0);
+  // projeção: cada cenário sai do último ponto e vai até 100% (ou até o horizonte de 90 dias)
+  const rit = faltam > 0 ? ritmosProjecao(serie) : null;
+  const HORIZ = 90;
+  const cen = rit ? [["pessimista", "ritmo lento"], ["neutro", "ritmo atual"], ["otimista", "ritmo rápido"]].map(([k, rot]) => {
+    const dd = Math.ceil(faltam / rit[k]);
+    return { k, rot, taxa: rit[k], dd, fim: Math.min(dd, HORIZ), data: msParaIso(diaMs(ultimo.dia) + dd * DIA_MS) };
+  }) : [];
+  const horiz = cen.length ? Math.max(...cen.map((c) => c.fim)) : 0;
+  const L = 52, R = 508, T = 16, B = 186;  // à direita sobra espaço para a escala em %
+  const t0 = diaMs(dias[0]), span = Math.max(1, (diaMs(dias[dias.length - 1]) - t0) / DIA_MS + horiz);
+  const x = (ms) => L + (R - L) * (((ms - t0) / DIA_MS) / span);
   const y = (v) => B - (B - T) * (Math.max(0, Math.min(maxResp, v)) / maxResp);
-  const linhaResp = serie.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.respostas_revisadas ?? 0).toFixed(1)}`).join(" ");
-  const linhaTot = serie.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.respostas_total || maxResp).toFixed(1)}`).join(" ");
+  const xi = (i) => x(diaMs(dias[i]));
+  const linhaResp = serie.map((p, i) => `${i ? "L" : "M"}${xi(i).toFixed(1)},${y(p.respostas_revisadas ?? 0).toFixed(1)}`).join(" ");
+  const linhaTot = serie.map((p, i) => `${i ? "L" : "M"}${xi(i).toFixed(1)},${y(p.respostas_total || maxResp).toFixed(1)}`).join(" ");
+  const area = `${linhaResp} L${xi(dias.length - 1).toFixed(1)},${B} L${xi(0).toFixed(1)},${B} Z`;
   const pontos = serie.map((p, i) => {
     const rev = p.respostas_revisadas ?? 0, tot = p.respostas_total || maxResp;
     const pRev = tot ? Math.round((100 * rev) / tot) : 0;
-    return `<circle cx="${x(i).toFixed(1)}" cy="${y(rev).toFixed(1)}" r="3.5" fill="var(--ok)">
+    return `<circle cx="${xi(i).toFixed(1)}" cy="${y(rev).toFixed(1)}" r="3.5" fill="var(--ok)">
       <title>${diaBR(p.dia)}: ${fmtN(rev)} de ${fmtN(tot)} respostas únicas conferidas (${pRev}%)</title>
     </circle>`;
   }).join("");
   const ticks = [1.0, 0.75, 0.5, 0.25, 0];
   const grade = ticks.map((f) => `<line x1="${L}" y1="${y(f * maxResp).toFixed(1)}" x2="${R}" y2="${y(f * maxResp).toFixed(1)}"${f && f < 1 ? ' stroke-dasharray="3 4"' : ""}/>`).join("");
   const rotulosY = ticks.map((f) => `<text x="4" y="${(y(f * maxResp) + 4).toFixed(1)}">${f === 0 ? "0" : fmtN(Math.round(f * maxResp))}</text>`).join("");
-  const passo = dias.length > 8 ? 2 : 1;  // muitos dias: um rótulo a cada dois
-  const rotulosX = dias.map((d, i) => (i % passo === 0 || i === dias.length - 1) ? `<text x="${(x(i) - 16).toFixed(1)}" y="${B + 22}">${diaBR(d)}</text>` : "").join("");
+  const rotulosPct = ticks.map((f) => `<text x="${R + 6}" y="${(y(f * maxResp) + 3.5).toFixed(1)}">${Math.round(f * 100)}%</text>`).join("");
+  // rótulos de data só quando cabem (eixo em escala de calendário): o último dia real sempre aparece; o fim projetado só se couber
+  const xsRot = [];
+  dias.forEach((d, i) => {
+    const xx = xi(i), ult = i === dias.length - 1;
+    if (xsRot.length && xx - xsRot[xsRot.length - 1].x < 36) { if (!ult) return; xsRot.pop(); }  // o último dia real sempre aparece
+    xsRot.push({ x: xx, d });
+  });
+  const xUlt = xsRot[xsRot.length - 1].x;
+  const rotulosX = xsRot.map(({ x: xx, d }) => `<text x="${(xx - 16).toFixed(1)}" y="${B + 22}">${diaBR(d)}</text>`).join("");
+  const neutro = cen.find((c) => c.k === "neutro");
+  const quandoDe = (c) => (c.dd > HORIZ ? `além de ${HORIZ} dias` : diaBR(c.data));
+  const projecao = cen.map((c) => {
+    const xf = x(diaMs(ultimo.dia) + c.fim * DIA_MS), yf = y(Math.min(maxResp, rev0 + c.taxa * c.fim));
+    const d = `M${xi(dias.length - 1).toFixed(1)},${y(rev0).toFixed(1)} L${xf.toFixed(1)},${yf.toFixed(1)}`;
+    const dica = `<title>Projeção (${c.rot}, ~${fmtN(Math.round(c.taxa))} respostas/dia): 100% em ${quandoDe(c)}</title>`;
+    return `<path fill="none" stroke="var(--text-3)" stroke-width="${c.k === "neutro" ? 1.6 : 1.2}" stroke-opacity="${c.k === "neutro" ? 0.95 : 0.6}" stroke-dasharray="3 3" d="${d}">${dica}</path>
+      <path fill="none" stroke="transparent" stroke-width="9" d="${d}">${dica}</path>`;
+  }).join("");
+  const rotuloFim = neutro && neutro.dd <= HORIZ && x(diaMs(neutro.data)) - xUlt >= 36 ? `<text x="${(x(diaMs(neutro.data)) - 16).toFixed(1)}" y="${B + 22}">${diaBR(neutro.data)}</text>` : "";
+  const previsao = !neutro ? "" : (() => {
+    const ot = cen.find((c) => c.k === "otimista"), pe = cen.find((c) => c.k === "pessimista");
+    return `<span class="small prev">previsão de conclusão: <b>${quandoDe(neutro)}</b> no ritmo atual (entre ${quandoDe(ot)} e ${quandoDe(pe)})</span>`;
+  })();
   return `<div class="grafico">
     <svg viewBox="0 0 560 214" width="100%" height="196" role="img"
          aria-label="Progressão: volume de respostas únicas conferidas em relação ao total">
+      <defs><linearGradient id="gProg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="var(--ok)" stop-opacity="0.06"/><stop offset="1" stop-color="var(--ok)" stop-opacity="0.38"/>
+      </linearGradient></defs>
       <g stroke="var(--border)">${grade}</g>
       <g font-size="10.5" fill="var(--text-3)" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">${rotulosY}${rotulosX}</g>
-      <polyline fill="none" stroke="var(--text-3)" stroke-width="1.8" stroke-dasharray="4 4" stroke-linejoin="round" d="${linhaTot}"/>
-      <polyline fill="none" stroke="var(--ok)" stroke-width="2.6" stroke-linejoin="round" d="${linhaResp}"/>
+      <g font-size="9.5" fill="var(--text-3)" opacity="0.8" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">${rotulosPct}${rotuloFim}</g>
+      <path fill="none" stroke="var(--text-3)" stroke-width="1.8" stroke-dasharray="4 4" stroke-linejoin="round" d="${linhaTot}"/>
+      <path d="${area}" fill="url(#gProg)" stroke="none"/>
+      ${projecao}
+      <path fill="none" stroke="var(--ok)" stroke-width="2.6" stroke-linejoin="round" d="${linhaResp}"/>
       ${pontos}
     </svg>
     <div class="legenda">
       <span><i class="sw ok"></i>respostas conferidas</span>
       <span><i class="sw total"></i>total de respostas únicas</span>
+      ${cen.length ? `<span><i class="sw proj"></i>projeção</span>` : ""}
+      ${previsao}
       <span class="small">contagem absoluta de respostas únicas — a linha sobe a cada revisão; entrada de dados cria degrau no total</span>
     </div>
   </div>`;
@@ -456,7 +516,7 @@ function avisosDoPayload(payload) {
   if (payload?.limite_atingido) {
     toast(`Limite de uso do provedor atingido: parei a classificação. ${payload.nao_tentados} resposta(s) ficaram pendentes — espere um pouco (ou troque de provedor em '⚙ Configurar IA') e tente de novo.`, true);
   } else if (payload?.parado_usuario) {
-    toast(`Classificação parada a seu pedido. ${payload.nao_tentados} resposta(s) ficaram pendentes — o que já foi classificado está salvo.`);
+    toast(`Classificação interrompida a seu pedido. O que já foi classificado foi salvo; ${payload.nao_tentados} resposta(s) permanecem pendentes.`);
   } else if (payload?.n_erro) {
     toast(`${payload.n_erro} resposta(s) deram erro na IA e continuam sem classificação (não foram para Outros). Use "Classificar as restantes" para tentar de novo.`, true);
   }
@@ -2655,8 +2715,13 @@ function alternarPainelProjeto() {
 async function trocarProjeto(slug) {
   if (!slug || slug === state.status.projeto.slug) return;
   await post("/api/projeto", { slug }, "Trocando de projeto…");
-  state.qid = null; await carregarStatus();
+  // nada do projeto antigo pode sobreviver: heartbeat de presença da pergunta, pergunta aberta, filtros, rascunho de novo projeto
+  pararPresenca();
+  Object.assign(state, { qid: null, P: null, view: "painel", filtro: filtroInicial(), mostrar: POR_PAGINA, novo: null, grupo: null });
+  await carregarStatus();
+  // abas gerais ficam onde estão; a rota antiga (#Q4, #grupo/x) pode não existir no projeto novo e vai ao painel
   if (["#usage", "#resultados", "#gerenciar", "#painel", ""].includes(location.hash)) rota(); else irPara(null);
+  presencaProjTick();
 }
 $("#proj-btn").onclick = (e) => { e.stopPropagation(); alternarPainelProjeto(); };
 $("#proj-panel").onclick = (e) => e.stopPropagation();  // clique dentro do cartão não fecha

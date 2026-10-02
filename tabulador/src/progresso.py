@@ -70,7 +70,7 @@ def etapa(chave: str, detalhe: str = "", estimativa: float | None = None) -> Non
         for e in ESTADO["etapas"]:
             if e is alvo:
                 break
-            if e["estado"] != "feito":
+            if e["estado"] not in ("feito", "interrompida"):
                 e["estado"], e["fim"] = "feito", t
                 e["inicio"] = e["inicio"] or t
         alvo.update(estado="ativo", inicio=alvo["inicio"] or t, detalhe=detalhe or alvo["detalhe"])
@@ -117,11 +117,28 @@ def ia_fim(segundos: float, ok: bool, tokens: int | None) -> None:
         ESTADO["tokens"] += int(tokens or 0)
 
 
+def interromper(chave: str, feitas: int, total: int, unidade: str = "respostas") -> None:
+    """A pessoa pediu para parar e sobrou trabalho: a etapa `chave` NÃO vira 'feita' (nada de ✓ verde nem
+    barra a 100%); fica 'interrompida' com o que foi salvo e o que continua pendente."""
+    with _lock:
+        if not ESTADO.get("ativo"):
+            return
+        e = _achar(chave)
+        if e is None:
+            return
+        pendentes = max(0, total - feitas)
+        e.update(estado="interrompida", fim=_agora(), detalhe=f"{feitas} de {total} {unidade} · {pendentes} continuam pendentes")
+        ESTADO["interrompida"] = True
+        ESTADO["eventos"].append({"hora": datetime.now().strftime("%H:%M:%S"),
+                                  "msg": f"⏹ Operação interrompida: {feitas} {unidade} salvas; {pendentes} continuam pendentes."})
+        del ESTADO["eventos"][:-30]
+
+
 def concluir() -> None:
     with _lock:
         t = _agora()
         for e in ESTADO.get("etapas", []):
-            if e["estado"] != "feito":
+            if e["estado"] not in ("feito", "interrompida"):
                 e["estado"], e["fim"] = "feito", t
         ESTADO.update(ativo=False, fim=t)
 
@@ -156,6 +173,10 @@ def ler() -> dict:
     s["decorrido"] = round(t - s["inicio"], 1)
     peso_total = sum(e["peso"] for e in s["etapas"]) or 1
     feito = sum(e["peso"] for e in s["etapas"] if e["estado"] == "feito")
+    # etapa interrompida: conta só a fração realmente feita (a barra não salta a 100% ao gravar o que sobrou)
+    for e in s["etapas"]:
+        if e["estado"] == "interrompida":
+            feito += e["peso"] * (min(1.0, s["feitos"] / s["total"]) if s.get("total") else 0.0)
     ativa = next((e for e in s["etapas"] if e["estado"] == "ativo"), None)
     restante = None
     s["indeterminado"] = False
@@ -177,7 +198,7 @@ def ler() -> dict:
             s["indeterminado"] = ativa["peso"] >= 3  # etapa longa sem como medir: barra animada
         feito += ativa["peso"] * frac
     s["pct"] = round(100 * feito / peso_total, 1)
-    s["restante"] = None if restante is None else round(restante, 1)
+    s["restante"] = None if restante is None or s.get("parando") else round(restante, 1)
     return s
 
 

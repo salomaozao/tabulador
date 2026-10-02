@@ -98,6 +98,9 @@ def _progresso(**kw) -> None:
     PROGRESSO.update(kw)
 
 
+_PULADO = object()  # devolvido por _um quando a parada foi pedida antes de chamar a IA
+
+
 def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], itens: dict, codigos_validos: dict) -> dict:
     """Codifica `pendentes` via LLM em lotes (config.LLM_PARALELO chamadas simultâneas) e preenche
     `itens` (rid -> item). Lote que falha NÃO entra em `itens` (nada de 'Outros' falso): a resposta
@@ -120,6 +123,8 @@ def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], i
 
     def _um(k_lote):
         k, lote = k_lote
+        if progresso.parada_pedida():
+            return _PULADO  # a pessoa pediu para parar antes desta chamada começar: não gasta a IA
         system, user = _prompt(qid, frame, enunciado, lote, ensino)
         return llm.chamar_json(system, user, SCHEMA_CODIFICACAO, nome=f"code_{qid}_{k + 1}")
 
@@ -132,7 +137,10 @@ def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], i
             if fut.cancelled():
                 continue  # cancelado antes de começar: fica pendente, não conta como tentado
             try:
-                resultados[k] = fut.result()
+                saida = fut.result()
+                if saida is _PULADO:
+                    continue  # nem chegou a chamar a IA: fica pendente, não conta como tentado
+                resultados[k] = saida
             except Exception as e:  # noqa: BLE001 - registrado como erro do lote
                 falhas.append(e)
                 resultados[k] = None
@@ -144,14 +152,17 @@ def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], i
             _progresso(feitos=PROGRESSO.get("feitos", 0) + len(lotes[k]), erros=len(falhas), limite_atingido=limite_atingido)
             progresso.atualizar(feitos=PROGRESSO["feitos"], lotes_feitos=progresso.ESTADO.get("lotes_feitos", 0) + 1,
                                 erros=len(falhas), limite_atingido=limite_atingido)
+            apos_parar = " · já estava em andamento quando você pediu para parar; foi salvo" if progresso.parada_pedida() else ""
             progresso.evento(f"Lote {k + 1} de {len(lotes)} {'com ERRO' if resultados[k] is None else 'concluído'} "
-                             f"({len(lotes[k])} respostas) · {PROGRESSO['feitos']} de {len(pendentes)} prontas em {time.time() - t_ini:.0f} s")
+                             f"({len(lotes[k])} respostas) · {PROGRESSO['feitos']} de {len(pendentes)} prontas em {time.time() - t_ini:.0f} s{apos_parar}")
             if not limite_atingido and not parado_usuario and progresso.parada_pedida():
                 parado_usuario = True  # o que já rodou fica salvo; o resto continua pendente p/ a próxima vez
                 for outro in futuros:  # só cancela quem ainda não começou a rodar
                     if outro is not fut:
                         outro.cancel()
                 progresso.evento("Parando a pedido — o que já foi classificado fica salvo.")
+    if parado_usuario:
+        progresso.interromper("ia", PROGRESSO.get("feitos", 0), len(pendentes))
     progresso.etapa("gravar", "juntando as respostas classificadas e salvando")
     _progresso(ativo=False)
     nao_tentados = sum(len(lote) for k, lote in enumerate(lotes) if k not in resultados)
