@@ -156,6 +156,55 @@ _SESI = projetos.pasta("sesi")
 
 
 @unittest.skipUnless((_SESI / "data" / "base_processamento.xlsx").exists(), "planilha SESI não disponível")
+class TestCopiarProjeto(unittest.TestCase):
+    """Cópia de projeto: pasta nova registrada, com ou sem resultados; o original não muda."""
+
+    def setUp(self):
+        import shutil
+        self.arq_orig = projetos.ARQUIVO
+        tmp = Path(tempfile.mkdtemp()) / "projetos.json"
+        shutil.copy(projetos.ARQUIVO, tmp)
+        projetos.ARQUIVO = tmp
+        self.pasta = Path(tempfile.mkdtemp(prefix="cp_")) / "Origem_cat"
+        REG.criar_rascunho(self.pasta, planilha_exemplo(Path(tempfile.mkdtemp()) / "pesquisa.xlsx"), "Origem")
+        completar(self.pasta, ["Q2", "Q4"])
+        REG.registrar(self.pasta, "origem")
+        (self.pasta / "output" / "perguntas" / "Q2").mkdir(parents=True)
+        (self.pasta / "output" / "perguntas" / "Q2" / "frame.json").write_text("{}", encoding="utf-8")
+        (self.pasta / "output" / "_backup").mkdir()
+        (self.pasta / "output" / "_backup" / "x.json").write_text("{}", encoding="utf-8")
+
+    def tearDown(self):
+        projetos.ARQUIVO = self.arq_orig
+        for s in ("origem", "origem_copia"):
+            projetos._modulos.pop(s, None)
+
+    def test_copia_sem_resultados(self):
+        from novo_projeto import copiar
+        r = copiar.copiar("origem", "Origem copia")
+        nova = Path(r["pasta"])
+        self.assertEqual(nova.parent.resolve(), self.pasta.parent.resolve())
+        self.assertTrue((nova / "data").exists())
+        self.assertFalse((nova / "output").exists())
+        self.assertEqual(json.loads((nova / "projeto.json").read_text(encoding="utf-8"))["NOME"], "Origem copia")
+        self.assertEqual(json.loads((self.pasta / "projeto.json").read_text(encoding="utf-8"))["NOME"], "Origem")
+        self.assertEqual(projetos._registro()["projetos"][r["slug"]], os.path.relpath(nova, projetos._DIR).replace("\\", "/"))
+
+    def test_copia_com_resultados_sem_backup(self):
+        from novo_projeto import copiar
+        nova = Path(copiar.copiar("origem", "Origem copia", True)["pasta"])
+        self.assertTrue((nova / "output" / "perguntas" / "Q2" / "frame.json").exists())
+        self.assertFalse((nova / "output" / "_backup").exists())
+
+    def test_nome_repetido_e_recusado(self):
+        from novo_projeto import copiar
+        copiar.copiar("origem", "Origem copia")
+        with self.assertRaises(ValueError):
+            copiar.copiar("origem", "Origem copia")
+        with self.assertRaises(ValueError):
+            copiar.copiar("origem", "Origem")
+
+
 class TestGabaritoSESI(unittest.TestCase):
     """O rascunho sem IA comparado ao projeto.py do SESI (feito e conferido à mão)."""
 

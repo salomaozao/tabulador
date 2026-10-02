@@ -581,6 +581,18 @@ def api_perigo_projeto():
         return _erro(e)
 
 
+@app.post("/api/projeto/copiar")
+def api_projeto_copiar():
+    """{slug, nome, copiar_resultados} -> cria uma cópia registrada do projeto (não ativa a cópia)."""
+    try:
+        from novo_projeto import copiar
+        d = request.get_json() or {}
+        with _lock:
+            return jsonify({"ok": True, **copiar.copiar(d.get("slug") or config.PROJETO, d.get("nome"), bool(d.get("copiar_resultados")))})
+    except Exception as e:
+        return _erro(e)
+
+
 # ----------------------------------------------------------------------------- API: novo projeto
 @app.post("/api/novo/iniciar")
 def api_novo_iniciar():

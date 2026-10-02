@@ -1714,6 +1714,8 @@ async function renderGerenciar() {
         <button class="btn perigo" id="pz-b3" ${comAlgo.length ? "" : "disabled"}>Recomeçar tudo</button></div>
     </div>
     <div class="perigo-zona"><div class="cab">Projeto</div>
+      <div class="perigo-item"><div class="d"><b>⧉ Criar uma cópia deste projeto</b><small>Duplica a pasta (configuração e planilha) com outro nome e cadastra na lista. Você escolhe se leva junto as categorias e classificações já feitas. O original não muda.</small></div>
+        <button class="btn" id="pz-copia">Criar cópia</button></div>
       <div class="perigo-item"><div class="d"><b>Excluir este projeto do Tabulador</b><small>Tira “${esc(P.nome)}” da lista de projetos. A pasta do projeto e a planilha não são apagadas (dá para cadastrar de novo). Opcionalmente, move a pasta de resultados para <code>…_excluido_&lt;data&gt;</code>.</small></div>
         <button class="btn perigo" id="pz-b4" ${G.n_projetos > 1 ? "" : 'disabled title="É o único projeto: crie outro antes"'}>Excluir projeto</button></div>
     </div>`;
@@ -1738,6 +1740,19 @@ async function renderGerenciar() {
   $("#pz-b3").onclick = async () => {
     if (await confirmarPerigo({ titulo: "Recomeçar todas as perguntas", texto: `Categorias e classificações de <b>todas as ${G.perguntas.length} perguntas</b> de “${esc(P.nome)}” vão para a lixeira.`, palavra: "RECOMEÇAR", botao: "Recomeçar tudo" }))
       apagar("todas", "tudo", "Todas as perguntas recomeçadas");
+  };
+  $("#pz-copia").onclick = async () => {
+    const dlg = $("#dlg-janela");
+    abrirJanela("Criar cópia do projeto", `<div class="small-t">Cópia de “<b>${esc(P.nome)}</b>”.</div>
+      <label class="campo">Nome da cópia <input id="cp-nome" autocomplete="off" value="${esc(P.nome)} (cópia)"></label>
+      <label><input type="checkbox" id="cp-res"> Copiar também categorias e classificações já feitas</label>
+      <div class="small muted">Sem isto, a cópia começa limpa: é só recarregar a planilha.</div>
+      <div class="dlg-acoes"><button class="btn primary" id="cp-ok">Criar cópia</button></div>`);
+    $("#cp-ok").onclick = async () => {
+      const nome = $("#cp-nome").value.trim(); if (!nome) return;
+      const j = await post("/api/projeto/copiar", { slug: P.slug, nome, copiar_resultados: $("#cp-res").checked }, "Copiando o projeto…");
+      dlg.close(); toast(`Cópia “${j.nome}” criada`); await carregarStatus(); renderGerenciar();
+    };
   };
   $("#pz-b4").onclick = async () => {
     const r = await confirmarPerigo({ titulo: "Excluir projeto", palavra: P.nome, botao: "Excluir projeto",
