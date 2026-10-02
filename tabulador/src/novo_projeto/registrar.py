@@ -59,11 +59,12 @@ def salvar_json(arq: Path, dados) -> None:
     arq.write_text(json.dumps(dados, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
-def registrar(pasta, slug: str | None = None, ativar: bool = False) -> str:
+def registrar(pasta, slug: str | None = None, ativar: bool = False, validar_antes: bool = True) -> str:
     pasta = Path(pasta).resolve()
-    res = validar(pasta)
-    if not res["valido"]:
-        raise ValueError(relatorio(res))
+    if validar_antes:  # cópia de projeto já aceito não revalida (projeto.py antigo não tem CONFERENCIA)
+        res = validar(pasta)
+        if not res["valido"]:
+            raise ValueError(relatorio(res))
     slug = slug or slug_de(pasta)
     reg = projetos._registro()
     if slug in reg["projetos"] and projetos.pasta(slug) != pasta:

@@ -77,7 +77,7 @@ def copiar(slug: str, nome: str, copiar_resultados: bool = False) -> dict:
                     nuvem.gravar(novo_slug, b["qid"], b["arquivo"], b["dados"])
                     copiados_nuvem += 1
         from . import registrar as REG
-        REG.registrar(destino, novo_slug)
+        REG.registrar(destino, novo_slug, validar_antes=False)
     except Exception:
         shutil.rmtree(destino, ignore_errors=True)  # pasta recém-criada por nós; nada do original é tocado
         raise
