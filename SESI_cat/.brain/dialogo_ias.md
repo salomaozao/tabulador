@@ -685,6 +685,7 @@ Depois vem uma única porta de gravação: PEND-31 + PEND-24 + a parte de grava�
 
 ---
 
+<<<<<<< HEAD
 ## 2026-10-02 12:40 — docs(brain): PEND-35 planejado — Assistente de IA na criação de grupos (rótulo, escopo, instrucoes_frame e compatibilidade)
 
 **Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
@@ -841,3 +842,35 @@ Gabriel pediu: nova pendência (trocar de projeto exige F5), prazo de 07/10 para
 - **Backfill não aplicado na base real:** rodar `python src/telemetria_backfill.py -p sesi --aplicar` só com OK do Gabriel (simulação: ~5.800 de ~7.300 casam).
 - PEND-24: validar contra o Turso real; PEND-26 segue `aberto` até o backfill. PEND-27 (painel) consome `eventos`.
 - Antes da entrega de 07/10: recarregar a planilha com as respostas de segunda e rodar "Classificar as restantes" (PEND-01).
+
+---
+
+## 2026-10-02 14:18 — feat(tabulador): cabeçalho da pergunta com enunciado sticky no topo a todo momento
+
+**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+**Branch/Worktree:** `worktrees/tabulador-header-sticky` (`feat/tabulador-header-sticky`)
+
+**Contexto:** O Gabriel solicitou: *"Queremos manter o header da pergunta com o enunciado no topo da tela a todo moento, sticky.; faça em uma worktree"*.
+Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancorado do modo sticky para dar lugar à barra de revisão rápida `.revbar-sticky`, o que fazia com que o enunciado e o título da pergunta saíssem da tela ao rolar a página.
+
+**Feito:**
+- **Worktree dedicada:** Criada a worktree `worktrees/tabulador-header-sticky` na branch `feat/tabulador-header-sticky` para total isolamento.
+- **Cabeçalho Sticky com Enunciado (`tabulador/static/app.css`):**
+  - `.q-cab`: Ancorado com `position: sticky; top: var(--topo, 49px); z-index: 7; margin: -20px -24px 12px; padding: 10px 24px 12px;` e sutil `box-shadow: 0 2px 8px rgba(0,0,0,0.05)`. Cobre a largura total de `main`, eliminando frestas laterais ou superiores durante a rolagem.
+  - O enunciado (`.q-cab .muted`) recebeu espaçamento compacto e legível (`line-height: 1.35; margin: 2px 0 3px;`).
+  - `.top` atualizado para `z-index: 10` e `.side` para `z-index: 8` para manter a hierarquia de sobreposição correta.
+- **Empilhamento Perfeito dos Cabeçalhos Fixos:**
+  - `th` genérico ajustado para `top: calc(var(--topo, 49px) + var(--qcab-h, 0px)); z-index: 5;`.
+  - `.revbar-sticky` ajustado para `top: calc(var(--topo, 49px) + var(--qcab-h, 0px)); z-index: 6;`.
+  - `table.res th` (thead da tabela de revisão) posicionado dinamicamente em `top: calc(var(--topo, 49px) + var(--qcab-h, 0px) + var(--revbar-h, 66px) + 8px); z-index: 5;`.
+  - `#area-revisao` com `scroll-margin-top: calc(var(--topo, 49px) + var(--qcab-h, 0px) + 16px);` para que o atalho "↓ ir para a revisão" role a página com folga exata abaixo do cabeçalho fixo.
+- **Sincronização Dinâmica em Tempo Real (`tabulador/static/app.js`):**
+  - Implementada `medirAlturasFixas()` que calcula as alturas reais de `.top`, `.q-cab` e `.revbar-sticky` e define `--topo`, `--qcab-h` e `--revbar-h` no `documentElement`.
+  - Adicionado `observarCabecalho()` com `ResizeObserver` monitorando alterações dinâmicas na altura de `.q-cab`.
+  - Atualizado fallback do enunciado para `${esc(R.enunciado || P.enunciado || "")}`.
+  - Rotas fora de perguntas limpam as variáveis de altura fixas para evitar herança indevida.
+- **Testes Unitários:** Suíte executada (172 testes passando).
+- **Commit:** Commit `1db9a3a` isolado na branch `feat/tabulador-header-sticky`.
+
+**Próxima IA / Handoff:**
+- Worktree `worktrees/tabulador-header-sticky` pronta para revisão e merge pelo Gabriel.
