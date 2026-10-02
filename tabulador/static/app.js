@@ -1352,7 +1352,7 @@ function abrirAuditoria() {
   const selProv = $("#au-prov"), selMod = $("#au-mod");
   const outro = Object.keys(provs).find((k) => k !== ia.provedor && !provs[k].sem_chave && pronto(k, provs[k]));
   if (outro) selProv.value = outro;
-  const encherModelos = () => { const p = provs[selProv.value] || {}; selMod.innerHTML = (p.modelos || [p.modelo]).filter(Boolean).map((m) => `<option>${esc(m)}</option>`).join(""); };
+  const encherModelos = () => { const p = provs[selProv.value] || {}; selMod.innerHTML = (p.modelos || [p.modelo]).filter(Boolean).map((m) => `<option value="${esc(m)}">${esc(m)}${m === p.modelo ? " (recomendado)" : ""}</option>`).join(""); };
   selProv.onchange = encherModelos; encherModelos();
   $("#au-ok").onclick = async () => {
     const body = { provedor: selProv.value, modelo: selMod.value, escopo: $("#au-esc").value, aceitar: $("#au-aceitar").checked, limiar: state.limiar ?? 0.85 };
@@ -2186,7 +2186,7 @@ function preencherProvedor(prov, inicial) {
 const OUTRO_MODELO = "__outro";
 function preencherModelos(P, valor) {
   const lista = P.modelos || [], sel = $("#ia-modelo-sel");
-  sel.innerHTML = lista.map((m) => `<option value="${esc(m)}">${m === "padrao" ? "padrão do programa" : esc(m)}</option>`).join("")
+  sel.innerHTML = lista.map((m) => `<option value="${esc(m)}">${m === "padrao" ? "padrão do programa" : esc(m)}${m === P.modelo ? " (recomendado)" : ""}</option>`).join("")
     + `<option value="${OUTRO_MODELO}">outro…</option>`;
   sel.value = lista.length && (!valor || lista.includes(valor)) ? valor || lista[0] : OUTRO_MODELO;
   $("#ia-modelo").value = sel.value === OUTRO_MODELO ? valor || "" : sel.value;
