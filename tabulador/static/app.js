@@ -612,10 +612,15 @@ function render() {
 }
 
 // ---------------------------------------------------------------- frame
+// Categorias nos menus de escolha: ordem alfabética (Outros e NS/NR no fim) e sem o número, que não ajuda o analista.
+// O número continua valendo no atalho de teclado (digitar o código na linha da resposta).
+const catsAlfabetica = (cats) => [...cats].sort((a, b) => (!!a.fixa - !!b.fixa) || a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }));
+const optsCategorias = (cats, { excluir = null, sel = null } = {}) => catsAlfabetica(cats).filter((c) => c.codigo !== excluir)
+  .map((c) => `<option value="${c.codigo}" ${c.codigo === sel ? "selected" : ""}>${esc(c.nome)}</option>`).join("");
 function renderFrame() {
   const P = state.P, F = P.frame, n = P.respostas?.n_respondeu || 0, cats = F.categorias;
   // destino pode ser Outros (97) ou NS/NR (98); só a ORIGEM não pode ser fixa (a linha fixa não tem o menu)
-  const opts = (excl) => cats.filter((c) => c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  const opts = (excl) => optsCategorias(cats, { excluir: excl });
   const rows = cats.map((c) => {
     const k = P.contagens[c.codigo] || { primaria: 0, secundaria: 0 }, m = k.primaria + k.secundaria;
     const ro = c.fixa || F.fixo;
@@ -726,6 +731,7 @@ function renderRevbar() {
           <div class="revbar-status">
             <b>Revisão:</b> <b>${fmtN(V.n_revisadas)}</b> de ${fmtN(V.n_codificadas)} conferidas (${pct(V.n_revisadas, V.n_codificadas)}) · <span class="pill ok">✓ ${fmtN(nPessoas)} manual</span>${V.n_confirmadas_auto ? ` <span class="pill ok auto" title="Confirmadas sozinhas: confiança alta e auditor concordou">⚡ ${fmtN(V.n_confirmadas_auto)} auto</span>` : ""} <span class="pill human">✎ ${fmtN(V.n_corrigidas)} corrigidas</span>
             ${acerto != null ? ` · <b>IA: ${acerto}%</b> <small>(${V.n_avaliadas_ia} avaliadas)</small>` : ""}
+            ${V.confirmacao_travada ? ` · <span class="pill warn" title="${esc(txtTrava())}">🔒 confirmações travadas</span>` : ""}
             ${V.n_alteradas ? ` · <button type="button" class="pill warn linkbtn" id="b-so-alteradas-revbar" title="Filtra a tabela só pelas ${V.n_alteradas} respostas que precisam de reconferência">⚠️ ${fmtN(V.n_alteradas)} a reconferir</button>` : ""}
             ${nPendentes ? ` · <button type="button" class="pill warn linkbtn" id="b-so-pendentes" title="Filtra a tabela abaixo só pelas ${nPendentes} que ainda faltam conferir">👁 ver as ${fmtN(nPendentes)} a conferir</button>` : ""}
           </div>
@@ -764,7 +770,7 @@ function renderAcoesCod() {
       <div class="tools supervisao">
         <b>Supervisão:</b>
         <button class="btn" id="b-auditar" title="Outra IA confere a classificação, resposta por resposta (segundo codificador)">🔎 Auditar com outra IA</button>
-        <button class="btn" id="b-auto" title="Confirma sozinho o que tem confiança alta E o auditor concordou">⚡ Aceitar alta confiança</button>
+        <button class="btn" id="b-auto" ${V.confirmacao_travada ? `disabled title="${esc(txtTrava())}"` : `title="Confirma sozinho o que tem confiança alta E o auditor concordou"`}>⚡ Aceitar alta confiança</button>
         <label class="small">limiar <input id="auto-limiar" type="number" min="0.5" max="1" step="0.05" value="${state.limiar ?? 0.85}" style="width:64px"></label>
         ${V.n_confirmadas_auto ? `<button class="btn ghost" id="b-desfazer-auto">↶ Desfazer as ${V.n_confirmadas_auto} automáticas</button>` : ""}
         <span class="sep"></span>
@@ -1006,7 +1012,7 @@ async function abrirJanelaCategorias() {
   const D = await api(`/api/pergunta/${qid}/perfil`, {}, "Montando o perfil das categorias…");
   const F = P.frame, frameOk = F && F.status === "aprovado", locked = P.codificacao?.status === "aprovado";
   const podeEditar = !F?.fixo && !locked;
-  const catsOpc = (excl) => catsValidas().filter((c) => c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  const catsOpc = (excl) => optsCategorias(catsValidas(), { excluir: excl });
   const b = D.base || {};
   const cats = D.classificada ? [...D.categorias].sort((x, y) => (y.n || 0) - (x.n || 0)) : D.categorias;
   const catOutros = D.classificada ? cats.find((c) => (c.codigo === 97 || String(c.codigo) === "97" || (c.nome || "").toLowerCase().includes("outros")) && (c.pct || 0) > 5.0) : null;
@@ -1061,7 +1067,7 @@ async function abrirJanelaSaudeQuadro() {
   const raras = diag.categorias_raras || [];
   const saudaveis = diag.categorias_saudaveis || [];
   const catsFrame = P.frame?.categorias || [];
-  const opts = (excl) => catsFrame.filter((c) => c.codigo !== excl).map((c) => `<option value="${c.codigo}">${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  const opts = (excl) => optsCategorias(catsFrame, { excluir: excl });
 
   const placarHtml = `
     <div class="sq-placar">
@@ -1359,6 +1365,7 @@ function abrirAuditoria() {
       ${htmlGanhoAuditoria(A.ganho)}
       ${A.parado_usuario ? `<p class="small">⏹ Parada a seu pedido: o que já foi auditado está salvo; o resto continua sem auditoria.</p>` : ""}
       ${A.auto ? `<p><b>${fmtN(A.auto.aceitas)}</b> aceitas sozinhas (confiança alta + auditor concordando).</p>` : ""}
+      ${A.auto_bloqueado ? `<p>🔒 Ninguém foi aceito sozinho: as confirmações desta pergunta estão travadas.</p>` : ""}
       <p class="small">As discordâncias aparecem na tabela com <b>🔎 auditor sugere…</b>. Filtre por <b>auditor discordou</b> e use o botão ou a tecla <kbd>S</kbd> para aceitar a sugestão.</p>`);
   };
 }
@@ -1408,10 +1415,18 @@ function renderAprovarBtn() {
   if (C.status === "aprovado") {
     return `<span class="pill ok" style="font-weight:600;padding:5px 10px" title="A classificação desta pergunta já foi aprovada e gravada nos resultados">✓ Aprovada nos resultados</span>`;
   }
-  return `<button class="btn ok" id="b-aprovar-cod" ${V.n_faltantes ? `disabled title="Classifique as restantes antes de aprovar"` : ""}>✓ Aprovar e gravar nos resultados</button>`;
+  const trava = V.confirmacao_travada;
+  const bloqueio = trava ? `disabled title="${esc(txtTrava())}"` : V.n_faltantes ? `disabled title="Classifique as restantes antes de aprovar"` : "";
+  return `<label class="small trava-conf" title="Impede confirmar respostas e aprovar a pergunta até alguém desmarcar"><input type="checkbox" id="c-trava" ${trava ? "checked" : ""}> 🔒 Travar confirmações</label>
+    <button class="btn ok" id="b-aprovar-cod" ${bloqueio}>✓ Aprovar e gravar nos resultados</button>`;
 }
 function bindAprovarBar() {
   const P = state.P; if (!P.codificacao) return;
+  $("#c-trava")?.addEventListener("change", async (e) => {
+    const ligar = e.target.checked;
+    try { refresh(await post(`/api/pergunta/${P.qid}/trava`, { travada: ligar })); toast(ligar ? "Confirmações travadas" : "Confirmações liberadas"); }
+    catch (err) { e.target.checked = !ligar; }
+  });
   $("#b-aprovar-cod")?.addEventListener("click", async () => {
     const V = P.revisao, naoConf = V.n_codificadas - V.n_revisadas;
     if (!confirm(`Aprovar a classificação?${P.n_alertas ? `\n• ${P.n_alertas} resposta(s) com alerta` : ""}${naoConf ? `\n• ${naoConf} resposta(s) não conferidas por você (ficam como a IA classificou)` : ""}`)) return;
@@ -1422,6 +1437,10 @@ function bindAprovarBar() {
 // ---------------------------------------------------------------- tabela de classificação
 // na tela do grupo cada linha tem a pergunta de origem (r._q) e a trava vale pela classificação DESSA pergunta
 const emGrupo = () => !!state.P?._cods;
+// PEND-42: trava que impede confirmar respostas e aprovar a pergunta (corrigir e desfazer continuam livres). Na tela do grupo
+// a checagem fica por conta do servidor, que recusa com a mensagem de quem travou.
+const confTravada = () => !emGrupo() && state.P?.revisao?.confirmacao_travada;
+const txtTrava = () => { const t = state.P?.revisao?.confirmacao_travada; return t ? `Confirmações travadas por ${t.por || "alguém"} em ${String(t.em || "").slice(0, 16).replace("T", " ")}. Desmarque "Travar confirmações" para confirmar.` : ""; };
 const travada = (r) => (emGrupo() ? state.P._cods[r._q]?.status === "aprovado" : state.P.codificacao?.status === "aprovado");
 const temSugestao = (r) => r.revisao === "pendente" && r.auditoria?.ok === false && r.auditoria.primaria != null && r.auditoria.primaria !== r.primaria;
 function situacaoOk(r, s) {
@@ -1465,7 +1484,7 @@ function renderCodificacao() {
   const ordem = [...cats].map((c) => ({ c, m: (P.contagens[c.codigo]?.primaria || 0) + (P.contagens[c.codigo]?.secundaria || 0) })).sort((a, b) => b.m - a.m);
   const maxm = Math.max(1, ...ordem.map((o) => o.m));
   const chart = ordem.map(({ c, m }) => `<div class="row"><div class="n" title="${esc(c.nome)}">${esc(c.nome)}</div><div class="bar"><i style="width:${(100 * m) / maxm}%"></i><span>${m} · ${pct(m, n)}</span></div></div>`).join("");
-  const optCat = (sel, vazio) => (vazio ? `<option value="">${esc(vazio)}</option>` : "") + cats.map((c) => `<option value="${c.codigo}" ${c.codigo === sel ? "selected" : ""}>${c.codigo} · ${esc(c.nome)}</option>`).join("");
+  const optCat = (sel, vazio) => (vazio ? `<option value="">${esc(vazio)}</option>` : "") + optsCategorias(cats, { sel });
   const todas = filtrarItens(), vis = todas.slice(0, state.mostrar);
   // sub-filtro por categoria (visível ao ordenar por confiança): conta ignorando o filtro de categoria em si
   const chipsCat = (() => {
@@ -1524,7 +1543,7 @@ function renderCodificacao() {
     const just = r.justificativa ? (r.ia_original_nome ? `<small>revisor: ${esc(r.justificativa.replace(/^\[revisor [^:]*: ?/, "").replace(/\] IA tinha: .*$/, ""))} · a IA tinha posto: ${esc(r.ia_original_nome)}</small>` : `<small>IA: ${esc(r.justificativa)}</small>`) : "";
     const sugestao = !travada(r) && temSugestao(r) ? `<div class="sugestao">🔎 auditor sugere: <b>${esc(r.sugestao_nome || r.auditoria.primaria)}</b>${r.sugestao_sec_nome ? ` + ${esc(r.sugestao_sec_nome)}` : ""}${r.auditoria.nota ? ` — ${esc(r.auditoria.nota)}` : ""} <button class="btn sm c-sug" title="Aceitar a sugestão do auditor (tecla S)">aceitar sugestão</button></div>` : "";
     const motivoAlt = r.revisao === "alterada" && r.alterada_motivo ? `<br><small style="color:var(--warn);font-weight:600">⚠️ Reconferir: ${esc(r.alterada_motivo)}</small>` : "";
-    const btnOk = nc || travada(r) ? "" : r.revisao === "alterada" ? `<button class="btn sm c-ok alterada" title="Reconfirmar resposta após alteração da categoria">✓</button>` : r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
+    const btnOk = nc || travada(r) ? "" : confTravada() && r.revisao !== "confirmada" ? `<button class="btn sm c-ok" disabled title="${esc(txtTrava())}">🔒</button>` : r.revisao === "alterada" ? `<button class="btn sm c-ok alterada" title="Reconfirmar resposta após alteração da categoria">✓</button>` : r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
     return `<tr class="${cls}" data-rid="${r.rid}" tabindex="0">
       <td>${btnOk}</td>
       ${emGrupo() ? `<td><span class="pill" title="Pergunta de origem da resposta">${esc(r._q)}</span></td>` : ""}
@@ -1554,12 +1573,12 @@ function renderCodificacao() {
         <option value="corrigida" ${f.situacao === "corrigida" ? "selected" : ""}>corrigidas por você</option>
         <option value="nao" ${f.situacao === "nao" ? "selected" : ""}>não classificadas</option>
       </select>
-      <select id="c-cat"><option value="">todas as categorias</option>${cats.map((c) => `<option value="${c.codigo}" ${String(c.codigo) === f.cat ? "selected" : ""}>${c.codigo} · ${esc(c.nome)}</option>`).join("")}</select>
+      <select id="c-cat"><option value="">todas as categorias</option>${optsCategorias(cats, { sel: +f.cat || null })}</select>
       <label><input type="checkbox" id="c-al" ${f.alertas ? "checked" : ""}> só alertas</label>
       <label><input type="checkbox" id="c-com" ${f.comentarios ? "checked" : ""}> só comentadas</label>
       <select id="c-ord"><option value="conf" ${f.ordem === "conf" ? "selected" : ""}>ordenar: menor confiança</option><option value="n" ${f.ordem === "n" ? "selected" : ""}>ordenar: mais frequentes</option><option value="cat" ${f.ordem === "cat" ? "selected" : ""}>ordenar: categoria</option></select>
       <span class="small">${vis.length} de ${todas.length} respostas${todas.length !== P.itens.length ? ` (filtradas de ${P.itens.length})` : ""}</span>
-      ${!locked && pendVis ? `<button class="btn sm" id="c-ok-todas" title="Confirma as respostas 'a conferir/reconferir' mostradas nesta página">✓ Confirmar as ${pendVis} mostradas</button>` : ""}
+      ${!locked && pendVis && !confTravada() ? `<button class="btn sm" id="c-ok-todas" title="Confirma as respostas 'a conferir/reconferir' mostradas nesta página">✓ Confirmar as ${pendVis} mostradas</button>` : ""}
     </div>
     ${chipsCat}
     ${painelDiscordancias}
@@ -1661,7 +1680,8 @@ function bindCodificacao() {
       else if (e.key === "ArrowUp" || keyLow === "k") { e.preventDefault(); proximaLinha(tr, -1)?.focus(); }
       else if (e.key === "Enter" && r.primaria != null) {
         e.preventDefault();
-        if (r.revisao === "pendente" || r.revisao === "alterada") salvar({ validado: true }, "Confirmada ✓", true);
+        if (confTravada() && (r.revisao === "pendente" || r.revisao === "alterada")) toast(txtTrava(), true);
+        else if (r.revisao === "pendente" || r.revisao === "alterada") salvar({ validado: true }, "Confirmada ✓", true);
         else proximaLinha(tr, 1)?.focus();
       } else if (keyLow === "c" && !com.disabled) { e.preventDefault(); com.focus(); }
       else if (keyLow === "s" && temSugestao(r)) { e.preventDefault(); aceitarSugestao(); }

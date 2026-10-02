@@ -268,6 +268,7 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
         "modelo": config.OPENAI_MODEL,
         "gerado_em": datetime.now().isoformat(timespec="seconds"),
         "frame_aprovado_em": frame.get("aprovado_em"),
+        **({"confirmacao_travada": atual["confirmacao_travada"]} if (atual or {}).get("confirmacao_travada") else {}),  # reclassificar não destrava
         "itens": [itens[r["rid"]] for r in dados["respostas"] if r["rid"] in itens],
     }
     CF._gravar(qid, "codificacao.json", cod)
@@ -330,6 +331,36 @@ def recodificar(qid: str, rids: list[int] | None = None, apenas_comentados: bool
     return cod
 
 
+class ConfirmacaoTravada(RuntimeError):
+    """A pergunta está com a trava de confirmações ligada (PEND-42): nada pode ser confirmado nem aprovado."""
+
+
+def _exigir_destravada(qid: str, cod: dict | None, acao: str) -> None:
+    t = (cod or {}).get("confirmacao_travada")
+    if t:
+        raise ConfirmacaoTravada(
+            f"{qid}: as confirmações estão travadas ({t.get('por') or 'alguém'}, {str(t.get('em') or '')[:16].replace('T', ' ')}). "
+            f"Desmarque '🔒 Travar confirmações' na pergunta para {acao}.")
+
+
+def definir_trava(qid: str, travada: bool, por: str | None = None) -> dict | None:
+    """Liga/desliga a trava de confirmações da pergunta (PEND-42). Qualquer pessoa pode desligar; fica no log de
+    eventos quem ligou e quem desligou. Devolve a trava atual ({por, em}) ou None."""
+    cod = codificacao(qid)
+    if not cod:
+        raise RuntimeError(f"{qid}: ainda não há classificação para travar")
+    antes = cod.get("confirmacao_travada")
+    if travada and not antes:
+        cod["confirmacao_travada"] = {"por": por or eventos.quem(), "em": datetime.now().isoformat(timespec="seconds")}
+    elif not travada:
+        cod.pop("confirmacao_travada", None)
+    if bool(antes) != bool(cod.get("confirmacao_travada")):
+        CF._gravar(qid, "codificacao.json", cod)
+        eventos.registrar(qid, "travar_confirmacoes" if travada else "destravar_confirmacoes", por=por,
+                          travada_antes_por=(antes or {}).get("por"))
+    return cod.get("confirmacao_travada")
+
+
 def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", comentario="__manter__", validado=None,
                    por: str | None = None) -> dict:
     """Correção manual de uma resposta (vinda da interface): categoria primária/secundária,
@@ -340,6 +371,8 @@ def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", c
     cod = codificacao(qid)
     if not cod:
         raise RuntimeError(f"{qid}: ainda não há codificação")
+    if validado:
+        _exigir_destravada(qid, cod, "confirmar respostas")
     item = next((i for i in cod["itens"] if i["rid"] == int(rid)), None)
     if item is None:
         # resposta ainda não classificada (fora da amostra): o pesquisador classifica à mão
@@ -419,6 +452,8 @@ def validar(qid: str, rids: list[int], valor: bool = True, por: str | None = Non
     cod = codificacao(qid)
     if not cod:
         raise RuntimeError(f"{qid}: ainda não há codificação")
+    if valor:
+        _exigir_destravada(qid, cod, "confirmar respostas")
     alvo = {int(r) for r in rids}
     agora = datetime.now().isoformat(timespec="seconds")
     n = 0
@@ -490,6 +525,7 @@ def resumo_revisao(qid: str) -> dict:
         "n_revisadas": confirmadas + corrigidas,
         "acerto_ia": round((confirmadas - auto) / avaliadas, 3) if avaliadas else None,
         "n_avaliadas_ia": avaliadas,
+        "confirmacao_travada": cod.get("confirmacao_travada"),
     }
 
 
@@ -640,6 +676,7 @@ def aprovar(qid: str) -> dict:
     cod = codificacao(qid)
     if not cod:
         raise RuntimeError(f"{qid}: nada para aprovar")
+    _exigir_destravada(qid, cod, "aprovar a pergunta")
     frame = CF._exigir_frame(qid)
     if frame.get("status") != "aprovado":
         raise RuntimeError(f"{qid}: o frame foi editado depois da codificação; aprove o frame e recodifique/revise")
