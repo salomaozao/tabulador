@@ -770,6 +770,7 @@ function renderAcoesCod() {
         ${V.n_alteradas ? `<button class="btn warn" id="b-so-alteradas" title="Filtrar as ${V.n_alteradas} respostas que precisam de reconferência após alteração no quadro">⚠️ Reconferir alteradas (${V.n_alteradas})</button>` : ""}
         <button class="btn" id="b-janela" title="Cada categoria com exemplos, perfil de quem citou e confirmação em bloco">🗂 Revisar por categoria</button>
         <button class="btn ${bs.classe}" id="b-saude-quadro-rev" title="Saúde do quadro: diagnóstico por categoria e soluções propostas">🩺 Saúde do quadro${bs.texto}</button>
+        <button class="btn ghost" id="b-versoes" title="Versões guardadas desta pergunta (volta a um ponto anterior se algo deu errado)">🕘 Versões</button>
       </div>
     </div>`;
 }
@@ -823,6 +824,7 @@ function bindAcoesCod() {
   $("#b-auditar")?.addEventListener("click", abrirAuditoria);
   $("#b-janela")?.addEventListener("click", () => abrirJanelaCategorias());
   $("#b-saude-quadro-rev")?.addEventListener("click", () => abrirJanelaSaudeQuadro());
+  $("#b-versoes")?.addEventListener("click", () => abrirJanelaVersoes());
   const filtrarParaAlteradas = () => {
     state.filtro.situacao = "alterada"; state.mostrar = POR_PAGINA; state.congelar = false;
     manterScroll(render);
@@ -1251,6 +1253,33 @@ function abrirAuditoria() {
       ${A.auto ? `<p><b>${fmtN(A.auto.aceitas)}</b> aceitas sozinhas (confiança alta + auditor concordando).</p>` : ""}
       <p class="small">As discordâncias aparecem na tabela com <b>🔎 auditor sugere…</b>. Filtre por <b>auditor discordou</b> e use o botão ou a tecla <kbd>S</kbd> para aceitar a sugestão.</p>`);
   };
+}
+// PEND-24: versões guardadas da classificação e do quadro; restaurar também guarda a versão de hoje (dá para desfazer)
+async function abrirJanelaVersoes() {
+  const P = state.P, V = await api(`/api/pergunta/${P.qid}/versoes`, {}, "Lendo as versões guardadas…");
+  const R = P.revisao || {};
+  const nomes = { "codificacao.json": "Classificação das respostas", "frame.json": "Quadro de categorias" };
+  const quando = (iso) => new Date(iso).toLocaleString("pt-BR");
+  const bloco = (arq) => {
+    const lista = V[arq] || [];
+    const linhas = lista.map((v, k) => `<tr><td>${esc(quando(v.gravado_em))}</td><td>${esc(v.motivo || "—")}</td>
+      <td class="num">${v.n_itens != null ? `${fmtN(v.n_itens)} resp. · ${fmtN(v.n_humano)} conferidas` : `${fmtN(v.n_categorias)} categorias`}</td>
+      <td><button class="btn" data-arq="${arq}" data-k="${k}">↶ Restaurar</button></td></tr>`).join("");
+    return `<h4>${nomes[arq]}</h4>${lista.length ? `<table class="tab"><thead><tr><th>Quando</th><th>Antes de quê</th><th>Conteúdo</th><th></th></tr></thead><tbody>${linhas}</tbody></table>` : `<p class="small">Nenhuma versão guardada ainda.</p>`}`;
+  };
+  const dlg = abrirJanela(`🕘 Versões de ${P.qid}`, `
+    <p>Antes de cada operação em massa (classificar, auditar, mesclar, apagar, aprovar) e a cada 15 min de revisão, o Tabulador guarda a versão anterior.
+    Hoje: <b>${fmtN(R.n_codificadas || 0)}</b> respostas classificadas, <b>${fmtN(R.n_revisadas || 0)}</b> conferidas por pessoa.
+    Restaurar também guarda a versão de hoje, então dá para voltar atrás.</p>${bloco("codificacao.json")}${bloco("frame.json")}`);
+  dlg.querySelectorAll("button[data-arq]").forEach((b) => b.onclick = async () => {
+    const v = V[b.dataset.arq][+b.dataset.k];
+    const perda = v.n_humano < (R.n_revisadas || 0) ? "\nAs conferências feitas depois dela serão perdidas (a versão de hoje fica guardada)." : "";
+    const delta = v.n_itens != null ? `\n\nHoje: ${R.n_revisadas || 0} conferidas · versão: ${v.n_humano} conferidas.${perda}` : "";
+    if (!confirm(`Restaurar "${nomes[b.dataset.arq]}" de ${quando(v.gravado_em)}?${delta}`)) return;
+    dlg.close();
+    refresh(await post(`/api/pergunta/${P.qid}/restaurar`, { arquivo: b.dataset.arq, gravado_em: v.gravado_em }, "Restaurando a versão…"));
+    toast("Versão restaurada");
+  });
 }
 // PEND-23: o que a auditoria trouxe. "Passou pelo auditor" não é "está certa": só a amostra de controle (PEND-32) mede o erro real.
 function htmlGanhoAuditoria(g) {

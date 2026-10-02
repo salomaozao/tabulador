@@ -42,3 +42,8 @@ resumo: "Com a nuvem ativa, nuvem.gravar faz upsert (substitui) e _remover apaga
 - **Testes:** `tests/test_protecao.py`, 17 testes. Suíte completa: 124, só as 4 falhas conhecidas.
 - **Limites conhecidos:** a guarda só cobre `codificacao.json`; um bug que zere o `frame.json` ou o `respostas.json` não é recusado (o frame tem snapshot; respostas não). O throttle de 15 min é por processo. Quem escreve direto no Turso, sem passar por `_gravar`, não é protegido.
 - **Não validado com o Turso de verdade**, só com SQLite local (mesmo cliente). Vale uma rodada contra a nuvem antes de confiar.
+
+## Andamento (02/10, Claude Sonnet 5.5)
+- **Tela "Restaurar versão" feita:** botão `🕘 Versões` na barra de revisão da pergunta (`abrirJanelaVersoes` em `static/app.js`). Lista as versões da classificação e do quadro (quando, antes de quê, conteúdo) e restaura com confirmação que mostra quantas conferidas se perdem. Usa `GET /versoes` e `POST /restaurar` que já existiam. Suíte completa passa.
+- **Backup manual da nuvem rodado** (`python src/nuvem.py -p sesi backup`): `tabulador/projetos/sesi_cat/output/_backup/nuvem_20261002_135625.json`. O backup diário automático não tinha deixado arquivo novo em `SESI_cat/output/_backup` desde 24/09 (conferir para onde o `backup_se_preciso` grava).
+- **Ainda não validado:** snapshot e restauração contra o Turso real (só SQLite local nos testes), e clique na tela em navegador.
