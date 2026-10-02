@@ -8,7 +8,7 @@ status: resolvido
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 data_resolucao: 2026-10-02
-resumo: "Pedido do Gabriel (02/10): poder bloquear uma pergunta de ser confirmada, com uma flag, e ela só ser confirmada se a flag for desmarcada manualmente. Feito na branch feat/trava-confirmacao-e-ordem-categorias (worktree worktrees/tabulador-trava-ordem), aguardando merge na main."
+resumo: "Pedido do Gabriel (02/10): poder bloquear uma pergunta de ser confirmada, com uma flag, e ela só ser confirmada se a flag for desmarcada manualmente. Mergeado na main em 02/10 (merge geral pedido pelo Gabriel); suíte integrada: 188 passam. Ainda não validado na tela."
 ---
 
 # PEND-42: Trava de confirmações

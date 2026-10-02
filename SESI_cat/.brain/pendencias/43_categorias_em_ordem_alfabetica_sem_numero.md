@@ -8,7 +8,7 @@ status: resolvido
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 data_resolucao: 2026-10-02
-resumo: "Pedido do Gabriel (02/10): ao escolher a categoria de uma resposta, listar em ordem alfabética e sem o número (pouco útil para o analista). Feito na branch feat/trava-confirmacao-e-ordem-categorias, aguardando merge na main."
+resumo: "Pedido do Gabriel (02/10): ao escolher a categoria de uma resposta, listar em ordem alfabética e sem o número (pouco útil para o analista). Mergeado na main em 02/10 (merge geral pedido pelo Gabriel); suíte integrada: 188 passam. Ainda não validado na tela."
 ---
 
 # PEND-43: Menus de categoria sem número e em ordem alfabética

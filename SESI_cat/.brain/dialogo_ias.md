@@ -922,3 +922,86 @@ Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancor
 - Merge da branch na main depende do Gabriel validar na tela. Não fazer `git checkout` na raiz: use a worktree.
 - Q35 ainda sem o carimbo do backfill (`python src/telemetria_backfill.py -p sesi Q35 --aplicar`, com ninguém em Q35).
 - PEND-24 (tela Versões) em validação pelo Gabriel.
+
+---
+
+## 2026-10-02 14:45 — fix(tabulador): cache-busting dinâmico no app.py e cabeçalho da pergunta (.q-cab) sticky em definitivo
+
+**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+
+**Contexto:** O Gabriel relatou que o cabeçalho da pergunta com o enunciado (em destaque na Q29: título, código, enunciado completo, base "Quem respondeu", link "ir para a revisão" e contador "revisadas / total") continuava sem fixar no topo durante a rolagem. Solicitou estritamente a execução em worktree dedicada, merge para `main` e validação.
+
+**Causa Raiz Identificada:**
+1. **Cache Stale no Navegador via Hash Estático do Flask:** No `app.py`, a variável `VERSAO = _versao_codigo()` era calculada uma única vez na inicialização do processo Flask (`PID 20608`). O servidor estava em execução há horas com o hash antigo (`a804a8f35035`). Mesmo após o merge do CSS sticky no commit `18e41a7`, a rota raiz continuava servindo `<link rel="stylesheet" href="/static/app.css?v=a804a8f35035">`. O navegador do Gabriel utilizava o arquivo em cache (sem o `position: sticky`).
+2. **Competição de Sticky no Topo:** A regra `.revbar-sticky` criada na PEND-15 competia pela mesma área vertical com `.q-cab` e o cabeçalho `th` da tabela.
+
+**Feito (em worktree `tabulador-header-sticky-fix`):**
+- **`tabulador/app.py`:**
+  - `index()` atualizado para calcular `_versao_codigo()` dinamicamente em tempo de execução: qualquer mudança em `.css` ou `.js` altera instantaneamente o query string `?v=<hash>` sem necessidade de reiniciar o servidor.
+  - Adicionado hook `@app.after_request` injetando `Cache-Control: no-cache, must-revalidate` em respostas para `/static/*`, impedindo armazenamento stale.
+  - `@app.get("/api/versao")` agora retorna `_versao_codigo()` dinâmica.
+- **`tabulador/static/app.css`:**
+  - `.q-cab` confirmado com `position: sticky; top: var(--topo, 49px); z-index: 7; background: var(--surface);` com sombra e padding perfeitamente alinhados ao container `main`.
+  - `.revbar-sticky` convertido em container estático elegante (`.passo`) no topo da seção de revisão, eliminando o empilhamento excessivo de 3 barras no topo da viewport.
+  - `table.res th, #tab-cod th, #tab-frame th` padronizados para grudar logo abaixo de `.q-cab` em `calc(var(--topo, 49px) + var(--qcab-h, 0px))`.
+  - `@media (max-width: 900px)` ajustado para `768px`, preservando a barra lateral ao lado do conteúdo em telas divididas (Snap no Windows).
+- **Merge & Deploy:**
+  - Branch rebaseada sobre `main` e mergeada via fast-forward (`79055b5`).
+  - Servidor reiniciado com o novo hash `e3a3f12194f9` ativo em `http://127.0.0.1:5000`.
+
+**Próxima IA / Handoff:**
+- O servidor Flask está ativo e servindo a versão `e3a3f12194f9`. O cabeçalho `.q-cab` e os cabeçalhos de tabela agora funcionam de forma 100% confiável e imediata em qualquer reload.
+- O branch `feat/trava-confirmacao-e-ordem-categorias` permanece isolado em sua respectiva worktree aguardando aprovação do Gabriel.
+
+---
+
+## 2026-10-02 14:50 — feat(tabulador): fusão inteligente de categorias com sugestão de IA e status alterada em mudanças de escopo (PEND-44)
+
+**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+
+**Contexto:**
+1. Ao pedir para a IA separar categorias (ex.: "metodologia e qualidade de ensino"), a IA mantinha o código antigo para uma categoria renomeada e criava uma nova categoria. As respostas daquela questão que já haviam sido confirmadas pelo pesquisador não eram marcadas para reconferência.
+2. Ao mesclar/fundir categorias, o sistema disparava apenas um `confirm()` nativo; o usuário solicitou poder inputar o nome da nova categoria com uma sugestão de placeholder da IA (aceita se o usuário confirmar sem mexer), além de alterar definição e palavras-chave.
+
+**Feito (worktree `tabulador-fusao-alteradas`, branch `feat/fusao-e-status-alteradas`, commit `f2be92a`):**
+1. **Status "alterada" para reconferência humana (`src/codeframe.py`):**
+   - Em `refinar()`: qualquer categoria existente que mudou de nome, definição ou que incorporou outras categorias passa a acionar `marcar_respostas_alteradas()` em todos os membros do quadro.
+   - Em `renomear()`: reativada a marcação de `"alterada"` caso o nome da categoria mude, alertando o pesquisador imediatamente na barra de revisão (`⚠️ N a reconferir`).
+   - Em `fundir()`: além de remapear as origens (com `alterada_motivo` e `alterada_de`), as respostas já existentes na categoria destino também ganham status `"alterada"` caso o escopo do destino tenha sido redefinido.
+   - `marcar_respostas_alteradas()` agora preserva motivos específicos prévios com `sobrescrever=False`.
+2. **Sugestão de Fusão via IA (`src/codeframe.py` e `app.py`):**
+   - Novo endpoint `POST /api/pergunta/<qid>/frame/sugerir-fusao` (`sugerir_fusao`): consulta IA estruturada devolvendo `nome_sugerido`, `definicao_sugerida` e `keywords_sugeridas` (com fallback determinístico).
+   - Atualizada rota `POST /api/pergunta/<qid>/frame/fundir` e `CF.fundir()` para receber `novo_nome`, `nova_definicao`, `novas_keywords` e `por` (telemetria).
+3. **Novo Modal de Fusão no Frontend (`templates/index.html`, `static/app.js`, `static/app.css`):**
+   - Diálogo dedicado `<dialog id="dlg-fusao">` disparado em cards de categorias, tabela do frame e Saúde do Quadro.
+   - O input de nome vem com a sugestão da IA no `placeholder`. Se o usuário apenas clicar em "Confirmar mesclagem" sem mexer no input, o placeholder é assumido automaticamente.
+   - Definição sintetizada e palavras-chave vêm pré-preenchidas e editáveis.
+4. **Testes Unitários:**
+   - 5 novos testes em `tests/test_alterada.py` (renomeação, fusão com metadados, refino da IA gerando `alterada` e rotas HTTP da API).
+   - Suíte de 185 testes aprovada com 100% de sucesso.
+
+**Próxima IA / Handoff:**
+- A branch `feat/fusao-e-status-alteradas` na worktree `worktrees/tabulador-fusao-alteradas` está commitada, limpa e pronta para merge em `main` quando o Gabriel desejar.
+
+
+
+---
+
+## 2026-10-02 — merge geral na main (a pedido do Gabriel)
+
+**Autor:** Claude Sonnet 5.5 · operador: Gabriel Nascimento
+
+**Contexto:** o semáforo (`sop can-merge`) estava 🔴 por causa de 5 worktrees "ocupadas". O Gabriel pediu o merge geral. Antes de integrar, medi cada branch contra a main (`rev-list` e `merge-tree`): só duas tinham commits à frente.
+
+**Feito (main):**
+- `feat/fusao-e-status-alteradas` (1 commit, `f2be92a`: fusão inteligente de categorias com sugestão de IA e status 'alterada') → merge `--no-ff`, sem conflito.
+- `feat/trava-confirmacao-e-ordem-categorias` (2 commits: PEND-43 e PEND-42) → merge `--no-ff`, sem conflito.
+- Suíte na main integrada: **188 passam**, 1 pulado.
+- Worktree `tabulador-trava-ordem` removida e branch apagada (já mergeada).
+- **Não mergeadas, de propósito:** `feat/melhorias-perpetuas`, `feat/tabulador-modelo-recomendado-parar` e `tabulador/projeto-embutido`. Têm 0 commits à frente da main, estão 55 a 61 commits atrás (último commit há 8 dias) e só carregam alterações NÃO commitadas (inclusive 280 linhas apagadas e versões antigas de `.brain/objetivos*`). Integrá-las reverteria trabalho. Nada foi commitado nem descartado nelas.
+- `grupos-f1` e `header-sticky-fix` já estavam desocupadas/mergeadas.
+- **Nada enviado ao GitHub** (main local à frente do origin).
+
+**Próxima IA / Handoff:**
+- Os donos das 3 worktrees antigas decidem: rebasear e commitar o que ainda vale, ou descartar. Até lá o semáforo continua 🔴 por elas.
+- Validar na tela: trava (PEND-42), ordem alfabética (PEND-43), fusão/alterada, tela Versões (PEND-24).
