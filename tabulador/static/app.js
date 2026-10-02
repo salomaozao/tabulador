@@ -1539,7 +1539,7 @@ function renderCodificacao() {
       : r.revisao === "pendente" || r.revisao === "alterada" ? `<button class="btn sm c-frz" title="Congelar (tecla F): nem confirmar nem mexer agora; a categoria fica travada até você descongelar">❄</button>` : "";
     const btnOk = nc || travada(r) || r.revisao === "congelada" ? "" : r.revisao === "alterada" ? `<button class="btn sm c-ok alterada" title="Reconfirmar resposta após alteração da categoria">✓</button>` : r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
     return `<tr class="${cls}" data-rid="${r.rid}" tabindex="0">
-      <td>${btnOk}${btnFrz}</td>
+      <td><div class="ok-acoes">${btnOk}${btnFrz}</div></td>
       ${emGrupo() ? `<td><span class="pill" title="Pergunta de origem da resposta">${esc(r._q)}</span></td>` : ""}
       <td>${origem}</td>
       <td><div class="txt-resp${r.texto.length > 280 ? " longa" : ""}" title="${r.texto.length > 280 ? "clique para ver a resposta inteira" : ""}">${esc(r.texto)}</div>${just}${sugestao}${motivoAlt}${r.alertas && !nc ? `<br><span class="pill warn">${esc(r.alertas)}</span>` : ""}${r.corrigido_de_nome ? `<br><small>a IA tinha posto: ${esc(r.corrigido_de_nome)}</small>` : ""}</td>
