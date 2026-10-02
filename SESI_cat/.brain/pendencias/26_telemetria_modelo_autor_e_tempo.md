@@ -31,3 +31,12 @@ resumo: "Hoje cada item tem origem, frame_versao e revisado_por; o 'modelo' fica
   - assim dá para responder "com qual quadro saiu a entrega de 02/10?".
 - **Não fazer aqui:** o painel (PEND-27). Esta pendência só registra.
 - **Também alimenta:** a medição de `acerto_ia` por modelo e por `frame_versao` (OBJ-02 §3) e a avaliação de mixture of agents (PEND-30).
+
+## Andamento (02/10, Claude Sonnet 5.5)
+- **Por resposta:** `classificado_por` (`provedor:modelo`) e `classificado_em` em toda classificação nova (`coding.py`); `revisado_em` agora também na confirmação (✓), não só na correção.
+- **Por categoria:** `criada_por` (`humano:<nome>` ou `ia:<provedor>:<modelo>`), `criada_em` e `criada_com` (induzir, adicionar, categorias novas do ajuste com IA). `atualizado_por/em` já existiam e passam a usar o nome da aba. Cada entrada de `frame.historico` ganhou `por` (e `modelo` quando a IA participou).
+- **Log de eventos:** `src/eventos.py`, tabela `eventos` no Turso (criada sozinha) ou `output/eventos.jsonl`. Registra classificar, reclassificar, corrigir (de→para), confirmar (e em bloco), auditar (com o modelo do auditor), aceitar/desfazer automático, aprovar, restaurar versão, gerar planilha e todas as ações do quadro (`quadro:*`). O nome vem do cabeçalho da aba (`before_request` em `app.py`).
+- **Manifesto da entrega:** `exportar.gerar` acrescenta uma entrada em `entrega_manifesto.json` (ao lado da planilha): data, commit do código (e se havia código não commitado), e por pergunta `frame_versao`, nº de respostas, conferidas por pessoa, aceitas automaticamente e modelos que classificaram. O formato do xlsx não mudou.
+- **Backfill:** `python src/telemetria_backfill.py -p sesi [--aplicar]`. Só carimba quando o `llm_log` traz o mesmo rid com a mesma categoria, confiança e justificativa; marca `classificado_por_estimado: true`. Simulação no SESI (02/10): ~5.800 de ~7.300 respostas casam; o resto fica "desconhecido". **Ainda não aplicado** na base real (nuvem): aguarda o OK do Gabriel.
+- **Testes:** `test_supervisao.py` (test_9, 10, 11). Suíte: 179 passam.
+- **Fica para a PEND-27:** painel e tela para ler os eventos; guardar o resumo de cada auditoria no `historico` da pergunta (PEND-23).

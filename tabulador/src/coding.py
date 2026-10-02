@@ -21,6 +21,7 @@ import pandas as pd
 import aprendizado
 import codeframe as CF
 import config
+import eventos
 import progresso
 import llm
 import load
@@ -176,7 +177,8 @@ def _chamar_lote(qid: str, frame: dict, enunciado: str, pendentes: list[dict], i
             if c["primaria"] not in codigos_validos:
                 conf = 0.0
             novo = {"rid": r["rid"], "primaria": prim, "secundaria": sec, "confianca": round(max(0.0, min(1.0, conf)), 2),
-                    "justificativa": c.get("justificativa", ""), "origem": "llm", "frame_versao": int(frame.get("versao") or 1)}
+                    "justificativa": c.get("justificativa", ""), "origem": "llm", "frame_versao": int(frame.get("versao") or 1),
+                    "classificado_por": eventos.modelo_atual(), "classificado_em": datetime.now().isoformat(timespec="seconds")}
             if r.get("comentario"):
                 novo["comentario"] = r["comentario"]
                 novo["origem"] = "llm+comentario"
@@ -223,6 +225,7 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
     """
     _aprender_antes(qid)
     CF.snapshot_antes(qid, "classificar")
+    inicio = datetime.now().isoformat(timespec="seconds")
     frame = CF.frame(qid)
     if not frame or frame.get("status") != "aprovado":
         raise RuntimeError(f"{qid}: frame não aprovado. Rode: python run.py frame {qid} aprovar")
@@ -268,11 +271,19 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
         "itens": [itens[r["rid"]] for r in dados["respostas"] if r["rid"] in itens],
     }
     CF._gravar(qid, "codificacao.json", cod)
+    _evento_classificacao(qid, "classificar", cod, inicio, frame, info)
     cod["_limite_atingido"] = info["limite_atingido"]
     cod["_nao_tentados"] = info["nao_tentados"]
     cod["_parado_usuario"] = info["parado_usuario"]
     cod["_n_erro"] = info["n_erro"]
     return cod
+
+
+def _evento_classificacao(qid: str, acao: str, cod: dict, inicio: str, frame: dict, info: dict) -> None:
+    """Uma linha no log de eventos por rodada de classificação (PEND-26): quantas a IA classificou e com qual modelo."""
+    n = sum(1 for i in cod["itens"] if (i.get("classificado_em") or "") >= inicio and i.get("classificado_por"))
+    eventos.registrar(qid, acao, modelo=eventos.modelo_atual(), frame_versao=int(frame.get("versao") or 1),
+                      n=n, n_erro=info["n_erro"], nao_tentados=info["nao_tentados"], parado=bool(info["parado_usuario"]))
 
 
 def recodificar(qid: str, rids: list[int] | None = None, apenas_comentados: bool = True, nao_revisados: bool = False) -> dict:
@@ -282,6 +293,7 @@ def recodificar(qid: str, rids: list[int] | None = None, apenas_comentados: bool
     (o 'Reclassificar tudo' da interface; não classifica as que estão fora da amostra)."""
     _aprender_antes(qid)
     CF.snapshot_antes(qid, "reclassificar")
+    inicio = datetime.now().isoformat(timespec="seconds")
     frame = CF.frame(qid)
     if not frame or frame.get("status") != "aprovado":
         raise RuntimeError(f"{qid}: frame não aprovado")
@@ -309,6 +321,7 @@ def recodificar(qid: str, rids: list[int] | None = None, apenas_comentados: bool
     cod["status"] = "rascunho"
     cod["recodificado_em"] = datetime.now().isoformat(timespec="seconds")
     CF._gravar(qid, "codificacao.json", cod)
+    _evento_classificacao(qid, "reclassificar", cod, inicio, frame, info)
     cod["_recodificados"] = len(novos)
     cod["_limite_atingido"] = info["limite_atingido"]
     cod["_nao_tentados"] = info["nao_tentados"]
@@ -368,13 +381,13 @@ def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", c
         item["origem"] = "humano"
         item["confianca"] = 1.0
         item["revisado_em"] = agora
-        _quem(item, por)
+        _quem(item, por, agora)
         for c in ("validado", "validado_em", "validado_por", "alterada", "alterada_motivo", "alterada_em", "alterada_de"):
             item.pop(c, None)
     elif validado is not None:
         if validado:
             item["validado"], item["validado_em"], item["validado_por"] = True, agora, "humano"
-            _quem(item, por)
+            _quem(item, por, agora)
             for c in ("alterada", "alterada_motivo", "alterada_em", "alterada_de"):
                 item.pop(c, None)
         else:
@@ -382,10 +395,19 @@ def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", c
                 item.pop(c, None)
     cod["status"] = "rascunho"
     CF._gravar(qid, "codificacao.json", cod, permitir_reducao=validado is False)  # desmarcar o ✓ é decisão da pessoa
+    if mudou:
+        eventos.registrar(qid, "corrigir", alvo=item["rid"], de=anterior, para=item["primaria"], por=por,
+                          frame_versao=item.get("frame_versao"))
+    elif validado is not None:
+        eventos.registrar(qid, "confirmar" if validado else "desconfirmar", alvo=item["rid"], para=item.get("primaria"), por=por,
+                          frame_versao=item.get("frame_versao"))
     return item
 
 
-def _quem(item: dict, por: str | None) -> None:
+def _quem(item: dict, por: str | None, agora: str | None = None) -> None:
+    """Carimba quem revisou (`revisado_por`) e quando (`revisado_em`, se `agora` for dado)."""
+    if agora:
+        item["revisado_em"] = agora
     if por:
         item["revisado_por"] = por
     else:
@@ -407,15 +429,15 @@ def validar(qid: str, rids: list[int], valor: bool = True, por: str | None = Non
             for c in ("alterada", "alterada_motivo", "alterada_em", "alterada_de"):
                 item.pop(c, None)
             item["validado"], item["validado_em"], item["validado_por"] = True, agora, "humano"
-            _quem(item, por)
+            _quem(item, por, agora)
             n += 1
         elif valor and item.get("origem") == "erro":  # confirmar um item com erro de IA = decisão humana
             item.update(origem="humano", confianca=1.0, revisado_em=agora)
-            _quem(item, por)
+            _quem(item, por, agora)
             n += 1
         elif valor and not item.get("validado"):
             item["validado"], item["validado_em"], item["validado_por"] = True, agora, "humano"
-            _quem(item, por)
+            _quem(item, por, agora)
             n += 1
         elif not valor and (item.get("validado") or item.get("alterada")):
             for c in ("validado", "validado_em", "validado_por", "alterada", "alterada_motivo", "alterada_em", "alterada_de"):
@@ -424,6 +446,7 @@ def validar(qid: str, rids: list[int], valor: bool = True, por: str | None = Non
     if n:
         cod["status"] = "rascunho"
         CF._gravar(qid, "codificacao.json", cod, permitir_reducao=not valor)  # desfazer ✓ reduz o conferido de propósito
+        eventos.registrar(qid, "confirmar_em_bloco" if valor else "desconfirmar_em_bloco", por=por, n=n, rids=sorted(alvo)[:200])
     return n
 
 
@@ -626,6 +649,7 @@ def aprovar(qid: str) -> dict:
     cod["status"] = "aprovado"
     cod["aprovado_em"] = datetime.now().isoformat(timespec="seconds")
     CF._gravar(qid, "codificacao.json", cod)
+    eventos.registrar(qid, "aprovar_codificacao", frame_versao=int(frame.get("versao") or 1), n=len(cod["itens"]))
     return cod
 
 

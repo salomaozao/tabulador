@@ -6,6 +6,7 @@ Escreve numa pasta temporária (TABULADOR_OUTPUT), nunca em SESI_cat/output.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -23,11 +24,14 @@ import pandas as pd  # noqa: E402
 import codeframe as CF  # noqa: E402
 import coding as CD  # noqa: E402
 import config  # noqa: E402
+import eventos  # noqa: E402
+import exportar  # noqa: E402
 import llm  # noqa: E402
 import load  # noqa: E402
 import perfil  # noqa: E402
 import projetos  # noqa: E402
 import supervisao as SUP  # noqa: E402
+import telemetria_backfill  # noqa: E402
 import usage  # noqa: E402
 
 from tests.test_sesi import _llm_fake  # noqa: E402
@@ -197,6 +201,84 @@ class TestSupervisao(unittest.TestCase):
         with self.assertRaises(ValueError):
             with llm.usando("nao_existe"):
                 pass
+
+    def test_9_telemetria_modelo_autor_e_tempo(self):
+        """PEND-26: carimbo por resposta (modelo, quando, quem revisou), autoria das categorias e log de eventos."""
+        modelo = f"{config.OPENAI_PROVEDOR}:{config.OPENAI_MODEL}"
+        itens = CD.codificacao(QID)["itens"]
+        llm_itens = [i for i in itens if i.get("origem") == "llm"]
+        self.assertTrue(llm_itens)
+        self.assertTrue(all(i.get("classificado_por") == modelo and i.get("classificado_em") for i in llm_itens))
+        frame = CF.frame(QID)
+        proprias = [c for c in frame["categorias"] if not c.get("fixa")]
+        self.assertTrue(all(c.get("criada_por", "").startswith("ia:") and c.get("criada_em") for c in proprias))
+        # correção e confirmação: quem e quando (revisado_em também na confirmação, não só na correção)
+        a, b = [i["rid"] for i in itens if i.get("origem") == "llm" and not i.get("validado")][:2]
+        outra = next(c["codigo"] for c in proprias if c["codigo"] != next(i for i in itens if i["rid"] == a)["primaria"])
+        CD.atualizar_item(QID, a, primaria=outra, por="Sara")
+        CD.validar(QID, [b], por="João")
+        por_rid = {i["rid"]: i for i in CD.codificacao(QID)["itens"]}
+        self.assertEqual((por_rid[a]["revisado_por"], por_rid[b]["revisado_por"]), ("Sara", "João"))
+        self.assertTrue(por_rid[a]["revisado_em"] and por_rid[b]["revisado_em"])
+        # categoria criada à mão e a entrada do histórico do quadro dizem quem foi
+        CF.adicionar(QID, "Categoria de teste telemetria", "só para o teste", por="Ana")
+        nova = next(c for c in CF.frame(QID)["categorias"] if c["nome"] == "Categoria de teste telemetria")
+        self.assertEqual(nova["criada_por"], "humano:Ana")
+        self.assertEqual(CF.frame(QID)["historico"][-1]["por"], "Ana")
+        # log de eventos (append-only): de→para da correção, quem confirmou, o quadro, a classificação com o modelo
+        evs = eventos.listar(QID)
+        corr = next(e for e in evs if e["acao"] == "corrigir" and e["alvo"] == a)
+        self.assertEqual((corr["quem"], corr["para"]), ("Sara", outra))
+        self.assertTrue(any(e["acao"] == "confirmar_em_bloco" and e["quem"] == "João" for e in evs))
+        self.assertTrue(any(e["acao"] == "quadro:adicionar" and e["quem"] == "Ana" for e in evs))
+        self.assertTrue(any(e["acao"] == "classificar" and e["modelo"] == modelo and e["detalhe"]["n"] > 0 for e in evs))
+
+    def test_10_manifesto_da_entrega(self):
+        """PEND-26: toda geração da planilha registra com qual quadro e modelo ela saiu (o formato do xlsx não muda)."""
+        if not exportar.disponivel():
+            self.skipTest("projeto sem SAIDA_PLANILHA")
+        p = exportar.gerar(incluir_rascunho=True, verbose=False)
+        manifesto = json.loads((p.parent / "entrega_manifesto.json").read_text(encoding="utf-8"))
+        ultima = manifesto[-1]
+        self.assertEqual(ultima["arquivo"], p.name)
+        self.assertIn("commit", ultima)
+        q = ultima["perguntas"][QID]
+        self.assertEqual(q["frame_versao"], int(CF.frame(QID).get("versao") or 1))
+        self.assertGreater(q["n_respostas"], 0)
+        self.assertTrue(q["classificado_por"])
+        self.assertTrue(any(e["acao"] == "gerar_planilha" for e in eventos.listar()))
+
+    def test_11_backfill_do_modelo_pelo_llm_log(self):
+        """PEND-26: classificação antiga sem carimbo recebe o modelo do log SÓ se rid, categoria, confiança e justificativa casam."""
+        cod = CD.codificacao(QID)
+        a, b = [i for i in cod["itens"] if i.get("origem") == "llm"][:2]
+        carimbos = {i["rid"]: (i.get("classificado_por"), i.get("classificado_em")) for i in (a, b)}  # os testes não dependem da ordem
+        for i in (a, b):
+            for c in ("classificado_por", "classificado_em"):
+                i.pop(c, None)
+        CF._gravar(QID, "codificacao.json", cod)
+        lote = [{"rid": a["rid"], "primaria": a["primaria"], "secundaria": a.get("secundaria"), "confianca": a["confianca"],
+                 "justificativa": a.get("justificativa", "")},
+                {"rid": b["rid"], "primaria": b["primaria"], "secundaria": b.get("secundaria"), "confianca": b["confianca"],
+                 "justificativa": "texto diferente do que está gravado"}]  # rid igual, justificativa diferente: não casa
+        config.garantir_pastas()
+        (config.LLM_LOG_OUT / f"20260101_120000_000001_code_{QID}_1.json").write_text(
+            json.dumps({"modelo": "modelo-antigo", "provedor": "cli_teste", "ok": True, "resposta": {"codificacoes": lote}}), encoding="utf-8")
+        sim = telemetria_backfill.estimar(QID)
+        self.assertEqual(sim["aplicado"], False)
+        self.assertNotIn("classificado_por", next(i for i in CD.codificacao(QID)["itens"] if i["rid"] == a["rid"]))
+        r = telemetria_backfill.estimar(QID, aplicar=True)
+        self.assertEqual(r["por_modelo"].get("cli_teste:modelo-antigo"), 1)
+        por_rid = {i["rid"]: i for i in CD.codificacao(QID)["itens"]}
+        self.assertEqual(por_rid[a["rid"]]["classificado_por"], "cli_teste:modelo-antigo")
+        self.assertTrue(por_rid[a["rid"]]["classificado_por_estimado"])
+        self.assertNotIn("classificado_por", por_rid[b["rid"]])
+        cod = CD.codificacao(QID)  # devolve os carimbos originais
+        for i in cod["itens"]:
+            if i["rid"] in carimbos:
+                i["classificado_por"], i["classificado_em"] = carimbos[i["rid"]]
+                i.pop("classificado_por_estimado", None)
+        CF._gravar(QID, "codificacao.json", cod)
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ import codeframe as CF
 import coding as CD
 import config
 import crosstabs
+import eventos
 import exportar
 import historico
 import llm
@@ -1073,6 +1074,12 @@ def api_aprovar(qid):
         return jsonify(_payload_pergunta(qid))
     except Exception as e:
         return _erro(e)
+
+
+@app.before_request
+def _carimbar_quem():
+    """Quem está na aba vai para a telemetria (PEND-26): `eventos.quem()` e os carimbos `por` dos quadros."""
+    eventos.definir_quem(_por())
 
 
 @app.get("/api/pergunta/<qid>/versoes")

@@ -17,6 +17,7 @@ import aprendizado
 import codeframe as CF
 import coding as CD
 import config
+import eventos
 import llm
 import progresso
 import variables as V
@@ -66,6 +67,8 @@ def auto_aceitar(qid: str, limiar: float = LIMIAR_PADRAO, exigir_auditoria: bool
     if n["aceitas"]:
         cod["status"] = "rascunho"
         CF._gravar(qid, "codificacao.json", cod)
+        eventos.registrar(qid, "aceitar_automatico", por=AUTO, n=n["aceitas"], limiar=limiar, categoria=categoria,
+                          exigir_auditoria=exigir_auditoria, executado_por=eventos.quem())
     return {"aceitas": n.pop("aceitas", 0), "ficaram": dict(n), "limiar": limiar, "exigir_auditoria": exigir_auditoria, "categoria": categoria}
 
 
@@ -84,6 +87,7 @@ def desfazer_auto(qid: str) -> int:
     if k:
         cod["status"] = "rascunho"
         CF._gravar(qid, "codificacao.json", cod, permitir_reducao=True)  # o aceite automático não é conferência humana
+        eventos.registrar(qid, "desfazer_aceite_automatico", n=k)
     return k
 
 
@@ -222,6 +226,8 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
                 n["discorda"] += 1
                 conf["discorda"].append(i.get("confianca") or 0)
     CF._gravar(qid, "codificacao.json", cod)
+    eventos.registrar(qid, "auditar", modelo=por, n=n["concorda"] + n["discorda"], concorda=n["concorda"],
+                      discorda=n["discorda"], lotes_com_erro=len(falhas), escopo=escopo)
     media = lambda v: round(sum(v) / len(v), 2) if v else None  # noqa: E731
     depois = _ganho(cod["itens"], limiar)
     return {"auditadas": n["concorda"] + n["discorda"], "concorda": n["concorda"], "discorda": n["discorda"],

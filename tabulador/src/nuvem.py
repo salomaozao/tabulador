@@ -73,6 +73,24 @@ CREATE TABLE IF NOT EXISTS blobs_historico (
 )
 """
 
+# Log de eventos (PEND-26): quem fez o quê, quando, com qual modelo. Só se acrescenta.
+_CRIAR_TABELA_EVENTOS = """
+CREATE TABLE IF NOT EXISTS eventos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    projeto TEXT NOT NULL,
+    qid TEXT,
+    quando TEXT NOT NULL,
+    quem TEXT,
+    acao TEXT NOT NULL,
+    alvo TEXT,
+    de TEXT,
+    para TEXT,
+    modelo TEXT,
+    frame_versao INTEGER,
+    detalhe TEXT
+)
+"""
+
 JANELA_PRESENCA_S = 30  # o navegador manda um heartbeat a cada 12s: folga para perder 1 batida
 
 _lock = threading.Lock()
@@ -140,6 +158,7 @@ def _obter_cliente():
             _cliente.execute(_CRIAR_TABELA_PRESENCA)
             _cliente.execute(_CRIAR_TABELA_PRESENCA_PROJETO)
             _cliente.execute(_CRIAR_TABELA_HISTORICO)
+            _cliente.execute(_CRIAR_TABELA_EVENTOS)
             _tabela_pronta = True
     return _cliente
 
@@ -211,6 +230,27 @@ def ler_historico(projeto: str, qid: str, arquivo: str, gravado_em: str) -> dict
         [projeto, qid, arquivo, gravado_em],
     )
     return json.loads(rs.rows[0][0]) if rs.rows else None
+
+
+def gravar_evento(ev: dict) -> None:
+    j = lambda v: None if v is None else json.dumps(v, ensure_ascii=False)  # noqa: E731
+    _obter_cliente().execute(
+        "INSERT INTO eventos (projeto, qid, quando, quem, acao, alvo, de, para, modelo, frame_versao, detalhe) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [ev["projeto"], ev["qid"], ev["quando"], ev["quem"], ev["acao"], j(ev["alvo"]), j(ev["de"]), j(ev["para"]),
+         ev["modelo"], ev["frame_versao"], j(ev["detalhe"])],
+    )
+
+
+def listar_eventos(projeto: str, qid: str | None, limite: int) -> list[dict]:
+    sql = "SELECT quando, projeto, qid, quem, acao, alvo, de, para, modelo, frame_versao, detalhe FROM eventos WHERE projeto = ?"
+    args: list = [projeto]
+    if qid:
+        sql += " AND qid = ?"
+        args.append(qid)
+    rs = _obter_cliente().execute(sql + " ORDER BY id DESC LIMIT ?", args + [limite])
+    ch = ("quando", "projeto", "qid", "quem", "acao", "alvo", "de", "para", "modelo", "frame_versao", "detalhe")
+    ld = lambda v: None if v is None else json.loads(v)  # noqa: E731
+    return [{c: (ld(v) if c in ("alvo", "de", "para", "detalhe") else v) for c, v in zip(ch, r)} for r in rs.rows]
 
 
 def apagar_historico(projeto: str, qid: str, arquivo: str, gravados_em: list[str]) -> int:

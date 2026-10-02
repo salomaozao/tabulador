@@ -17,6 +17,7 @@ import re
 from datetime import datetime
 
 import config
+import eventos
 import llm
 import load
 import nuvem
@@ -114,6 +115,7 @@ def restaurar_versao(qid: str, arquivo: str, gravado_em: str) -> dict:
         raise ValueError(f"{qid}: não há versão de {arquivo} em {gravado_em}")
     protecao.salvar_versao(qid, arquivo, _ler(qid, arquivo), "antes de restaurar", forcar=True)
     _gravar(qid, arquivo, dados, permitir_reducao=True)
+    eventos.registrar(qid, "restaurar_versao", alvo=arquivo, de=None, para=gravado_em)
     return protecao.resumo(dados)
 
 
@@ -401,6 +403,8 @@ def induzir(qid: str, min_cat: int = 6, max_cat: int = 15, forcar: bool = False)
     for i, c in enumerate(saida["categorias"], start=1):
         categorias.append({"codigo": i, "nome": c["nome"].strip(), "definicao": c["definicao"].strip(), "exemplos": c.get("exemplos", []),
                            "keywords": _limpar_keywords(c.get("keywords")), "fixa": False})
+    for c in categorias:
+        _marcar_criacao(c, ia=True)
     frame = {
         "pergunta": qid,
         "enunciado": dados.get("enunciado"),
@@ -416,6 +420,7 @@ def induzir(qid: str, min_cat: int = 6, max_cat: int = 15, forcar: bool = False)
     _gravar(qid, "frame_proposto.json", frame)
     _gravar(qid, "frame.json", frame)
     _remover(qid, "frame_anterior.json")
+    eventos.registrar(qid, "quadro:gerar_ia", modelo=eventos.modelo_atual(), frame_versao=1, n_categorias=len(categorias))
     return frame
 
 
@@ -550,7 +555,10 @@ RESPOSTAS (frequência x texto){nota}:
     f["raciocinio"] = saida.get("raciocinio", "")
     f["avisos_ultimo_refino"] = saida.get("avisos") or []
     f["modelo"] = config.OPENAI_MODEL
-    _registrar(f, "refinar_ia", pedido=feedback, remapeados={str(k): v for k, v in remap.items()})
+    for c in f["categorias"]:
+        if c["codigo"] not in antigos and not c.get("fixa"):
+            _marcar_criacao(c, ia=True)  # categoria nova criada pelo ajuste com IA
+    _registrar(f, "refinar_ia", modelo=eventos.modelo_atual(), pedido=feedback, remapeados={str(k): v for k, v in remap.items()})
     f["status"] = _status_apos_edicao(qid)
     _gravar(qid, "frame.json", f)
     _remapear_codificacao(qid, remap, motivo="Quadro ajustado com IA")
@@ -647,9 +655,14 @@ def _status_apos_edicao(qid: str) -> str:
 
 def _registrar(f: dict, acao: str, **kw) -> None:
     """Toda mudança no frame entra no histórico e gera uma versão nova (cada resposta classificada
-    guarda a versão do frame com que foi feita, em `frame_versao`)."""
+    guarda a versão do frame com que foi feita, em `frame_versao`). Cada entrada leva quem fez (`por`) e,
+    quando a IA participou, com qual modelo (`modelo`); a mesma linha vai para o log de eventos (PEND-26)."""
     f["versao"] = int(f.get("versao") or 1) + 1
+    kw["por"] = kw.get("por") or eventos.quem()
     f.setdefault("historico", []).append({"quando": datetime.now().isoformat(timespec="seconds"), "acao": acao, "versao": f["versao"], **kw})
+    resto = {k: v for k, v in kw.items() if k not in ("por", "modelo", "codigo", "de", "para")}
+    eventos.registrar(f.get("pergunta") or f.get("grupo"), "quadro:" + acao, alvo=kw.get("codigo"), de=kw.get("de"), para=kw.get("para"),
+                      modelo=kw.get("modelo"), frame_versao=f["versao"], por=kw["por"], **resto)
     if f.get("grupo"):
         # como na pergunta sozinha: quem ainda não classificou perde a aprovação do quadro; quem já classificou mantém
         f["aprovacoes"] = {q: a for q, a in (f.get("aprovacoes") or {}).items() if classificacao_iniciada(q)}
@@ -745,7 +758,16 @@ def _limpar_keywords(kws, bloqueadas=None) -> list[str]:
 
 def _marcar_edicao(c: dict, por: str | None) -> None:
     c["atualizado_em"] = datetime.now().isoformat(timespec="seconds")
-    c["atualizado_por"] = f"humano:{por}" if por else "humano"
+    c["atualizado_por"] = f"humano:{por or eventos.quem()}"
+
+
+def _marcar_criacao(c: dict, por: str | None = None, ia: bool = False) -> None:
+    """Autoria da categoria (PEND-26): `criada_por` = 'humano:<nome>' ou 'ia:<provedor>:<modelo>' (e `criada_com` = o modelo)."""
+    c["criada_em"] = datetime.now().isoformat(timespec="seconds")
+    if ia:
+        c["criada_por"], c["criada_com"] = f"ia:{eventos.modelo_atual()}", eventos.modelo_atual()
+    else:
+        c["criada_por"] = f"humano:{por or eventos.quem()}"
 
 
 def editar_keywords(qid: str, ref, adicionar=(), remover=(), fixar=(), por: str | None = None) -> dict:
@@ -806,6 +828,7 @@ def adicionar(qid: str, nome: str, definicao: str = "", por: str | None = None) 
     usados = [c["codigo"] for c in f["categorias"] if not c.get("fixa")]
     codigo = (max(usados) + 1) if usados else 1
     nova = {"codigo": codigo, "nome": nome.strip(), "definicao": definicao.strip(), "exemplos": [], "keywords": [], "fixa": False}
+    _marcar_criacao(nova, por)
     _marcar_edicao(nova, por)
     f["categorias"].insert(len(usados), nova)
     _registrar(f, "adicionar", codigo=codigo, nome=nome, por=por)

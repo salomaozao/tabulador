@@ -334,7 +334,7 @@ def aprender(qid: str, forcar: bool = False) -> dict:
             mudancas.append({"codigo": c["codigo"], "campo": "keywords_auto", "antes": antes, "depois": novas})
     frame["aprendizado"] = {"em": agora, "n_conferidas": n}
     if mudancas:
-        CF._registrar(frame, "aprendizado_auto", categorias=mudancas, n_conferidas=n)
+        CF._registrar(frame, "aprendizado_auto", por="auto", categorias=mudancas, n_conferidas=n)
     CF._gravar(qid, "frame.json", frame)
     return {"rodou": True, "mudancas": mudancas, "n_conferidas": n, "versao": frame.get("versao", 1)}
 
