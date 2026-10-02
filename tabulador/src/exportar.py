@@ -47,6 +47,7 @@ def _quadro_da_entrega(frame: dict, cod: dict, coluna: str, status: str | None, 
             "n_categorias": len(frame["categorias"]), "n_respostas": len(itens),
             "n_conferidas_por_pessoa": sum(1 for i in itens if i.get("origem") == "humano" or (i.get("validado") and i.get("validado_por") != "auto")),
             "n_aceitas_automaticamente": sum(1 for i in itens if i.get("validado_por") == "auto"),
+            "n_congeladas": sum(1 for i in itens if i.get("congelada")),  # saem com a categoria da IA, sem conferência
             "classificado_por": dict(Counter(i.get("classificado_por") or "desconhecido" for i in itens if i.get("origem") in ("llm", "llm+comentario")))}
 
 

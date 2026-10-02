@@ -469,7 +469,7 @@ function nomeCat(c) { const x = catsValidas().find((k) => k.codigo === +c); retu
 // recalcula contagens e números da revisão no navegador (sem recarregar tudo a cada clique)
 function recalcular() {
   const P = state.P, cont = {};
-  let cod = 0, conf = 0, confAuto = 0, corr = 0, corrIA = 0, alt = 0;
+  let cod = 0, conf = 0, confAuto = 0, corr = 0, corrIA = 0, alt = 0, cong = 0;
   for (const r of P.itens) {
     for (const [k, campo] of [[r.primaria, "primaria"], [r.secundaria, "secundaria"]]) {
       if (k == null) continue;
@@ -480,20 +480,22 @@ function recalcular() {
     if (r.revisao === "confirmada") { conf++; if (r.validado_por === "auto") confAuto++; }
     if (r.revisao === "corrigida") { corr++; if (r.corrigido_de_nome != null) corrIA++; }
     if (r.revisao === "alterada") { alt++; }
+    if (r.revisao === "congelada") { cong++; }
   }
   P.contagens = cont;
   P.n_alertas = P.itens.filter((r) => r.alertas && r.alertas !== "não codificado").length;
   P.n_comentarios_pendentes = P.itens.filter((r) => r.comentario_pendente).length;
   // confirmadas pelo supervisor.py (auto) não medem o acerto da IA — mesma regra de coding.resumo_revisao
   const aval = conf - confAuto + corrIA, tot = P.itens.length;
-  P.revisao = { n_unicas: tot, n_codificadas: cod, n_faltantes: tot - cod, n_confirmadas: conf, n_confirmadas_auto: confAuto, n_corrigidas: corr, n_alteradas: alt, n_revisadas: conf + corr, acerto_ia: aval ? (conf - confAuto) / aval : null, n_avaliadas_ia: aval };
+  P.revisao = { n_unicas: tot, n_codificadas: cod, n_faltantes: tot - cod, n_confirmadas: conf, n_confirmadas_auto: confAuto, n_corrigidas: corr, n_alteradas: alt, n_congeladas: cong, n_revisadas: conf + corr, acerto_ia: aval ? (conf - confAuto) / aval : null, n_avaliadas_ia: aval };
 }
 function aplicarItem(r, it) {
   const au = it.auditoria || null;
   Object.assign(r, {
     primaria: it.primaria, secundaria: it.secundaria, origem: it.origem, confianca: it.confianca,
     comentario: it.comentario || null, comentario_pendente: !!it.comentario && !it.comentario_aplicado_em,
-    revisao: it.primaria == null ? null : it.alterada ? "alterada" : it.origem === "humano" ? "corrigida" : it.validado ? "confirmada" : "pendente",
+    revisao: it.primaria == null ? null : it.congelada ? "congelada" : it.alterada ? "alterada" : it.origem === "humano" ? "corrigida" : it.validado ? "confirmada" : "pendente",
+    congelada: it.congelada || null,
     alterada: !!it.alterada,
     alterada_motivo: it.alterada_motivo || null,
     alterada_em: it.alterada_em || null,
@@ -722,7 +724,8 @@ function renderRevbar() {
   const P = state.P, V = P.revisao;
   if (!V) return "";
   const acerto = V.acerto_ia == null ? null : Math.round(100 * V.acerto_ia);
-  const nPendentes = V.n_codificadas - V.n_revisadas;
+  const nCong = V.n_congeladas || 0;
+  const nPendentes = V.n_codificadas - V.n_revisadas - nCong;
   const nPessoas = V.n_confirmadas - (V.n_confirmadas_auto || 0);
   return `
     <div class="passo revbar-sticky" id="revbar-passo">
@@ -731,7 +734,7 @@ function renderRevbar() {
           <div class="revbar-status">
             <b>Revisão:</b> <b>${fmtN(V.n_revisadas)}</b> de ${fmtN(V.n_codificadas)} conferidas (${pct(V.n_revisadas, V.n_codificadas)}) · <span class="pill ok">✓ ${fmtN(nPessoas)} manual</span>${V.n_confirmadas_auto ? ` <span class="pill ok auto" title="Confirmadas sozinhas: confiança alta e auditor concordou">⚡ ${fmtN(V.n_confirmadas_auto)} auto</span>` : ""} <span class="pill human">✎ ${fmtN(V.n_corrigidas)} corrigidas</span>
             ${acerto != null ? ` · <b>IA: ${acerto}%</b> <small>(${V.n_avaliadas_ia} avaliadas)</small>` : ""}
-            ${V.confirmacao_travada ? ` · <span class="pill warn" title="${esc(txtTrava())}">🔒 confirmações travadas</span>` : ""}
+            ${nCong ? ` · <button type="button" class="pill cong linkbtn" id="b-so-congeladas" title="Congeladas: nem a conferir nem confirmadas, categoria travada até você descongelar. Clique para ver só elas">❄ ${fmtN(nCong)} congelada${nCong === 1 ? "" : "s"}</button>` : ""}
             ${V.n_alteradas ? ` · <button type="button" class="pill warn linkbtn" id="b-so-alteradas-revbar" title="Filtra a tabela só pelas ${V.n_alteradas} respostas que precisam de reconferência">⚠️ ${fmtN(V.n_alteradas)} a reconferir</button>` : ""}
             ${nPendentes ? ` · <button type="button" class="pill warn linkbtn" id="b-so-pendentes" title="Filtra a tabela abaixo só pelas ${nPendentes} que ainda faltam conferir">👁 ver as ${fmtN(nPendentes)} a conferir</button>` : ""}
           </div>
@@ -741,7 +744,7 @@ function renderRevbar() {
         </div>
         <div class="revbar-linha2 small">
           <span><b>Classificadas:</b> ${fmtN(V.n_codificadas)} de ${fmtN(V.n_unicas)} respostas (${pct(V.n_codificadas, V.n_unicas)})${V.n_faltantes ? ` · faltam <b>${fmtN(V.n_faltantes)}</b>` : ""}</span>
-          <div class="prog pilha" title="${V.n_revisadas} conferidas · ${nPendentes} a conferir · ${V.n_faltantes} ainda não classificadas">
+          <div class="prog pilha" title="${V.n_revisadas} conferidas · ${nPendentes} a conferir${nCong ? ` · ${nCong} congeladas` : ""} · ${V.n_faltantes} ainda não classificadas">
             <i class="conf" style="width:${V.n_unicas ? (100 * V.n_revisadas) / V.n_unicas : 0}%"></i><i class="ia" style="width:${V.n_unicas ? (100 * nPendentes) / V.n_unicas : 0}%"></i>
           </div>
         </div>
@@ -770,7 +773,7 @@ function renderAcoesCod() {
       <div class="tools supervisao">
         <b>Supervisão:</b>
         <button class="btn" id="b-auditar" title="Outra IA confere a classificação, resposta por resposta (segundo codificador)">🔎 Auditar com outra IA</button>
-        <button class="btn" id="b-auto" ${V.confirmacao_travada ? `disabled title="${esc(txtTrava())}"` : `title="Confirma sozinho o que tem confiança alta E o auditor concordou"`}>⚡ Aceitar alta confiança</button>
+        <button class="btn" id="b-auto" title="Confirma sozinho o que tem confiança alta E o auditor concordou">⚡ Aceitar alta confiança</button>
         <label class="small">limiar <input id="auto-limiar" type="number" min="0.5" max="1" step="0.05" value="${state.limiar ?? 0.85}" style="width:64px"></label>
         ${V.n_confirmadas_auto ? `<button class="btn ghost" id="b-desfazer-auto">↶ Desfazer as ${V.n_confirmadas_auto} automáticas</button>` : ""}
         <span class="sep"></span>
@@ -812,7 +815,7 @@ function bindAcoesCod() {
   });
   $("#b-recod-com")?.addEventListener("click", async () => { const r = await post(`/api/pergunta/${P.qid}/recodificar`, { apenas_comentados: true }, "Reclassificando as respostas comentadas…", true); toast(`${r.recodificados} resposta(s) reclassificada(s)`); refresh(r); });
   $("#b-recod-tudo")?.addEventListener("click", async () => {
-    const V = P.revisao, n = V ? V.n_codificadas - V.n_revisadas : 0;
+    const V = P.revisao, n = V ? V.n_codificadas - V.n_revisadas - (V.n_congeladas || 0) : 0;
     const msg = `Reclassificar com a IA as ${fmtN(n)} já classificadas que você ainda não conferiu? O que você corrigiu ou confirmou é mantido; as que ainda não foram classificadas não entram (para elas, use "Classificar as restantes").`;
     if (n > AVISO_VOLUME ? !confirmarVolume(n, "Reclassificar tudo") : !confirm(msg)) return;
     refresh(await post(`/api/pergunta/${P.qid}/recodificar`, { apenas_comentados: false }, "Reclassificando…", true));
@@ -832,6 +835,7 @@ function bindAcoesCod() {
   $("#b-janela")?.addEventListener("click", () => abrirJanelaCategorias());
   $("#b-saude-quadro-rev")?.addEventListener("click", () => abrirJanelaSaudeQuadro());
   $("#b-versoes")?.addEventListener("click", () => abrirJanelaVersoes());
+  $("#b-so-congeladas")?.addEventListener("click", () => { state.filtro.situacao = "congelada"; state.mostrar = POR_PAGINA; state.congelar = false; manterScroll(render); });
   const filtrarParaAlteradas = () => {
     state.filtro.situacao = "alterada"; state.mostrar = POR_PAGINA; state.congelar = false;
     manterScroll(render);
@@ -1365,7 +1369,6 @@ function abrirAuditoria() {
       ${htmlGanhoAuditoria(A.ganho)}
       ${A.parado_usuario ? `<p class="small">⏹ Parada a seu pedido: o que já foi auditado está salvo; o resto continua sem auditoria.</p>` : ""}
       ${A.auto ? `<p><b>${fmtN(A.auto.aceitas)}</b> aceitas sozinhas (confiança alta + auditor concordando).</p>` : ""}
-      ${A.auto_bloqueado ? `<p>🔒 Ninguém foi aceito sozinho: as confirmações desta pergunta estão travadas.</p>` : ""}
       <p class="small">As discordâncias aparecem na tabela com <b>🔎 auditor sugere…</b>. Filtre por <b>auditor discordou</b> e use o botão ou a tecla <kbd>S</kbd> para aceitar a sugestão.</p>`);
   };
 }
@@ -1415,21 +1418,13 @@ function renderAprovarBtn() {
   if (C.status === "aprovado") {
     return `<span class="pill ok" style="font-weight:600;padding:5px 10px" title="A classificação desta pergunta já foi aprovada e gravada nos resultados">✓ Aprovada nos resultados</span>`;
   }
-  const trava = V.confirmacao_travada;
-  const bloqueio = trava ? `disabled title="${esc(txtTrava())}"` : V.n_faltantes ? `disabled title="Classifique as restantes antes de aprovar"` : "";
-  return `<label class="small trava-conf" title="Impede confirmar respostas e aprovar a pergunta até alguém desmarcar"><input type="checkbox" id="c-trava" ${trava ? "checked" : ""}> 🔒 Travar confirmações</label>
-    <button class="btn ok" id="b-aprovar-cod" ${bloqueio}>✓ Aprovar e gravar nos resultados</button>`;
+  return `<button class="btn ok" id="b-aprovar-cod" ${V.n_faltantes ? `disabled title="Classifique as restantes antes de aprovar"` : ""}>✓ Aprovar e gravar nos resultados</button>`;
 }
 function bindAprovarBar() {
   const P = state.P; if (!P.codificacao) return;
-  $("#c-trava")?.addEventListener("change", async (e) => {
-    const ligar = e.target.checked;
-    try { refresh(await post(`/api/pergunta/${P.qid}/trava`, { travada: ligar })); toast(ligar ? "Confirmações travadas" : "Confirmações liberadas"); }
-    catch (err) { e.target.checked = !ligar; }
-  });
   $("#b-aprovar-cod")?.addEventListener("click", async () => {
-    const V = P.revisao, naoConf = V.n_codificadas - V.n_revisadas;
-    if (!confirm(`Aprovar a classificação?${P.n_alertas ? `\n• ${P.n_alertas} resposta(s) com alerta` : ""}${naoConf ? `\n• ${naoConf} resposta(s) não conferidas por você (ficam como a IA classificou)` : ""}`)) return;
+    const V = P.revisao, nCong = V.n_congeladas || 0, naoConf = V.n_codificadas - V.n_revisadas - nCong;
+    if (!confirm(`Aprovar a classificação?${P.n_alertas ? `\n• ${P.n_alertas} resposta(s) com alerta` : ""}${naoConf ? `\n• ${naoConf} resposta(s) não conferidas por você (ficam como a IA classificou)` : ""}${nCong ? `\n• ❄ ${nCong} resposta(s) congeladas (saem com a categoria da IA, sem conferência; descongele antes se quiser revisar)` : ""}`)) return;
     refresh(await post(`/api/pergunta/${P.qid}/aprovar`, {}, "Gravando nos resultados…")); toast("Classificação aprovada");
   });
 }
@@ -1437,10 +1432,6 @@ function bindAprovarBar() {
 // ---------------------------------------------------------------- tabela de classificação
 // na tela do grupo cada linha tem a pergunta de origem (r._q) e a trava vale pela classificação DESSA pergunta
 const emGrupo = () => !!state.P?._cods;
-// PEND-42: trava que impede confirmar respostas e aprovar a pergunta (corrigir e desfazer continuam livres). Na tela do grupo
-// a checagem fica por conta do servidor, que recusa com a mensagem de quem travou.
-const confTravada = () => !emGrupo() && state.P?.revisao?.confirmacao_travada;
-const txtTrava = () => { const t = state.P?.revisao?.confirmacao_travada; return t ? `Confirmações travadas por ${t.por || "alguém"} em ${String(t.em || "").slice(0, 16).replace("T", " ")}. Desmarque "Travar confirmações" para confirmar.` : ""; };
 const travada = (r) => (emGrupo() ? state.P._cods[r._q]?.status === "aprovado" : state.P.codificacao?.status === "aprovado");
 const temSugestao = (r) => r.revisao === "pendente" && r.auditoria?.ok === false && r.auditoria.primaria != null && r.auditoria.primaria !== r.primaria;
 function situacaoOk(r, s) {
@@ -1471,7 +1462,7 @@ function filtrarItens() {
   const conf = (r) => (r.primaria == null ? 9 : r.revisao !== "pendente" ? 2 + (r.confianca ?? 0) : r.confianca ?? 0);
   const faixaConf = (r) => Math.floor(conf(r) * 10);  // agrupa em faixas de 10% para poder desempatar por categoria
   const k = f.ordem;
-  const conferida = (r) => (r.revisao === "confirmada" || r.revisao === "corrigida" ? 1 : 0);  // conferidas sempre no fim
+  const conferida = (r) => (r.revisao === "confirmada" || r.revisao === "corrigida" || r.revisao === "congelada" ? 1 : 0);  // conferidas e congeladas sempre no fim
   rows.sort((a, b) => conferida(a) - conferida(b) ||
     (k === "conf" ? faixaConf(a) - faixaConf(b) || (a.primaria ?? 999) - (b.primaria ?? 999) || conf(a) - conf(b) || b.n - a.n
     : k === "n" ? b.n - a.n
@@ -1532,8 +1523,9 @@ function renderCodificacao() {
   })();
   const rows = vis.map((r) => {
     const nc = r.primaria == null;
-    const cls = [r.alertas && !nc ? "alerta" : "", r.revisao === "alterada" ? "alterada" : "", r.revisao === "corrigida" ? "humano" : "", r.revisao === "confirmada" ? "confirmada" : "", r.comentario_pendente ? "pendente" : "", nc ? "naocod" : ""].join(" ");
+    const cls = [r.alertas && !nc ? "alerta" : "", r.revisao === "alterada" ? "alterada" : "", r.revisao === "corrigida" ? "humano" : "", r.revisao === "confirmada" ? "confirmada" : "", r.revisao === "congelada" ? "congelada" : "", r.comentario_pendente ? "pendente" : "", nc ? "naocod" : ""].join(" ");
     const origem = nc ? '<span class="pill">não classificada</span>'
+      : r.revisao === "congelada" ? `<span class="pill cong" title="Congelada por ${esc(r.congelada?.por || "alguém")} em ${esc(String(r.congelada?.em || "").slice(0, 16).replace("T", " "))}: nem a conferir nem confirmada">❄ congelada</span>`
       : r.revisao === "alterada" ? `<span class="pill warn" title="${esc(r.alterada_motivo || 'Categoria alterada — reconferir')}">⚠️ alterada</span>`
       : r.revisao === "corrigida" ? `<span class="pill human" title="${r.corrigido_de_nome ? "A IA tinha posto: " + esc(r.corrigido_de_nome) : ""}">✎ você</span>`
       : r.revisao === "confirmada" ? (r.validado_por === "auto" ? `<span class="pill ok auto" title="Confirmada sozinha: confiança alta e o auditor concordou">⚡ auto</span>` : '<span class="pill ok">✓ conferida</span>')
@@ -1543,9 +1535,11 @@ function renderCodificacao() {
     const just = r.justificativa ? (r.ia_original_nome ? `<small>revisor: ${esc(r.justificativa.replace(/^\[revisor [^:]*: ?/, "").replace(/\] IA tinha: .*$/, ""))} · a IA tinha posto: ${esc(r.ia_original_nome)}</small>` : `<small>IA: ${esc(r.justificativa)}</small>`) : "";
     const sugestao = !travada(r) && temSugestao(r) ? `<div class="sugestao">🔎 auditor sugere: <b>${esc(r.sugestao_nome || r.auditoria.primaria)}</b>${r.sugestao_sec_nome ? ` + ${esc(r.sugestao_sec_nome)}` : ""}${r.auditoria.nota ? ` — ${esc(r.auditoria.nota)}` : ""} <button class="btn sm c-sug" title="Aceitar a sugestão do auditor (tecla S)">aceitar sugestão</button></div>` : "";
     const motivoAlt = r.revisao === "alterada" && r.alterada_motivo ? `<br><small style="color:var(--warn);font-weight:600">⚠️ Reconferir: ${esc(r.alterada_motivo)}</small>` : "";
-    const btnOk = nc || travada(r) ? "" : confTravada() && r.revisao !== "confirmada" ? `<button class="btn sm c-ok" disabled title="${esc(txtTrava())}">🔒</button>` : r.revisao === "alterada" ? `<button class="btn sm c-ok alterada" title="Reconfirmar resposta após alteração da categoria">✓</button>` : r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
+    const btnFrz = nc || travada(r) ? "" : r.revisao === "congelada" ? `<button class="btn sm c-frz on" title="Descongelar (tecla F): volta a ser a conferir">❄</button>`
+      : r.revisao === "pendente" || r.revisao === "alterada" ? `<button class="btn sm c-frz" title="Congelar (tecla F): nem confirmar nem mexer agora; a categoria fica travada até você descongelar">❄</button>` : "";
+    const btnOk = nc || travada(r) || r.revisao === "congelada" ? "" : r.revisao === "alterada" ? `<button class="btn sm c-ok alterada" title="Reconfirmar resposta após alteração da categoria">✓</button>` : r.revisao === "corrigida" ? "" : r.revisao === "confirmada" ? `<button class="btn sm c-ok on" title="Desfazer confirmação">✓</button>` : `<button class="btn sm c-ok" title="A IA acertou — confirmar">✓</button>`;
     return `<tr class="${cls}" data-rid="${r.rid}" tabindex="0">
-      <td>${btnOk}</td>
+      <td>${btnOk}${btnFrz}</td>
       ${emGrupo() ? `<td><span class="pill" title="Pergunta de origem da resposta">${esc(r._q)}</span></td>` : ""}
       <td>${origem}</td>
       <td><div class="txt-resp${r.texto.length > 280 ? " longa" : ""}" title="${r.texto.length > 280 ? "clique para ver a resposta inteira" : ""}">${esc(r.texto)}</div>${just}${sugestao}${motivoAlt}${r.alertas && !nc ? `<br><span class="pill warn">${esc(r.alertas)}</span>` : ""}${r.corrigido_de_nome ? `<br><small>a IA tinha posto: ${esc(r.corrigido_de_nome)}</small>` : ""}</td>
@@ -1571,6 +1565,7 @@ function renderCodificacao() {
         <option value="auto" ${f.situacao === "auto" ? "selected" : ""}>confirmadas automaticamente ⚡</option>
         <option value="discorda" ${f.situacao === "discorda" ? "selected" : ""}>auditor discordou 🔎</option>
         <option value="corrigida" ${f.situacao === "corrigida" ? "selected" : ""}>corrigidas por você</option>
+        <option value="congelada" ${f.situacao === "congelada" ? "selected" : ""}>❄ congeladas${V.n_congeladas ? ` (${V.n_congeladas})` : ""}</option>
         <option value="nao" ${f.situacao === "nao" ? "selected" : ""}>não classificadas</option>
       </select>
       <select id="c-cat"><option value="">todas as categorias</option>${optsCategorias(cats, { sel: +f.cat || null })}</select>
@@ -1578,13 +1573,13 @@ function renderCodificacao() {
       <label><input type="checkbox" id="c-com" ${f.comentarios ? "checked" : ""}> só comentadas</label>
       <select id="c-ord"><option value="conf" ${f.ordem === "conf" ? "selected" : ""}>ordenar: menor confiança</option><option value="n" ${f.ordem === "n" ? "selected" : ""}>ordenar: mais frequentes</option><option value="cat" ${f.ordem === "cat" ? "selected" : ""}>ordenar: categoria</option></select>
       <span class="small">${vis.length} de ${todas.length} respostas${todas.length !== P.itens.length ? ` (filtradas de ${P.itens.length})` : ""}</span>
-      ${!locked && pendVis && !confTravada() ? `<button class="btn sm" id="c-ok-todas" title="Confirma as respostas 'a conferir/reconferir' mostradas nesta página">✓ Confirmar as ${pendVis} mostradas</button>` : ""}
+      ${!locked && pendVis ? `<button class="btn sm" id="c-ok-todas" title="Confirma as respostas 'a conferir/reconferir' mostradas nesta página">✓ Confirmar as ${pendVis} mostradas</button>` : ""}
     </div>
     ${chipsCat}
     ${painelDiscordancias}
     <table id="tab-cod"><thead><tr><th style="width:44px" title="Confirmar que a IA acertou">OK</th>${emGrupo() ? `<th style="width:70px" title="Questão de origem">Questão</th>` : ""}<th style="width:96px">Situação</th><th>Resposta <small>(e justificativa da IA)</small></th><th class="num" style="width:40px">n</th><th style="width:18%">Categoria principal</th><th style="width:16%">Secundária</th><th class="num" style="width:54px">Conf.</th><th style="width:19%">Comentário para a IA</th></tr></thead><tbody>${rows}</tbody></table>
     ${todas.length > vis.length ? `<div class="tools"><button class="btn" id="c-mais">Mostrar mais ${Math.min(POR_PAGINA, todas.length - vis.length)}</button><span class="small">${todas.length - vis.length} restantes</span></div>` : ""}
-    <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha primeiro): <kbd>↑</kbd>/<kbd>↓</kbd> ou <kbd>J</kbd>/<kbd>K</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>0</kbd>–<kbd>99</kbd> código da categoria · <kbd>C</kbd> comentar (<kbd>Ctrl+Enter</kbd> salva) · <kbd>S</kbd> aceitar sugestão do auditor.</div>
+    <div class="small atalhos">⌨ <b>Atalhos</b> (clique numa linha primeiro): <kbd>↑</kbd>/<kbd>↓</kbd> ou <kbd>J</kbd>/<kbd>K</kbd> navegar · <kbd>Enter</kbd> confirmar ✓ e ir para a próxima · <kbd>0</kbd>–<kbd>99</kbd> código da categoria · <kbd>C</kbd> comentar (<kbd>Ctrl+Enter</kbd> salva) · <kbd>S</kbd> aceitar sugestão do auditor · <kbd>F</kbd> congelar/descongelar ❄ (nem a conferir, nem confirmada).</div>
     <div class="small">Mudar a categoria vale na hora (fica marcada como sua). ✓ = a IA acertou. Um comentário não muda nada sozinho: vira instrução obrigatória quando você clica em <b>Reclassificar comentadas</b>.</div>`;
 }
 function proximaLinha(tr, passo) {
@@ -1655,6 +1650,19 @@ function bindCodificacao() {
     const rid = +tr.dataset.rid, r = state.P.itens.find((i) => i.rid === rid);
     const prim = tr.querySelector(".c-prim"), sec = tr.querySelector(".c-sec"), com = tr.querySelector(".c-com"), ok = tr.querySelector(".c-ok");
     if (travada(r)) { prim.disabled = sec.disabled = com.disabled = true; continue; }
+    const cong = r.revisao === "congelada";
+    if (cong) prim.disabled = sec.disabled = com.disabled = true;  // categoria travada até descongelar
+    const congelar = async (valor) => {
+      const seguinte = valor ? proximaLinha(tr, 1)?.dataset.rid : null;
+      const a = alvo(rid);
+      const res = await post(`/api/pergunta/${a.q}/item/${a.rid}/congelar`, { congelada: valor });
+      aplicarItem(r, res.item); recalcular();
+      if (valor && state.ordemFixa) state.ordemFixa = [...state.ordemFixa.filter((x) => x !== rid), rid];  // vai para o fim, como as conferidas
+      rerenderNaLinha(rid, seguinte ? +seguinte : rid);
+      toast(valor ? "Resposta congelada ❄ (nem a conferir, nem confirmada)" : "Resposta descongelada");
+      document.querySelector(`#tab-cod tr[data-rid="${seguinte || rid}"]`)?.focus({ preventScroll: true });
+    };
+    tr.querySelector(".c-frz")?.addEventListener("click", () => congelar(!cong));
     const salvar = async (body, msg, proxima = false) => {
       const antes = r.revisao, seguinte = proximaLinha(tr, 1)?.dataset.rid;
       tr.classList.add("just-confirmed");
@@ -1680,10 +1688,11 @@ function bindCodificacao() {
       else if (e.key === "ArrowUp" || keyLow === "k") { e.preventDefault(); proximaLinha(tr, -1)?.focus(); }
       else if (e.key === "Enter" && r.primaria != null) {
         e.preventDefault();
-        if (confTravada() && (r.revisao === "pendente" || r.revisao === "alterada")) toast(txtTrava(), true);
-        else if (r.revisao === "pendente" || r.revisao === "alterada") salvar({ validado: true }, "Confirmada ✓", true);
+        if (r.revisao === "pendente" || r.revisao === "alterada") salvar({ validado: true }, "Confirmada ✓", true);
         else proximaLinha(tr, 1)?.focus();
-      } else if (keyLow === "c" && !com.disabled) { e.preventDefault(); com.focus(); }
+      } else if (keyLow === "f" && r.primaria != null && (cong || r.revisao === "pendente" || r.revisao === "alterada")) { e.preventDefault(); congelar(!cong); }
+      else if (cong && (keyLow === "c" || keyLow === "s" || /^[0-9]$/.test(e.key))) { e.preventDefault(); toast("Resposta congelada ❄: descongele (tecla F) para mexer nela.", true); }
+      else if (keyLow === "c" && !com.disabled) { e.preventDefault(); com.focus(); }
       else if (keyLow === "s" && temSugestao(r)) { e.preventDefault(); aceitarSugestao(); }
       else if (/^[0-9]$/.test(e.key)) {
         e.preventDefault();

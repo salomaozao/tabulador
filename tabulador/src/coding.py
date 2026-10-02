@@ -243,6 +243,8 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
         # "restantes" inclui as que deram erro na chamada (ex.: cota da IA esgotada no meio): são refeitas
         if ant and somente_faltantes and ant.get("primaria") in codigos_validos and ant.get("origem") != "erro":
             itens[r["rid"]] = ant
+        elif ant and ant.get("congelada") and ant.get("primaria") in codigos_validos:
+            itens[r["rid"]] = ant  # congelada: a IA não toca (PEND-42)
         elif ant and preservar_humano and _protegido(ant, codigos_validos):
             itens[r["rid"]] = ant
         elif r["nsnr"] and not (ant and ant.get("comentario")):
@@ -268,7 +270,6 @@ def codificar(qid: str, forcar: bool = False, preservar_humano: bool = True,
         "modelo": config.OPENAI_MODEL,
         "gerado_em": datetime.now().isoformat(timespec="seconds"),
         "frame_aprovado_em": frame.get("aprovado_em"),
-        **({"confirmacao_travada": atual["confirmacao_travada"]} if (atual or {}).get("confirmacao_travada") else {}),  # reclassificar não destrava
         "itens": [itens[r["rid"]] for r in dados["respostas"] if r["rid"] in itens],
     }
     CF._gravar(qid, "codificacao.json", cod)
@@ -309,7 +310,8 @@ def recodificar(qid: str, rids: list[int] | None = None, apenas_comentados: bool
         rids = [rid for rid, i in itens.items() if i.get("primaria") is not None and i.get("origem") != "regra" and not _protegido(i, codigos_validos)]
     elif rids is None:
         rids = [rid for rid, i in itens.items() if i.get("comentario") and not i.get("comentario_aplicado_em")] if apenas_comentados else list(itens)
-    pendentes = [dict(por_rid[rid], comentario=(itens.get(rid) or {}).get("comentario")) for rid in rids if rid in por_rid]
+    pendentes = [dict(por_rid[rid], comentario=(itens.get(rid) or {}).get("comentario")) for rid in rids
+                 if rid in por_rid and not (itens.get(rid) or {}).get("congelada")]
     progresso.etapa("preparar", f"{len(pendentes)} resposta(s) para a IA refazer (o que você corrigiu/confirmou é mantido)")
     if not pendentes:
         cod["_recodificados"] = 0
@@ -331,34 +333,35 @@ def recodificar(qid: str, rids: list[int] | None = None, apenas_comentados: bool
     return cod
 
 
-class ConfirmacaoTravada(RuntimeError):
-    """A pergunta está com a trava de confirmações ligada (PEND-42): nada pode ser confirmado nem aprovado."""
+class RespostaCongelada(RuntimeError):
+    """A resposta está congelada (PEND-42): nem confirmar nem mexer até alguém descongelar."""
 
 
-def _exigir_destravada(qid: str, cod: dict | None, acao: str) -> None:
-    t = (cod or {}).get("confirmacao_travada")
-    if t:
-        raise ConfirmacaoTravada(
-            f"{qid}: as confirmações estão travadas ({t.get('por') or 'alguém'}, {str(t.get('em') or '')[:16].replace('T', ' ')}). "
-            f"Desmarque '🔒 Travar confirmações' na pergunta para {acao}.")
-
-
-def definir_trava(qid: str, travada: bool, por: str | None = None) -> dict | None:
-    """Liga/desliga a trava de confirmações da pergunta (PEND-42). Qualquer pessoa pode desligar; fica no log de
-    eventos quem ligou e quem desligou. Devolve a trava atual ({por, em}) ou None."""
+def congelar(qid: str, rid: int, valor: bool = True, por: str | None = None) -> dict:
+    """Congela (ou descongela) UMA resposta: ela fica fora do 'a conferir' e das confirmadas, com a categoria
+    travada, para a pessoa voltar a ela mais tarde. Só dá para congelar o que ainda não foi confirmado nem
+    corrigido (a pessoa já decidiu essas). Congelada não é confirmada em bloco, nem aceita sozinha, nem
+    reclassificada pela IA, nem auditada. Descongelar devolve a resposta ao que ela era (a conferir ou a reconferir)."""
     cod = codificacao(qid)
     if not cod:
-        raise RuntimeError(f"{qid}: ainda não há classificação para travar")
-    antes = cod.get("confirmacao_travada")
-    if travada and not antes:
-        cod["confirmacao_travada"] = {"por": por or eventos.quem(), "em": datetime.now().isoformat(timespec="seconds")}
-    elif not travada:
-        cod.pop("confirmacao_travada", None)
-    if bool(antes) != bool(cod.get("confirmacao_travada")):
+        raise RuntimeError(f"{qid}: ainda não há classificação")
+    item = next((i for i in cod["itens"] if i["rid"] == int(rid)), None)
+    if item is None or item.get("primaria") is None:
+        raise ValueError(f"{qid}: a resposta {rid} ainda não foi classificada; só dá para congelar uma resposta já classificada.")
+    mudou = False
+    if valor and not item.get("congelada"):
+        if (item.get("origem") == "humano" or item.get("validado")) and not item.get("alterada"):
+            raise ValueError("Esta resposta já foi confirmada ou corrigida. Desfaça a confirmação antes de congelar.")
+        item["congelada"] = {"por": por or eventos.quem(), "em": datetime.now().isoformat(timespec="seconds")}
+        mudou = True
+    elif not valor and item.get("congelada"):
+        item.pop("congelada")
+        mudou = True
+    if mudou:
         CF._gravar(qid, "codificacao.json", cod)
-        eventos.registrar(qid, "travar_confirmacoes" if travada else "destravar_confirmacoes", por=por,
-                          travada_antes_por=(antes or {}).get("por"))
-    return cod.get("confirmacao_travada")
+        eventos.registrar(qid, "congelar" if valor else "descongelar", alvo=int(rid), para=item["primaria"], por=por,
+                          frame_versao=item.get("frame_versao"))
+    return item
 
 
 def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", comentario="__manter__", validado=None,
@@ -371,9 +374,9 @@ def atualizar_item(qid: str, rid: int, primaria=None, secundaria="__manter__", c
     cod = codificacao(qid)
     if not cod:
         raise RuntimeError(f"{qid}: ainda não há codificação")
-    if validado:
-        _exigir_destravada(qid, cod, "confirmar respostas")
     item = next((i for i in cod["itens"] if i["rid"] == int(rid)), None)
+    if item is not None and item.get("congelada"):
+        raise RespostaCongelada(f"{qid}: a resposta {rid} está congelada ({item['congelada'].get('por') or 'alguém'}). Descongele (❄) antes de mexer nela.")
     if item is None:
         # resposta ainda não classificada (fora da amostra): o pesquisador classifica à mão
         if not any(r["rid"] == int(rid) for r in CF.respostas(qid)["respostas"]):
@@ -452,13 +455,11 @@ def validar(qid: str, rids: list[int], valor: bool = True, por: str | None = Non
     cod = codificacao(qid)
     if not cod:
         raise RuntimeError(f"{qid}: ainda não há codificação")
-    if valor:
-        _exigir_destravada(qid, cod, "confirmar respostas")
     alvo = {int(r) for r in rids}
     agora = datetime.now().isoformat(timespec="seconds")
     n = 0
     for item in cod["itens"]:
-        if item["rid"] not in alvo or item.get("primaria") is None or (item.get("origem") == "humano" and not item.get("alterada")):
+        if item["rid"] not in alvo or item.get("primaria") is None or item.get("congelada") or (item.get("origem") == "humano" and not item.get("alterada")):
             continue
         if valor and item.get("alterada"):
             for c in ("alterada", "alterada_motivo", "alterada_em", "alterada_de"):
@@ -488,6 +489,8 @@ def validar(qid: str, rids: list[int], valor: bool = True, por: str | None = Non
 def situacao_revisao(item: dict | None) -> str | None:
     if not item or item.get("primaria") is None:
         return None
+    if item.get("congelada"):
+        return "congelada"  # nem a conferir nem confirmada: a pessoa volta a ela mais tarde (PEND-42)
     if item.get("alterada"):
         return "alterada"
     if item.get("origem") == "humano":
@@ -512,6 +515,7 @@ def resumo_revisao(qid: str) -> dict:
     corrigidas = sum(1 for i in itens.values() if situacao_revisao(i) == "corrigida")
     corrigidas_ia = sum(1 for i in itens.values() if situacao_revisao(i) == "corrigida" and "corrigido_de" in i)
     alteradas = sum(1 for i in itens.values() if situacao_revisao(i) == "alterada")
+    congeladas = sum(1 for i in itens.values() if situacao_revisao(i) == "congelada")
     avaliadas = confirmadas - auto + corrigidas_ia
     return {
         "n_unicas": n_unicas,
@@ -525,7 +529,7 @@ def resumo_revisao(qid: str) -> dict:
         "n_revisadas": confirmadas + corrigidas,
         "acerto_ia": round((confirmadas - auto) / avaliadas, 3) if avaliadas else None,
         "n_avaliadas_ia": avaliadas,
-        "confirmacao_travada": cod.get("confirmacao_travada"),
+        "n_congeladas": congeladas,
     }
 
 
@@ -579,6 +583,7 @@ def tabela(qid: str) -> pd.DataFrame:
             "alertas": "; ".join(alertas_item(i, frame)) if i["primaria"] is not None else "não codificado",
             "respondent_ids": r["respondent_ids"],
             "revisao": situacao_revisao(i),
+            "congelada": i.get("congelada"),
             "alterada": bool(i.get("alterada")),
             "alterada_motivo": i.get("alterada_motivo"),
             "alterada_em": i.get("alterada_em"),
@@ -640,7 +645,7 @@ def importar_revisao(qid: str) -> dict:
     for _, linha in rev.iterrows():
         rid = int(linha["rid"])
         item = itens.get(rid)
-        if item is None:
+        if item is None or item.get("congelada"):
             continue
         mudou = False
         for campo, col in (("primaria", "REVISAO_PRIMARIA"), ("secundaria", "REVISAO_SECUNDARIA")):
@@ -676,7 +681,6 @@ def aprovar(qid: str) -> dict:
     cod = codificacao(qid)
     if not cod:
         raise RuntimeError(f"{qid}: nada para aprovar")
-    _exigir_destravada(qid, cod, "aprovar a pergunta")
     frame = CF._exigir_frame(qid)
     if frame.get("status") != "aprovado":
         raise RuntimeError(f"{qid}: o frame foi editado depois da codificação; aprove o frame e recodifique/revise")
