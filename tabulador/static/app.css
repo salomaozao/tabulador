@@ -220,7 +220,18 @@ dialog.larga{width:min(1100px,96vw);max-height:92vh;padding:0}dialog.larga form{
 .jan-cab h2{margin:0}#jan-corpo{padding:16px 20px;overflow:auto}
 table.mudancas td,table.mudancas th{padding:5px 8px}
 .campo{display:flex;flex-direction:column;gap:4px;margin:10px 0;font-size:13px;color:var(--text-2)}.campo input{width:100%}
+.campo textarea{width:100%;font-family:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);resize:vertical}
+.campo .help{font-size:11px;color:var(--text-3);margin-top:2px}
 .dlg-acoes{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+
+/* ---- modal de fusão ---- */
+#dlg-fusao{width:min(640px,94vw);padding:0}
+#dlg-fusao form{display:flex;flex-direction:column;max-height:90vh}
+#fusao-corpo{padding:16px 20px;overflow:auto}
+.fusao-meta-box{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;line-height:1.5}
+.fusao-meta-box .seta{color:var(--text-3);margin:0 6px;font-weight:bold}
+.fusao-loading{display:flex;align-items:center;justify-content:center;gap:10px;padding:36px 12px;color:var(--text-2);font-size:14px}
+
 
 /* ---- consumo da IA ---- */
 table.usage td{vertical-align:middle}table.usage .prog{margin-top:4px;height:4px}

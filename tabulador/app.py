@@ -76,7 +76,10 @@ def _precisa_confirmar(qid_ou_grupo: str, acao: str, confirmado, por_grupo: bool
 
 
 def _payload_pergunta(qid: str) -> dict:
-    spec = V.por_id(qid)
+    try:
+        spec = V.por_id(qid)
+    except KeyError:
+        spec = {"id": qid, "rotulo": qid}
     resp = CF._ler(qid, "respostas.json")
     frame = CF.frame(qid)
     cod = CD.codificacao(qid)
@@ -838,6 +841,20 @@ def api_frame_remover(qid, codigo):
         return _erro(e)
 
 
+@app.post("/api/pergunta/<qid>/frame/sugerir-fusao")
+def api_frame_sugerir_fusao(qid):
+    try:
+        d = request.get_json() or {}
+        destino = d.get("destino")
+        origens = d.get("origens") or []
+        if destino is None or not origens:
+            return jsonify({"erro": "Destino e origens são obrigatórios"}), 400
+        prop = CF.sugerir_fusao(qid, destino, *origens)
+        return jsonify(prop)
+    except Exception as e:
+        return _erro(e)
+
+
 @app.post("/api/pergunta/<qid>/frame/fundir")
 def api_frame_fundir(qid):
     try:
@@ -845,7 +862,15 @@ def api_frame_fundir(qid):
         if (bloq := _precisa_confirmar(qid, "fundir", d.get("confirmado"))):
             return bloq
         with _lock:
-            CF.fundir(qid, d["destino"], *d["origens"])
+            CF.fundir(
+                qid,
+                d["destino"],
+                *d["origens"],
+                novo_nome=d.get("novo_nome"),
+                nova_definicao=d.get("nova_definicao"),
+                novas_keywords=d.get("novas_keywords"),
+                por=_por(),
+            )
         return jsonify(_payload_pergunta(qid))
     except Exception as e:
         return _erro(e)

@@ -690,8 +690,8 @@ function bindFrame() {
     tr.querySelector(".f-def")?.addEventListener("change", async (e) => { await post(`/api/pergunta/${P.qid}/frame/categoria`, { codigo: cod, definicao: e.target.value }); toast("Definição salva"); });
     tr.querySelector(".f-mesclar")?.addEventListener("change", async (e) => {
       const dest = e.target.value; if (!dest) return;
-      if (!confirm(`Mesclar "${nomeCat(cod)}" em "${nomeCat(dest)}"? A categoria ${cod} deixa de existir.`)) { e.target.value = ""; return; }
-      refresh(await post(`/api/pergunta/${P.qid}/frame/fundir`, { destino: dest, origens: [cod] }, "Mesclando…"));
+      e.target.value = "";
+      await abrirModalFusao(P.qid, [cod], dest, async (r) => { refresh(r); });
     });
     tr.querySelector(".f-remover")?.addEventListener("click", async () => {
       if (!confirm(`Excluir a categoria "${nomeCat(cod)}"? Respostas já classificadas nela vão para Outros.`)) return;
@@ -891,6 +891,116 @@ function cardCategoria(c, D, podeEditar, catsOpc) {
     ${D.classificada && pend && (c.menor_confianca || []).length ? `<div class="small cc-menor">Menor confiança: ${c.menor_confianca.map((m) => `“${esc(m.texto.slice(0, 80))}${m.texto.length > 80 ? "…" : ""}” (${fmt1(m.confianca, 2)})`).join(" · ")}</div>` : ""}
   </div>`;
 }
+// ---- modal de fusão assistido por IA
+async function abrirModalFusao(qid, origens, dest, onConcluido) {
+  const dlg = $("#dlg-fusao");
+  if (!dlg) return;
+  const corpo = $("#fusao-corpo");
+  const titulo = $("#fusao-titulo");
+
+  const nomeCatLocal = (k) => {
+    const P = state.P;
+    const cat = P?.frame?.categorias?.find((c) => String(c.codigo) === String(k));
+    return cat ? cat.nome : `Cat. ${k}`;
+  };
+
+  const origensArray = Array.isArray(origens) ? origens : [origens];
+  const nomesOrig = origensArray.map(nomeCatLocal).join(", ");
+  const nomeDest = nomeCatLocal(dest);
+
+  titulo.textContent = `Mesclar categorias`;
+  corpo.innerHTML = `
+    <div class="fusao-meta-box">
+      <b>Origem:</b> ${esc(nomesOrig)} <span class="seta">➔</span> <b>Destino:</b> ${esc(nomeDest)}
+    </div>
+    <div class="fusao-loading">
+      <span class="spinner"></span> A IA está sugerindo a combinação de nome, definição e palavras-chave…
+    </div>
+  `;
+  if (!dlg.open) dlg.showModal();
+
+  $("#fusao-fechar").onclick = () => dlg.close();
+
+  let prop;
+  try {
+    prop = await post(`/api/pergunta/${qid}/frame/sugerir-fusao`, { destino: dest, origens: origensArray });
+  } catch (err) {
+    toast(`Não foi possível obter sugestão da IA: ${err.message}`, true);
+    prop = {
+      nome_sugerido: `${nomeDest} e ${nomesOrig}`,
+      definicao_sugerida: "",
+      keywords_sugeridas: []
+    };
+  }
+
+  const kwsStr = (prop.keywords_sugeridas || []).join(", ");
+
+  corpo.innerHTML = `
+    <div class="fusao-meta-box">
+      <b>Origem:</b> ${esc(nomesOrig)} <span class="seta">➔</span> <b>Destino:</b> ${esc(nomeDest)}<br>
+      <small style="color:var(--text-3)">Respostas afetadas das categorias envolvidas ficarão com status <b>alterada</b> para reconferência.</small>
+    </div>
+
+    <label class="campo">
+      Nome da categoria unificada
+      <input id="fusao-input-nome" type="text" placeholder="${esc(prop.nome_sugerido || '')}">
+      <small class="help">Deixe em branco para aceitar a sugestão da IA: <b>${esc(prop.nome_sugerido || '')}</b></small>
+    </label>
+
+    <label class="campo">
+      Definição
+      <textarea id="fusao-input-def" rows="3">${esc(prop.definicao_sugerida || '')}</textarea>
+      <small class="help">Delimite o escopo combinado das categorias unificadas.</small>
+    </label>
+
+    <label class="campo">
+      Palavras-chave (separadas por vírgula)
+      <input id="fusao-input-kws" type="text" value="${esc(kwsStr)}">
+      <small class="help">Termos típicos para reconhecimento automático e sugestão.</small>
+    </label>
+
+    <div class="dlg-acoes">
+      <button type="button" class="btn" id="fusao-btn-cancelar">Cancelar</button>
+      <button type="button" class="btn primary" id="fusao-btn-confirmar">Confirmar mesclagem</button>
+    </div>
+  `;
+
+  $("#fusao-btn-cancelar").onclick = () => dlg.close();
+
+  const inputNome = $("#fusao-input-nome");
+  const inputDef = $("#fusao-input-def");
+  const inputKws = $("#fusao-input-kws");
+  const btnConf = $("#fusao-btn-confirmar");
+
+  btnConf.onclick = async () => {
+    btnConf.disabled = true;
+    btnConf.textContent = "Mesclando…";
+
+    // Regra: se o usuário não mexer no input (deixar em branco), usa o placeholder sugerido pela IA
+    const nomeFinal = (inputNome.value.trim()) || prop.nome_sugerido || nomeDest;
+    const defFinal = inputDef.value.trim();
+    const kwsFinal = inputKws.value.split(",").map((s) => s.trim()).filter(Boolean);
+
+    try {
+      const payload = {
+        destino: dest,
+        origens: origensArray,
+        novo_nome: nomeFinal,
+        nova_definicao: defFinal,
+        novas_keywords: kwsFinal,
+      };
+      const r = await post(`/api/pergunta/${qid}/frame/fundir`, payload, "Mesclando categorias…");
+      dlg.close();
+      toast(`Categorias mescladas em "${nomeFinal}"`);
+      if (onConcluido) await onConcluido(r);
+    } catch (err) {
+      toast(`Erro ao mesclar: ${err.message}`, true);
+      btnConf.disabled = false;
+      btnConf.textContent = "Confirmar mesclagem";
+    }
+  };
+}
+
 async function abrirJanelaCategorias() {
   const P = state.P, qid = P.qid;
   const D = await api(`/api/pergunta/${qid}/perfil`, {}, "Montando o perfil das categorias…");
@@ -924,8 +1034,8 @@ async function abrirJanelaCategorias() {
     card.querySelector(".cc-def")?.addEventListener("change", async (e) => { await post(`/api/pergunta/${qid}/frame/categoria`, { codigo: cod, definicao: e.target.value }); toast("Definição salva"); });
     card.querySelector(".cc-mesclar")?.addEventListener("change", async (e) => {
       const dest = e.target.value; if (!dest) return;
-      if (!confirm(`Mesclar "${c.nome}" em "${nomeCat(dest)}"? As respostas passam para a categoria de destino.`)) { e.target.value = ""; return; }
-      await depois(await post(`/api/pergunta/${qid}/frame/fundir`, { destino: dest, origens: [cod] }, "Mesclando…"), "Categorias mescladas");
+      e.target.value = "";
+      await abrirModalFusao(qid, [cod], dest, async (r) => { await depois(r, "Categorias mescladas"); });
     });
     card.querySelector(".cc-conf")?.addEventListener("click", async () => {
       const menor = (c.menor_confianca || []).map((m) => `• ${m.texto.slice(0, 90)} (${fmt1(m.confianca, 2)})`).join("\n");
@@ -1198,13 +1308,10 @@ async function abrirJanelaSaudeQuadro() {
       const sel = row?.querySelector(".sq-raras-mesclar");
       const dest = sel?.value;
       if (!dest) return toast("Selecione a categoria de destino para mesclar", true);
-      const c = P.frame?.categorias?.find((x) => String(x.codigo) === String(cod));
-      const d = P.frame?.categorias?.find((x) => String(x.codigo) === String(dest));
-      if (!confirm(`Mesclar "${c?.nome}" em "${d?.nome}"? As respostas serão remapeadas.`)) return;
-      const r = await post(`/api/pergunta/${qid}/frame/fundir`, { destino: dest, origens: [cod] }, "Mesclando…");
-      toast("Categorias mescladas com sucesso!");
-      refresh(r);
-      await abrirJanelaSaudeQuadro();
+      await abrirModalFusao(qid, [cod], dest, async (r) => {
+        refresh(r);
+        await abrirJanelaSaudeQuadro();
+      });
     });
   });
 
