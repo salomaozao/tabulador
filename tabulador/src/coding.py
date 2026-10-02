@@ -538,7 +538,7 @@ def tabela(qid: str) -> pd.DataFrame:
             "rid": r["rid"], "texto": r["texto"], "n": r["n"], "nsnr_regra": r["nsnr"],
             "primaria": i["primaria"], "primaria_nome": nomes.get(i["primaria"]),
             "secundaria": i["secundaria"], "secundaria_nome": nomes.get(i["secundaria"]),
-            "confianca": i["confianca"], "justificativa": i["justificativa"], "origem": i["origem"],
+            "confianca": i.get("confianca"), "justificativa": i.get("justificativa", ""), "origem": i.get("origem"),
             "comentario": i.get("comentario"), "comentario_pendente": bool(i.get("comentario")) and not i.get("comentario_aplicado_em"),
             "alertas": "; ".join(alertas_item(i, frame)) if i["primaria"] is not None else "não codificado",
             "respondent_ids": r["respondent_ids"],

@@ -140,6 +140,150 @@ class TestStatusAlterada(unittest.TestCase):
         self.assertEqual(por_rid[4].get("alterada_de"), 3)
         self.assertEqual(CD.situacao_revisao(por_rid[4]), "alterada")
 
+    def test_renomear_nome_marca_alterada(self):
+        # Mudar apenas o nome da categoria 1
+        CF.renomear(self.qid, 1, "Equipe Docente")
+
+        cod = CF._ler(self.qid, "codificacao.json")
+        por_rid = {i["rid"]: i for i in cod["itens"]}
+
+        # rid 1 e rid 2 eram de 1 -> devem estar 'alterada'
+        self.assertTrue(por_rid[1].get("alterada"))
+        self.assertIn("equipe docente", por_rid[1].get("alterada_motivo", "").lower())
+        self.assertEqual(CD.situacao_revisao(por_rid[1]), "alterada")
+
+        self.assertTrue(por_rid[2].get("alterada"))
+        self.assertEqual(CD.situacao_revisao(por_rid[2]), "alterada")
+
+    def test_fundir_com_novo_nome_definicao_e_keywords(self):
+        # Funde a categoria 2 na 1 alterando nome, definição e keywords
+        CF.fundir(
+            self.qid, 1, 2,
+            novo_nome="Docentes e Estrutura",
+            nova_definicao="Professores e dependências físicas",
+            novas_keywords=["docente", "quadra", "sala"]
+        )
+
+        f = CF._ler(self.qid, "frame.json")
+        c1 = [c for c in f["categorias"] if c["codigo"] == 1][0]
+        self.assertEqual(c1["nome"], "Docentes e Estrutura")
+        self.assertEqual(c1["definicao"], "Professores e dependências físicas")
+        self.assertIn("docente", c1["keywords"])
+
+        # Categoria 2 não deve mais existir no frame
+        self.assertEqual([c for c in f["categorias"] if c["codigo"] == 2], [])
+
+        cod = CF._ler(self.qid, "codificacao.json")
+        por_rid = {i["rid"]: i for i in cod["itens"]}
+
+        # rid 3 era da categoria 2: remapeado para 1, marcado como alterada com motivo de mesclagem
+        self.assertEqual(por_rid[3]["primaria"], 1)
+        self.assertTrue(por_rid[3].get("alterada"))
+        self.assertEqual(por_rid[3].get("alterada_de"), 2)
+
+        # rid 1 e rid 2 já eram da categoria 1: como 1 foi redefinida, também ganham alterada!
+        self.assertTrue(por_rid[1].get("alterada"))
+        self.assertIn("redefinida", por_rid[1].get("alterada_motivo", "").lower())
+        self.assertTrue(por_rid[2].get("alterada"))
+
+    def test_refinar_ia_com_renomeacao_marca_alterada(self):
+        from unittest.mock import patch
+
+        # Simula resposta da IA no refino:
+        # A categoria 1 é mantida mas renomeada para "Corpo Docente", e uma categoria 4 nova é adicionada
+        resposta_ia = {
+            "raciocinio": "Desmembrado corpo docente e metodologia",
+            "avisos": [],
+            "categorias": [
+                {
+                    "codigo_anterior": 1,
+                    "incorpora": [],
+                    "nome": "Corpo Docente",
+                    "definicao": "Professores e instrutores",
+                    "exemplos": ["professores dedicados"],
+                    "keywords": ["professor", "docente"]
+                },
+                {
+                    "codigo_anterior": 2,
+                    "incorpora": [],
+                    "nome": "Estrutura",
+                    "definicao": "prédio, salas, quadra",
+                    "exemplos": ["quadra"],
+                    "keywords": ["quadra"]
+                },
+                {
+                    "codigo_anterior": 3,
+                    "incorpora": [],
+                    "nome": "Preço",
+                    "definicao": "mensalidade, valor",
+                    "exemplos": [],
+                    "keywords": ["valor"]
+                },
+                {
+                    "codigo_anterior": None,
+                    "incorpora": [],
+                    "nome": "Metodologia",
+                    "definicao": "Qualidade do método de ensino",
+                    "exemplos": ["metodologia moderna"],
+                    "keywords": ["metodo", "ensino"]
+                },
+            ]
+        }
+
+        with patch("llm.chamar_json", return_value=resposta_ia):
+            CF.refinar(self.qid, "separe professores e metodologia")
+
+        cod = CF._ler(self.qid, "codificacao.json")
+        por_rid = {i["rid"]: i for i in cod["itens"]}
+
+        # rid 1 e rid 2 eram de 1 (que mudou de nome/escopo) -> DEVEM ser marcados como alterada!
+        self.assertTrue(por_rid[1].get("alterada"))
+        self.assertIn("escopo de 'corpo docente' alterado", por_rid[1].get("alterada_motivo", "").lower())
+        self.assertEqual(CD.situacao_revisao(por_rid[1]), "alterada")
+
+        self.assertTrue(por_rid[2].get("alterada"))
+        self.assertEqual(CD.situacao_revisao(por_rid[2]), "alterada")
+
+        # rid 3 era da categoria 2 (que não mudou de nome nem definição) -> NÃO deve ser alterada
+        self.assertFalse(por_rid[3].get("alterada"))
+        self.assertEqual(CD.situacao_revisao(por_rid[3]), "confirmada")
+
+    def test_sugerir_fusao(self):
+        sugestao = CF.sugerir_fusao(self.qid, 1, 2)
+        self.assertIn("nome_sugerido", sugestao)
+        self.assertIn("definicao_sugerida", sugestao)
+        self.assertIn("keywords_sugeridas", sugestao)
+        self.assertEqual(sugestao["destino"]["codigo"], 1)
+        self.assertEqual(sugestao["origens"][0]["codigo"], 2)
+
+    def test_api_fusao_rotas(self):
+        import app as A
+        c = A.app.test_client()
+
+        # 1. Sugerir fusão
+        res = c.post(f"/api/pergunta/{self.qid}/frame/sugerir-fusao", json={"destino": 1, "origens": [2]})
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertIn("nome_sugerido", data)
+        self.assertIn("definicao_sugerida", data)
+        self.assertIn("keywords_sugeridas", data)
+
+        # 2. Fundir via API com novo nome e definição
+        res_fundir = c.post(f"/api/pergunta/{self.qid}/frame/fundir", json={
+            "destino": 1,
+            "origens": [2],
+            "novo_nome": "Docentes e Infra",
+            "nova_definicao": "Professores e prédios",
+            "novas_keywords": ["docente", "predio"]
+        })
+        self.assertEqual(res_fundir.status_code, 200)
+        data_p = res_fundir.get_json()
+        f = data_p["frame"]
+        c1 = [x for x in f["categorias"] if x["codigo"] == 1][0]
+        self.assertEqual(c1["nome"], "Docentes e Infra")
+        self.assertEqual(c1["definicao"], "Professores e prédios")
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -1,4 +1,4 @@
-﻿"""Criação de projetos novos: projeto.json, rascunho sem IA, validador e o gabarito do SESI.
+"""Criação de projetos novos: projeto.json, rascunho sem IA, validador e o gabarito do SESI.
 
 Rodar:  python -m unittest discover -s tests -v
 Tudo em pastas temporárias; projetos.json real não é alterado.
@@ -205,6 +205,7 @@ class TestCopiarProjeto(unittest.TestCase):
             copiar.copiar("origem", "Origem")
 
 
+@unittest.skipUnless((_SESI / "data" / "base_processamento.xlsx").exists(), "planilha SESI não disponível")
 class TestGabaritoSESI(unittest.TestCase):
     """O rascunho sem IA comparado ao projeto.py do SESI (feito e conferido à mão)."""
 

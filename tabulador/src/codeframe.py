@@ -1,4 +1,4 @@
-﻿"""Fase 1 - Code frame por pergunta.
+"""Fase 1 - Code frame por pergunta.
 
 1. `preparar(qid)`  : extrai as respostas da base (com filtro de base), deduplica, marca NS/NR
                       -> output/perguntas/<QID>/respostas.json
@@ -175,7 +175,10 @@ def instrucoes_completas(qid: str) -> str:
     if nome_grupo:
         partes = [t for t in (cfg_grupo.get("instrucoes_frame", ""), instrucoes(qid)) if t]
         return "\n".join(partes)
-    spec = V.por_id(qid)
+    try:
+        spec = V.por_id(qid)
+    except KeyError:
+        spec = {}
     partes = [t for t in (spec.get("instrucoes_frame", ""), instrucoes(qid)) if t]
     return "\n".join(partes)
 
@@ -452,6 +455,20 @@ SCHEMA_REFINO = {
 }
 
 
+SCHEMA_SUGESTAO_FUSAO = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "nome_sugerido": {"type": "string", "description": "Nome conciso de 1 a 4 palavras para a categoria unificada."},
+        "definicao_sugerida": {"type": "string", "description": "Definição clara de 1 a 2 frases cobrindo o escopo das categorias mescladas."},
+        "keywords_sugeridas": {"type": "array", "items": {"type": "string"}, "description": "3 a 8 palavras-chave mais representativas para a categoria unificada."},
+        "raciocinio": {"type": "string", "description": "Breve justificativa da proposta de fusão."},
+    },
+    "required": ["nome_sugerido", "definicao_sugerida", "keywords_sugeridas"],
+}
+
+
+
 def avisos_atributo(f: dict | None) -> list[dict]:
     """Categorias cujo nome sugere DOIS atributos ("Preço e atendimento", "Estrutura / limpeza"). Só avisa:
     pode ser falso alarme ("Ensino e aprendizagem"); quem decide é o pesquisador."""
@@ -483,7 +500,11 @@ def refinar(qid: str, feedback: str) -> dict:
         titulo = f"GRUPO DE PERGUNTAS: {grupos_frame.rotulo(nome_grupo)} (perguntas: {', '.join(grupos_frame.membros(nome_grupo))}; a tag [QID] indica a pergunta de cada resposta)"
     else:
         dados = respostas(qid)
-        titulo = f"PERGUNTA ({qid}): {dados.get('enunciado') or V.por_id(qid).get('rotulo')}"
+        try:
+            rotulo = V.por_id(qid).get("rotulo")
+        except KeyError:
+            rotulo = qid
+        titulo = f"PERGUNTA ({qid}): {dados.get('enunciado') or rotulo or qid}"
     linhas, nota = _linhas_inducao(dados)
     cats = "\n".join(f"  {c['codigo']}: {c['nome']} - {c['definicao']}" for c in atual["categorias"] if not c.get("fixa"))
     instr = instrucoes_completas(qid)
@@ -542,10 +563,12 @@ RESPOSTAS (frequência x texto){nota}:
                       "keywords": _limpar_keywords(c.get("keywords")), "fixa": False, "_inc": c.get("incorpora") or []})
         prox += 1
     remap = {}
+    incorporaram = set()
     for c in novas:
-        for o in c.pop("_inc"):
+        for o in c.pop("_inc", []):
             if o in antigos and o not in usados and o != c["codigo"]:
                 remap[o] = c["codigo"]
+                incorporaram.add(c["codigo"])
     for o in antigos:
         if o not in usados and o not in remap:
             remap[o] = CODIGO_OUTROS  # categoria removida sem destino
@@ -562,6 +585,23 @@ RESPOSTAS (frequência x texto){nota}:
     f["status"] = _status_apos_edicao(qid)
     _gravar(qid, "frame.json", f)
     _remapear_codificacao(qid, remap, motivo="Quadro ajustado com IA")
+
+    # Marcar respostas alteradas para categorias mantidas cujo escopo mudou:
+    # 1. Se o nome da categoria mudou
+    # 2. Se a definição da categoria mudou
+    # 3. Se a categoria incorporou outras categorias fundidas nela
+    for c in novas:
+        cod = c["codigo"]
+        if cod in antigos:
+            ant = antigos[cod]
+            nome_mudou = (ant["nome"].strip() != c["nome"].strip())
+            def_mudou = (ant.get("definicao", "").strip() != c.get("definicao", "").strip())
+            incorporou = (cod in incorporaram)
+            if nome_mudou or def_mudou or incorporou:
+                motivo = f"Quadro ajustado com IA: escopo de '{c['nome']}' alterado"
+                for q in _membros_quadro(qid):
+                    marcar_respostas_alteradas(q, cod, motivo=motivo)
+
     return f
 
 
@@ -671,7 +711,8 @@ def _registrar(f: dict, acao: str, **kw) -> None:
 
 
 def marcar_respostas_alteradas(qid: str, codigos: int | list[int] | set[int] | None = None,
-                               motivo: str = "Categoria alterada", rids: list[int] | None = None) -> int:
+                               motivo: str = "Categoria alterada", rids: list[int] | None = None,
+                               sobrescrever: bool = False) -> int:
     """Marca respostas já conferidas/revisadas que pertencem às categorias indicadas (ou RIDs específicos)
     com o status 'alterada', exigindo reconferência pelo pesquisador após mudança conceitual ou estrutural.
     
@@ -705,10 +746,11 @@ def marcar_respostas_alteradas(qid: str, codigos: int | list[int] | set[int] | N
             tocar = True
         
         if tocar and (r.get("validado") or r.get("origem") == "humano"):
-            r["alterada"] = True
-            r["alterada_em"] = agora
-            r["alterada_motivo"] = motivo
-            modificados += 1
+            if not r.get("alterada") or sobrescrever:
+                r["alterada"] = True
+                r["alterada_em"] = agora
+                r["alterada_motivo"] = motivo
+                modificados += 1
             
     if modificados:
         cod["status"] = "rascunho"
@@ -718,8 +760,8 @@ def marcar_respostas_alteradas(qid: str, codigos: int | list[int] | set[int] | N
 
 def renomear(qid: str, ref, novo_nome: str, nova_definicao: str | None = None, por: str | None = None) -> dict:
     """Muda nome e/ou definição. O histórico guarda o antes e o depois dos dois.
-    Se a definição mudar, respostas já conferidas nessa categoria ganham status 'alterada'
-    para reconferência pelo pesquisador. (Mudança no nome pode ser incluída futuramente)."""
+    Se o nome ou a definição mudar, respostas já conferidas nessa categoria ganham status 'alterada'
+    para reconferência pelo pesquisador."""
     f = _exigir_frame(qid)
     c = _cat(f, ref)
     antigo, def_antiga = c["nome"], c.get("definicao", "")
@@ -734,12 +776,15 @@ def renomear(qid: str, ref, novo_nome: str, nova_definicao: str | None = None, p
     _marcar_edicao(c, por)
     _registrar(f, "renomear" if nome_mudou else "definir", codigo=c["codigo"], de=antigo, para=c["nome"], por=por, **extra)
     _gravar(qid, "frame.json", f)
-    if def_mudou:
+    if def_mudou or nome_mudou:
+        if def_mudou and nome_mudou:
+            motivo = f"Nome e definição da categoria alterados para '{c['nome']}'"
+        elif def_mudou:
+            motivo = f"Definição da categoria '{c['nome']}' alterada"
+        else:
+            motivo = f"Nome da categoria alterado para '{c['nome']}'"
         for q in _membros_quadro(qid):
-            marcar_respostas_alteradas(q, c["codigo"], f"Definição da categoria '{c['nome']}' alterada")
-    # Futuramente: se mudança de nome também exigir reconferência:
-    # if nome_mudou:
-    #     marcar_respostas_alteradas(qid, c["codigo"], f"Nome da categoria alterado para '{c['nome']}'")
+            marcar_respostas_alteradas(q, c["codigo"], motivo)
     return f
 
 
@@ -799,28 +844,119 @@ def editar_keywords(qid: str, ref, adicionar=(), remover=(), fixar=(), por: str 
     return f
 
 
-def fundir(qid: str, destino, *origens) -> dict:
+def fundir(qid: str, destino, *origens, novo_nome: str | None = None, nova_definicao: str | None = None, novas_keywords: list[str] | None = None, por: str | None = None) -> dict:
     snapshot_antes(qid, "mesclar categorias")
     """Funde as categorias `origens` em `destino` (exemplos são somados; códigos das origens somem).
-    Se já houver codificação, os códigos fundidos são remapeados em codificacao.json."""
+    Opcionalmente atualiza o nome, definição e palavras-chave da categoria unificada.
+    Se já houver codificação, os códigos fundidos são remapeados em codificacao.json,
+    e as respostas já existentes no destino também ganham status 'alterada' se o escopo mudou."""
     f = _exigir_frame(qid)
     d = _cat(f, destino)
+    antigo_nome = d["nome"]
+    antiga_def = d.get("definicao", "")
     remap = {}
+    origens_nomes = []
     for o in origens:
         c = _cat(f, o)
         if c is d:
             continue
         if c.get("fixa"):
             raise ValueError("categorias fixas (Outros, NS/NR) não podem ser fundidas")
+        origens_nomes.append(c["nome"])
         d["exemplos"] = (d.get("exemplos") or []) + (c.get("exemplos") or [])
         if c.get("keywords"):
             d["keywords"] = _limpar_keywords((d.get("keywords") or []) + c["keywords"], d.get("keywords_bloqueadas"))
         remap[c["codigo"]] = d["codigo"]
         f["categorias"].remove(c)
-    _registrar(f, "fundir", destino=d["codigo"], origens=list(remap))
+
+    if novo_nome and novo_nome.strip():
+        d["nome"] = novo_nome.strip()
+    if nova_definicao is not None and nova_definicao.strip():
+        d["definicao"] = nova_definicao.strip()
+    if novas_keywords is not None:
+        d["keywords"] = _limpar_keywords(novas_keywords, d.get("keywords_bloqueadas"))
+
+    _marcar_edicao(d, por)
+    _registrar(f, "fundir", destino=d["codigo"], origens=list(remap), novo_nome=d["nome"], nova_definicao=d.get("definicao", ""), por=por)
     _gravar(qid, "frame.json", f)
     _remapear_codificacao(qid, remap, motivo=f"Categoria mesclada em '{d['nome']}'")
+
+    dest_mudou = (d["nome"] != antigo_nome or d.get("definicao", "") != antiga_def or bool(remap))
+    if dest_mudou:
+        nomes_juntos = ", ".join(f"'{n}'" for n in origens_nomes) if origens_nomes else "outra categoria"
+        motivo_dest = f"Categoria '{d['nome']}' redefinida após fusão com {nomes_juntos}"
+        for q in _membros_quadro(qid):
+            marcar_respostas_alteradas(q, d["codigo"], motivo=motivo_dest)
+
     return f
+
+
+def sugerir_fusao(qid: str, destino, *origens) -> dict:
+    """Usa IA para propor nome unificado, definição sintetizada e palavras-chave ao fundir categorias."""
+    f = _exigir_frame(qid)
+    d = _cat(f, destino)
+    cats_origem = [_cat(f, o) for o in origens if _cat(f, o) is not d]
+    if not cats_origem:
+        raise ValueError("Selecione pelo menos uma categoria de origem diferente do destino.")
+
+    # Fallback determinístico caso IA não esteja disponível
+    todas_kws = list(d.get("keywords") or [])
+    for c in cats_origem:
+        todas_kws.extend(c.get("keywords") or [])
+    kws_fallback = _limpar_keywords(todas_kws, d.get("keywords_bloqueadas"))[:8]
+    nomes_origens = " e ".join(c["nome"] for c in cats_origem)
+    nome_fallback = f"{d['nome']} e {nomes_origens}" if len(f"{d['nome']} e {nomes_origens}") <= 50 else d["nome"]
+    defs_fallback = " / ".join(filter(None, [d.get("definicao", "")] + [c.get("definicao", "") for c in cats_origem]))
+
+    system = (
+        "Você é um especialista em taxonomia e livros de códigos para pesquisa quantitativa e qualitativa. "
+        "Seu objetivo é sugerir a unificação de categorias de respostas abertas, sintetizando seu nome, "
+        "definição e palavras-chave de forma concisa, coesa e natural. Responda em português do Brasil."
+    )
+
+    bloco_cats = [f"- DESTINO: Código {d['codigo']} | Nome: '{d['nome']}' | Definição: '{d.get('definicao', '')}' | Keywords: {', '.join(d.get('keywords') or [])}"]
+    for c in cats_origem:
+        bloco_cats.append(f"- ORIGEM: Código {c['codigo']} | Nome: '{c['nome']}' | Definição: '{c.get('definicao', '')}' | Keywords: {', '.join(c.get('keywords') or [])}")
+
+    try:
+        rotulo = V.por_id(qid).get("rotulo")
+    except KeyError:
+        rotulo = qid
+    enunciado = f.get("enunciado") or rotulo or qid
+    user = f"""CONTEXTO DO PROJETO:
+{config.CONTEXTO_PROJETO}
+
+PERGUNTA:
+{enunciado}
+
+CATEGORIAS A SEREM FUNDIDAS:
+{chr(10).join(bloco_cats)}
+
+TAREFA:
+Proponha a melhor combinação para a categoria unificada:
+1. `nome_sugerido`: Nome conciso (1 a 4 palavras) que capture a ideia comum ou una ambos os aspectos (ex.: "Metodologia e qualidade de ensino").
+2. `definicao_sugerida`: Definição de 1 a 2 frases claras delimitando o escopo unificado.
+3. `keywords_sugeridas`: 3 a 8 palavras/termos mais representativos para a categoria unificada.
+"""
+    try:
+        saida = llm.chamar_json(system, user, SCHEMA_SUGESTAO_FUSAO, nome=f"sugestao_fusao_{qid}")
+        return {
+            "nome_sugerido": saida.get("nome_sugerido", "").strip() or nome_fallback,
+            "definicao_sugerida": saida.get("definicao_sugerida", "").strip() or defs_fallback,
+            "keywords_sugeridas": _limpar_keywords(saida.get("keywords_sugeridas") or kws_fallback),
+            "raciocinio": saida.get("raciocinio", ""),
+            "destino": {"codigo": d["codigo"], "nome": d["nome"], "definicao": d.get("definicao", "")},
+            "origens": [{"codigo": c["codigo"], "nome": c["nome"], "definicao": c.get("definicao", "")} for c in cats_origem],
+        }
+    except Exception as e:
+        return {
+            "nome_sugerido": nome_fallback,
+            "definicao_sugerida": defs_fallback,
+            "keywords_sugeridas": kws_fallback,
+            "raciocinio": f"Fallback automático: {e}",
+            "destino": {"codigo": d["codigo"], "nome": d["nome"], "definicao": d.get("definicao", "")},
+            "origens": [{"codigo": c["codigo"], "nome": c["nome"], "definicao": c.get("definicao", "")} for c in cats_origem],
+        }
 
 
 def adicionar(qid: str, nome: str, definicao: str = "", por: str | None = None) -> dict:
