@@ -47,10 +47,10 @@ def _logs(qid: str) -> dict[int, dict]:
 
 
 def estimar(qid: str, aplicar: bool = False) -> dict:
+    logs = _logs(qid)  # a parte lenta vem ANTES de ler a codificação: encurta a janela entre ler e gravar (PEND-31)
     cod = CD.codificacao(qid)
     if not cod:
         return {"qid": qid, "itens": 0, "casaram": 0, "sem_carimbo": 0, "por_modelo": {}}
-    logs = _logs(qid)
     n_pendentes, casou = 0, Counter()
     for i in cod["itens"]:
         if i.get("classificado_por") or i.get("origem") not in ("llm", "llm+comentario"):

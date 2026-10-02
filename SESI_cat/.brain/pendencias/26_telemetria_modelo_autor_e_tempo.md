@@ -40,3 +40,10 @@ resumo: "Hoje cada item tem origem, frame_versao e revisado_por; o 'modelo' fica
 - **Backfill:** `python src/telemetria_backfill.py -p sesi [--aplicar]`. Só carimba quando o `llm_log` traz o mesmo rid com a mesma categoria, confiança e justificativa; marca `classificado_por_estimado: true`. Simulação no SESI (02/10): ~5.800 de ~7.300 respostas casam; o resto fica "desconhecido". **Ainda não aplicado** na base real (nuvem): aguarda o OK do Gabriel.
 - **Testes:** `test_supervisao.py` (test_9, 10, 11). Suíte: 179 passam.
 - **Fica para a PEND-27:** painel e tela para ler os eventos; guardar o resumo de cada auditoria no `historico` da pergunta (PEND-23).
+
+## Backfill aplicado na base real (02/10, ~14:20)
+- Backup da nuvem antes: `tabulador/projetos/sesi_cat/output/_backup/nuvem_20261002_141754.json` (mais o snapshot por pergunta que o próprio backfill guarda em `blobs_historico`).
+- Aplicado em **Q2, Q4, Q5, Q29, Q30, Q32, Q33** (projeto `sesi`), uma pergunta por vez, conferindo depois de cada uma: mesmos rids, nenhum campo alterado além dos 3 novos, conferidas por pessoa e status iguais. Carimbadas: Q2 19, Q4 646, Q5 1.882, Q29 1.301, Q30 268, Q32 312, Q33 119.
+- **Q35 NÃO aplicada:** a Sara estava revisando nela na hora (presença), e escrever a pergunta inteira ao mesmo tempo pode apagar os ✓ dela (PEND-31). Aplicar quando ninguém estiver em Q35: `python src/telemetria_backfill.py -p sesi Q35 --aplicar` (simulação: 1.244 casam).
+- O projeto `sesi_categorias_novas` não foi tocado.
+- **A PEND-26 fica `aberta` para a finalização** (decisão do Gabriel: guardar para depois).
