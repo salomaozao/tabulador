@@ -84,10 +84,10 @@ class TestAdministracaoGrupos(unittest.TestCase):
             self.assertEqual(CF.frame("Q32")["status"], "aprovado")           # segue com o quadro dela
             CF.renomear("Q32", 1, "B")                                          # e dá para editar
             self.assertEqual(CF.frame("Q32")["categorias"][0]["nome"], "B")
-            grupos_frame._gravar_grupo("motivo_troca", "frame.json", {"status": "rascunho", "categorias": [{"codigo": 7, "nome": "G"}]})
+            grupos_frame._gravar_grupo("motivo_troca", "frame.json", {"status": "rascunho", "categorias": [{"codigo": 7, "nome": "G", "definicao": "g"}]})
             self.assertEqual(CF.frame("Q32")["categorias"][0]["nome"], "G")     # quadro do grupo passa a valer
-            with self.assertRaises(NotImplementedError):
-                CF.renomear("Q32", 7, "H")
+            CF.renomear("Q32", 7, "H")                                          # e a edição passa a valer para o grupo
+            self.assertEqual(grupos_frame.frame("motivo_troca")["categorias"][0]["nome"], "H")
 
     def test_sem_arquivo_vale_o_projeto_py(self):
         self.assertEqual(list(grupos_frame.todos()), ["motivo_troca"])

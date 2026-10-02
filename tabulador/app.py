@@ -93,6 +93,7 @@ def _payload_pergunta(qid: str) -> dict:
         "respostas": {k: v for k, v in (resp or {}).items() if k != "respostas"},
         "frame": frame,
         "pode_desfazer_refino": CF._existe(qid, "frame_anterior.json"),
+        "avisos_atributo": CF.avisos_atributo(frame),
         "codificacao": {k: v for k, v in (cod or {}).items() if k != "itens"} if cod else None,
         "itens": itens,
         "contagens": {str(k): v for k, v in contagens.items()},
@@ -1137,6 +1138,57 @@ def api_grupos():
                           for q in V.perguntas_codificaveis()],
             "sugestoes": [{**s, "rotulos": [V.por_id(q).get("rotulo") for q in s["perguntas"]]} for s in grupos_frame.sugerir()],
         })
+    except Exception as e:
+        return _erro(e, 500)
+
+
+def _payload_grupo(nome: str) -> dict:
+    """Quadro do grupo + cobertura (quantas respostas de cada pergunta a IA leu) + andamento por pergunta."""
+    cfg = grupos_frame.todos()[nome]
+    f = grupos_frame.frame(nome)
+    return {"nome": nome, "rotulo": cfg.get("rotulo", nome), "instrucoes_frame": cfg.get("instrucoes_frame", ""),
+            "perguntas": [grupos_frame._situacao(q) | {"qid": q, "rotulo": V.por_id(q).get("rotulo")} for q in cfg.get("perguntas", [])],
+            "frame": f, "cobertura": (f or {}).get("cobertura"), "avisos_atributo": CF.avisos_atributo(f),
+            "pode_desfazer_refino": bool(f) and (grupos_frame.pasta(nome) / "frame_anterior.json").exists()}
+
+
+@app.get("/api/grupo/<nome>")
+def api_grupo(nome):
+    try:
+        if nome not in grupos_frame.todos():
+            raise KeyError(f"Grupo desconhecido: {nome}")
+        return jsonify(_payload_grupo(nome))
+    except Exception as e:
+        return _erro(e)
+
+
+@app.post("/api/grupo/<nome>/frame/induzir")
+def api_grupo_induzir(nome):
+    """Gera o quadro do grupo lendo as respostas de TODAS as perguntas (a cobertura volta no payload)."""
+    try:
+        d = request.get_json(silent=True) or {}
+        if nome not in grupos_frame.todos():
+            raise KeyError(f"Grupo desconhecido: {nome}")
+        with _lock, progresso.operacao(f"Gerando categorias do grupo · {grupos_frame.rotulo(nome)}", [("ler", "Ler as respostas de todas as perguntas do grupo"),
+                                                                         ("ia", "A IA lê as respostas e propõe as categorias", 10), ("gravar", "Gravar as categorias propostas")]):
+            grupos_frame.induzir(nome, forcar=True, min_cat=int(d.get("min", 6)), max_cat=int(d.get("max", 15)))
+        return jsonify(_payload_grupo(nome))
+    except Exception as e:
+        return _erro(e, 500)
+
+
+@app.post("/api/grupo/<nome>/frame/refinar")
+def api_grupo_refinar(nome):
+    """{feedback} -> a IA ajusta o quadro do grupo (uma categoria = um atributo; o que ela recusar volta em avisos_ultimo_refino)."""
+    try:
+        d = request.get_json() or {}
+        membros = grupos_frame.membros(nome)
+        if not membros or not grupos_frame.frame(nome):
+            raise KeyError(f"Grupo '{nome}' não existe ou ainda não tem quadro.")
+        with _lock, progresso.operacao(f"Ajustando as categorias do grupo · {grupos_frame.rotulo(nome)}", [("ia", "A IA revisa a lista conforme o seu pedido", 10),
+                                                                                  ("gravar", "Gravar a lista revisada")]):
+            CF.refinar(membros[0], d.get("feedback", ""))
+        return jsonify(_payload_grupo(nome))
     except Exception as e:
         return _erro(e, 500)
 

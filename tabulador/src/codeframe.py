@@ -50,7 +50,23 @@ def pasta(qid: str):
     return p
 
 
+_ARQ_QUADRO = ("frame.json", "frame_proposto.json", "frame_anterior.json")
+
+
+def _grupo_do_quadro(qid: str, nome: str) -> str | None:
+    """Grupo dono do arquivo de quadro `nome` de `qid` (None: o arquivo é da própria pergunta).
+    Pergunta de grupo com quadro compartilha UM frame; classificação e respostas continuam por pergunta."""
+    if nome not in _ARQ_QUADRO:
+        return None
+    import grupos_frame
+    return grupos_frame.grupo_efetivo(qid)[0]
+
+
 def _ler(qid: str, nome: str) -> dict | None:
+    grupo = _grupo_do_quadro(qid, nome)
+    if grupo:
+        import grupos_frame
+        return grupos_frame._ler_grupo(grupo, nome)
     if nuvem.ativa():
         return nuvem.ler(config.PROJETO, qid, nome)
     p = pasta(qid) / nome
@@ -66,6 +82,11 @@ def _gravar(qid: str, nome: str, dados: dict, permitir_reducao: bool = False) ->
         if nome == "codificacao.json":
             protecao.verificar(qid, atual, dados, permitir_reducao)
         protecao.salvar_versao(qid, nome, atual, "revisão")
+    grupo = _grupo_do_quadro(qid, nome)
+    if grupo:
+        import grupos_frame
+        grupos_frame._gravar_grupo(grupo, nome, dados)
+        return
     if nuvem.ativa():
         nuvem.gravar(config.PROJETO, qid, nome, dados)
         return
@@ -97,6 +118,10 @@ def restaurar_versao(qid: str, arquivo: str, gravado_em: str) -> dict:
 
 
 def _existe(qid: str, nome: str) -> bool:
+    grupo = _grupo_do_quadro(qid, nome)
+    if grupo:
+        import grupos_frame
+        return (grupos_frame.pasta(grupo) / nome).exists()
     if nuvem.ativa():
         return nuvem.existe(config.PROJETO, qid, nome)
     return (pasta(qid) / nome).exists()
@@ -112,6 +137,13 @@ def _remover(qid: str, nome: str, permitir_reducao: bool = False) -> bool:
         if nome == "codificacao.json":
             protecao.verificar(qid, atual, {"itens": []}, permitir_reducao)
         protecao.salvar_versao(qid, nome, atual, "antes de apagar", forcar=True)
+    grupo = _grupo_do_quadro(qid, nome)
+    if grupo:
+        import grupos_frame
+        p = grupos_frame.pasta(grupo) / nome
+        existia = p.exists()
+        p.unlink(missing_ok=True)
+        return existia
     if nuvem.ativa():
         return nuvem.remover(config.PROJETO, qid, nome)
     p = pasta(qid) / nome
@@ -266,20 +298,46 @@ SCHEMA_FRAME = {
 }
 
 
-def _linhas_inducao(dados: dict) -> tuple[list[str], str]:
-    """Respostas que a IA lê para propor/refinar o frame. Acima de config.MAX_RESPOSTAS_INDUCAO
-    respostas únicas, usa todas as repetidas (n>1) + amostra aleatória fixa das demais."""
+def _amostra_inducao(dados: dict) -> tuple[list[dict], dict]:
+    """Respostas que a IA lê para propor/refinar o quadro, e a cobertura por pergunta de origem.
+    Até config.MAX_RESPOSTAS_INDUCAO respostas únicas lê tudo. Acima disso: as repetidas (n>1) primeiro; em
+    grupo (respostas com `origem_qid`) cada pergunta recebe antes uma cota mínima, para uma pergunta
+    pequena não sumir do sorteio; o resto é sorteio de semente fixa."""
     validas = [r for r in dados["respostas"] if not r["nsnr"]]
     limite = config.MAX_RESPOSTAS_INDUCAO
-    nota = ""
-    if len(validas) > limite:
-        repetidas = [r for r in validas if r["n"] > 1][:limite]
-        resto = [r for r in validas if r["n"] == 1]
-        amostra = random.Random(0).sample(resto, max(0, min(len(resto), limite - len(repetidas))))
-        validas = sorted(repetidas + amostra, key=lambda r: r["rid"])
-        nota = f" (AMOSTRA de {len(validas)} das {dados['n_unicas']} respostas únicas)"
+    origem = lambda r: r.get("origem_qid")
+    origens = sorted({origem(r) for r in validas}, key=str)
+    sel: dict = {}
+    if len(validas) <= limite:
+        sel = {r["rid"]: r for r in validas}
+    else:
+        k = len(origens)
+        teto_rep = limite if k == 1 else limite // 2
+        for r in sorted([r for r in validas if r["n"] > 1], key=lambda r: -r["n"])[:teto_rep]:
+            sel[r["rid"]] = r
+        if k > 1:
+            cota = limite // (2 * k)
+            for o in origens:
+                faltam = cota - sum(1 for r in sel.values() if origem(r) == o)
+                resto = [r for r in validas if origem(r) == o and r["rid"] not in sel]
+                for r in random.Random(0).sample(resto, max(0, min(len(resto), faltam))):
+                    sel[r["rid"]] = r
+        resto = [r for r in validas if r["rid"] not in sel]
+        for r in random.Random(0).sample(resto, max(0, min(len(resto), limite - len(sel)))):
+            sel[r["rid"]] = r
+    escolhidas = sorted(sel.values(), key=lambda r: r["rid"])
+    cobertura = {"amostra": len(validas) > limite, "limite": limite, "perguntas": {
+        str(o): {"unicas": sum(1 for r in validas if origem(r) == o), "lidas": sum(1 for r in escolhidas if origem(r) == o)} for o in origens}}
+    return escolhidas, cobertura
+
+
+def _linhas_inducao(dados: dict) -> tuple[list[str], str]:
+    """Linhas de texto das respostas lidas pela IA (ver _amostra_inducao) e a nota de amostra."""
+    escolhidas, cob = _amostra_inducao(dados)
+    nota = f" (AMOSTRA de {len(escolhidas)} das {dados['n_unicas']} respostas únicas)" if cob["amostra"] else ""
     corta = lambda t: t if len(t) <= 400 else t[:400] + "…"
-    return [f"- ({r['n']}x) {corta(r['texto'])}" for r in validas], nota
+    com_origem = any(r.get("origem_qid") for r in escolhidas)
+    return [f"- ({r['n']}x) " + (f"[{r['origem_qid']}] " if com_origem else "") + corta(r["texto"]) for r in escolhidas], nota
 
 
 def _prompt_inducao(qid: str, dados: dict, spec: dict, min_cat: int, max_cat: int) -> tuple[str, str]:
@@ -366,6 +424,8 @@ SCHEMA_REFINO = {
     "additionalProperties": False,
     "properties": {
         "raciocinio": {"type": "string", "description": "O que foi alterado e por quê, em 1 a 3 frases."},
+        "avisos": {"type": "array", "items": {"type": "string"},
+                   "description": "Partes do pedido que NÃO foram atendidas por juntarem dois atributos/ideias numa categoria, com o motivo. Vazio se tudo foi atendido."},
         "categorias": {
             "type": "array",
             "items": {
@@ -383,28 +443,42 @@ SCHEMA_REFINO = {
             },
         },
     },
-    "required": ["raciocinio", "categorias"],
+    "required": ["raciocinio", "avisos", "categorias"],
 }
+
+
+def avisos_atributo(f: dict | None) -> list[dict]:
+    """Categorias cujo nome sugere DOIS atributos ("Preço e atendimento", "Estrutura / limpeza"). Só avisa:
+    pode ser falso alarme ("Ensino e aprendizagem"); quem decide é o pesquisador."""
+    saida = []
+    for c in (f or {}).get("categorias", []):
+        if c.get("fixa"):
+            continue
+        n = f" {c['nome'].lower()} "
+        if any(sep in n for sep in (" e ", " ou ", " / ", " & ", " + ", ",")):
+            saida.append({"codigo": c["codigo"], "nome": c["nome"],
+                          "msg": f"“{c['nome']}” parece juntar dois atributos; cada categoria deve ter um só — considere separar."})
+    return saida
 
 
 def refinar(qid: str, feedback: str) -> dict:
     """Loop de feedback do frame: a IA recebe o frame atual + o pedido do pesquisador
     ("junte X e Y", "separe Z", "falta categoria para W") e devolve o frame revisado.
     Categorias que continuam mantêm o código; fundidas/removidas são remapeadas na codificação."""
-    import grupos_frame
-    nome, _ = grupos_frame.grupo_efetivo(qid)
-    if nome:
-        raise NotImplementedError(
-            f"{qid} pertence ao grupo '{nome}': use refinar diretamente no grupo (em breve)."
-        )
     feedback = (feedback or "").strip()
     if not feedback:
         raise ValueError("Escreva o que deve mudar nas categorias.")
     atual = _exigir_frame(qid)
     if atual.get("fixo"):
         raise ValueError("Este frame é fixo (back-coding) e não pode ser refinado pela IA.")
-    spec = V.por_id(qid)
-    dados = respostas(qid)
+    import grupos_frame
+    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
+    if nome_grupo:
+        dados = grupos_frame.respostas(nome_grupo)
+        titulo = f"GRUPO DE PERGUNTAS: {grupos_frame.rotulo(nome_grupo)} (perguntas: {', '.join(grupos_frame.membros(nome_grupo))}; a tag [QID] indica a pergunta de cada resposta)"
+    else:
+        dados = respostas(qid)
+        titulo = f"PERGUNTA ({qid}): {dados.get('enunciado') or V.por_id(qid).get('rotulo')}"
     linhas, nota = _linhas_inducao(dados)
     cats = "\n".join(f"  {c['codigo']}: {c['nome']} - {c['definicao']}" for c in atual["categorias"] if not c.get("fixa"))
     instr = instrucoes_completas(qid)
@@ -415,7 +489,7 @@ def refinar(qid: str, feedback: str) -> dict:
     user = f"""CONTEXTO DO PROJETO
 {config.CONTEXTO_PROJETO}
 
-PERGUNTA ({qid}): {dados.get('enunciado') or spec.get('rotulo')}
+{titulo}
 
 CODE FRAME ATUAL:
 {cats}
@@ -431,6 +505,7 @@ Regras:
 3. `incorpora` = códigos de categorias atuais que foram FUNDIDAS nesta (lista vazia se nenhuma).
 4. Nome curto (1 a 4 palavras), definição de 1 frase, 2 a 4 exemplos LITERAIS das respostas e 3 a 8 keywords (palavras típicas das respostas da categoria).
 5. NÃO inclua 'Outros' nem 'NS/NR': são fixas.
+6. Cada categoria avalia UM atributo/ideia. Se o pedido mandar juntar dois atributos distintos numa categoria (ex.: "Preço e Atendimento"), NÃO atenda essa parte: mantenha-os separados e explique em `avisos`. Fundir só vale quando os dois são o mesmo atributo.
 {('Instruções gerais desta pergunta: ' + instr) if instr else ''}
 
 RESPOSTAS (frequência x texto){nota}:
@@ -473,6 +548,7 @@ RESPOSTAS (frequência x texto){nota}:
     f = dict(atual)
     f["categorias"] = novas + [c for c in atual["categorias"] if c.get("fixa")]
     f["raciocinio"] = saida.get("raciocinio", "")
+    f["avisos_ultimo_refino"] = saida.get("avisos") or []
     f["modelo"] = config.OPENAI_MODEL
     _registrar(f, "refinar_ia", pedido=feedback, remapeados={str(k): v for k, v in remap.items()})
     f["status"] = _status_apos_edicao(qid)
@@ -492,10 +568,11 @@ def desfazer_refino(qid: str) -> dict:
     _gravar(qid, "frame.json", anterior)
     _remover(qid, "frame_anterior.json")
     validos = {c["codigo"] for c in anterior["categorias"]}
-    cod = _ler(qid, "codificacao.json")
-    if cod:
-        orfaos = {i.get(k) for i in cod["itens"] for k in ("primaria", "secundaria")} - validos - {None}
-        _remapear_codificacao(qid, {o: CODIGO_OUTROS for o in orfaos}, motivo="Refino desfeito (categoria removida)")
+    for q in _membros_quadro(qid):
+        cod = _ler(q, "codificacao.json")
+        if cod:
+            orfaos = {i.get(k) for i in cod["itens"] for k in ("primaria", "secundaria")} - validos - {None}
+            _remapear_uma(q, {o: CODIGO_OUTROS for o in orfaos}, "Refino desfeito (categoria removida)")
     return anterior
 
 
@@ -551,11 +628,21 @@ def classificacao_iniciada(qid: str) -> bool:
     return _existe(qid, "codificacao.json")
 
 
-def _status_apos_edicao(qid: str) -> str:
+def _membros_quadro(chave: str) -> list[str]:
+    """Perguntas que usam o quadro de `chave` (uma pergunta ou o nome de um grupo): as do grupo, ou só ela."""
+    import grupos_frame
+    if grupos_frame.membros(chave):
+        return list(grupos_frame.membros(chave))
+    nome, _ = grupos_frame.grupo_efetivo(chave)
+    return list(grupos_frame.membros(nome)) if nome else [chave]
+
+
+def _status_apos_edicao(chave: str) -> str:
     """Aprovar as categorias é uma etapa só, antes da PRIMEIRA classificação. Depois disso, editar
     (renomear, mesclar, excluir, ajustar com a IA) vale na hora e não trava a classificação: as
-    respostas já são remapeadas, e as próximas chamadas à IA usam a lista nova."""
-    return "aprovado" if classificacao_iniciada(qid) else "rascunho"
+    respostas já são remapeadas, e as próximas chamadas à IA usam a lista nova. Em grupo, basta
+    uma das perguntas já ter classificação."""
+    return "aprovado" if any(classificacao_iniciada(q) for q in _membros_quadro(chave)) else "rascunho"
 
 
 def _registrar(f: dict, acao: str, **kw) -> None:
@@ -564,7 +651,8 @@ def _registrar(f: dict, acao: str, **kw) -> None:
     f["versao"] = int(f.get("versao") or 1) + 1
     f.setdefault("historico", []).append({"quando": datetime.now().isoformat(timespec="seconds"), "acao": acao, "versao": f["versao"], **kw})
     if f.get("status") == "aprovado":
-        f["status"] = _status_apos_edicao(f["pergunta"]) if f.get("pergunta") else "rascunho"
+        dono = f.get("grupo") or f.get("pergunta")
+        f["status"] = _status_apos_edicao(dono) if dono else "rascunho"
 
 
 def marcar_respostas_alteradas(qid: str, codigos: int | list[int] | set[int] | None = None,
@@ -617,12 +705,6 @@ def renomear(qid: str, ref, novo_nome: str, nova_definicao: str | None = None, p
     """Muda nome e/ou definição. O histórico guarda o antes e o depois dos dois.
     Se a definição mudar, respostas já conferidas nessa categoria ganham status 'alterada'
     para reconferência pelo pesquisador. (Mudança no nome pode ser incluída futuramente)."""
-    import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
-    if nome_grupo:
-        raise NotImplementedError(
-            f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
-        )
     f = _exigir_frame(qid)
     c = _cat(f, ref)
     antigo, def_antiga = c["nome"], c.get("definicao", "")
@@ -638,7 +720,8 @@ def renomear(qid: str, ref, novo_nome: str, nova_definicao: str | None = None, p
     _registrar(f, "renomear" if nome_mudou else "definir", codigo=c["codigo"], de=antigo, para=c["nome"], por=por, **extra)
     _gravar(qid, "frame.json", f)
     if def_mudou:
-        marcar_respostas_alteradas(qid, c["codigo"], f"Definição da categoria '{c['nome']}' alterada")
+        for q in _membros_quadro(qid):
+            marcar_respostas_alteradas(q, c["codigo"], f"Definição da categoria '{c['nome']}' alterada")
     # Futuramente: se mudança de nome também exigir reconferência:
     # if nome_mudou:
     #     marcar_respostas_alteradas(qid, c["codigo"], f"Nome da categoria alterado para '{c['nome']}'")
@@ -668,12 +751,6 @@ def editar_keywords(qid: str, ref, adicionar=(), remover=(), fixar=(), por: str 
     adicionar: vira keyword fixa (e sai das bloqueadas);
     remover  : sai das fixas e das aprendidas e fica BLOQUEADA (o aprendizado não a traz de volta);
     fixar    : uma keyword aprendida (keywords_auto) passa a ser fixa."""
-    import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
-    if nome_grupo:
-        raise NotImplementedError(
-            f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
-        )
     f = _exigir_frame(qid)
     c = _cat(f, ref)
     campos = ("keywords", "keywords_auto", "keywords_bloqueadas")
@@ -699,12 +776,6 @@ def editar_keywords(qid: str, ref, adicionar=(), remover=(), fixar=(), por: str 
 
 
 def fundir(qid: str, destino, *origens) -> dict:
-    import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
-    if nome_grupo:
-        raise NotImplementedError(
-            f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
-        )
     snapshot_antes(qid, "mesclar categorias")
     """Funde as categorias `origens` em `destino` (exemplos são somados; códigos das origens somem).
     Se já houver codificação, os códigos fundidos são remapeados em codificacao.json."""
@@ -729,12 +800,6 @@ def fundir(qid: str, destino, *origens) -> dict:
 
 
 def adicionar(qid: str, nome: str, definicao: str = "", por: str | None = None) -> dict:
-    import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
-    if nome_grupo:
-        raise NotImplementedError(
-            f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
-        )
     f = _exigir_frame(qid)
     usados = [c["codigo"] for c in f["categorias"] if not c.get("fixa")]
     codigo = (max(usados) + 1) if usados else 1
@@ -748,12 +813,6 @@ def adicionar(qid: str, nome: str, definicao: str = "", por: str | None = None) 
 
 def remover(qid: str, ref) -> dict:
     """Remove a categoria; respostas já codificadas nela caem em 'Outros'."""
-    import grupos_frame
-    nome_grupo, _ = grupos_frame.grupo_efetivo(qid)
-    if nome_grupo:
-        raise NotImplementedError(
-            f"{qid} pertence ao grupo '{nome_grupo}': edite o frame do grupo diretamente (em breve)."
-        )
     f = _exigir_frame(qid)
     c = _cat(f, ref)
     if c.get("fixa"):
@@ -780,8 +839,14 @@ def aprovar(qid: str) -> dict:
 
 
 def _remapear_codificacao(qid: str, remap: dict, motivo: str | None = None) -> None:
+    """Remapeia os códigos na classificação de TODAS as perguntas que usam o quadro de `qid`."""
     if not remap:
         return
+    for q in _membros_quadro(qid):
+        _remapear_uma(q, remap, motivo)
+
+
+def _remapear_uma(qid: str, remap: dict, motivo: str | None) -> None:
     cod = _ler(qid, "codificacao.json")
     if not cod:
         return

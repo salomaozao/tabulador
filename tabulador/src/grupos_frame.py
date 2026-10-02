@@ -150,6 +150,11 @@ def preparar(nome_grupo: str) -> dict:
     return dados
 
 
+def respostas(nome_grupo: str) -> dict:
+    """Respostas unificadas já preparadas (ou prepara agora, se ainda não existem)."""
+    return _ler_grupo(nome_grupo, "respostas.json") or preparar(nome_grupo)
+
+
 # ----------------------------------------------------------------------------- frame mestre
 def frame(nome_grupo: str) -> dict | None:
     """Lê o frame mestre do grupo."""
@@ -178,13 +183,10 @@ def induzir(nome_grupo: str, min_cat: int = 6, max_cat: int = 15, forcar: bool =
         "Você é um pesquisador sênior de pesquisa de mercado quantitativa, especialista em construir "
         "CODE FRAMES (livros de códigos) para perguntas abertas. Responda em português do Brasil."
     )
-    validas = [r for r in dados["respostas"] if not r.get("nsnr")]
-    limite = config.MAX_RESPOSTAS_INDUCAO
-    if len(validas) > limite:
-        import random
-        validas = random.Random(0).sample(validas, limite)
+    escolhidas, cobertura = CF._amostra_inducao(dados)
     corta = lambda t: t if len(t) <= 400 else t[:400] + "…"
-    linhas = [f"- ({r['n']}x) [{r['origem_qid']}] {corta(r['texto'])}" for r in validas]
+    linhas = [f"- ({r['n']}x) [{r['origem_qid']}] {corta(r['texto'])}" for r in escolhidas]
+    lidas = " · ".join(f"{q}: {c['lidas']} de {c['unicas']}" for q, c in cobertura["perguntas"].items())
 
     user = f"""CONTEXTO DO PROJETO
 {config.CONTEXTO_PROJETO}
@@ -192,13 +194,14 @@ def induzir(nome_grupo: str, min_cat: int = 6, max_cat: int = 15, forcar: bool =
 GRUPO DE PERGUNTAS: {rotulo(nome_grupo)}
 Perguntas membros: {', '.join(membros(nome_grupo))}
 Total de respostas únicas no grupo: {dados['n_unicas']}
+Respostas lidas por pergunta (únicas): {lidas}{' — AMOSTRA' if cobertura['amostra'] else ''}
 
 TAREFA
 Proponha um code frame FECHADO com {min_cat} a {max_cat} categorias para codificar TODAS as respostas abaixo.
 As categorias devem funcionar para TODAS as perguntas do grupo (indicadas por [QID] em cada resposta).
 Regras:
 1. Categorias mutuamente exclusivas, com nome curto (1 a 4 palavras) e definição objetiva de 1 frase.
-2. Cada categoria deve representar UMA ideia.
+2. Cada categoria avalia UM atributo/ideia; não junte conceitos distintos no mesmo nome ("Preço e Atendimento" é proibido).
 3. NÃO crie categorias 'Outros' nem 'NS/NR': são adicionadas automaticamente.
 4. Liste 2 a 4 exemplos LITERAIS por categoria.
 5. Ordene da mais frequente para a menos frequente.
@@ -208,7 +211,7 @@ Regras:
 RESPOSTAS (frequência x pergunta x texto):
 {chr(10).join(linhas)}
 """
-    progresso.etapa("ia", f"{len(linhas)} respostas · modelo {config.OPENAI_MODEL}",
+    progresso.etapa("ia", f"{lidas} · modelo {config.OPENAI_MODEL}",
                     estimativa=progresso.tempo_medio("frame_"))
     saida = llm.chamar_json(system, user, CF.SCHEMA_FRAME, nome=f"frame_grupo_{nome_grupo}")
     progresso.etapa("gravar", f"{len(saida['categorias'])} categorias")
@@ -230,6 +233,7 @@ RESPOSTAS (frequência x pergunta x texto):
         "gerado_em": datetime.now().isoformat(timespec="seconds"),
         "modelo": config.OPENAI_MODEL,
         "raciocinio": saida.get("raciocinio", ""),
+        "cobertura": cobertura,
         "categorias": categorias + [dict(f_) for f_ in CF.FIXAS],
         "historico": [],
         "versao": 1,
