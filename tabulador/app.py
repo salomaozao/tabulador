@@ -182,12 +182,20 @@ def _arquivo_resultado(tipo: str) -> Path:
 
 
 # ----------------------------------------------------------------------------- páginas
+@app.after_request
+def _adicionar_cabecalhos_cache(response):
+    if request.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
+
 @app.get("/")
 def index():
-    # sem cache e com ?v=<versão> nos estáticos: depois de atualizar o programa, o navegador nunca usa CSS/JS velhos
+    # sem cache e com ?v=<versão> dinâmica nos estáticos: a cada atualização de CSS/JS, o navegador baixa na hora sem precisar reiniciar o servidor
+    v = _versao_codigo()
     html = (Path(app.template_folder) / "index.html").read_text(encoding="utf-8")
-    html = html.replace("/static/app.css", f"/static/app.css?v={VERSAO}").replace("/static/app.js", f"/static/app.js?v={VERSAO}")
-    return html, 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store"}
+    html = html.replace("/static/app.css", f"/static/app.css?v={v}").replace("/static/app.js", f"/static/app.js?v={v}")
+    return html, 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, no-cache, must-revalidate"}
 
 
 @app.get("/relatorio/<qid>")
@@ -1284,7 +1292,7 @@ def api_grupos_dissolver(nome):
 
 @app.get("/api/versao")
 def api_versao():
-    return jsonify({"versao": VERSAO, "pid": os.getpid()})
+    return jsonify({"versao": _versao_codigo(), "pid": os.getpid()})
 
 
 def _porta_ocupada(porta: int) -> bool:
