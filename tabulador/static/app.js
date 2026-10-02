@@ -1639,7 +1639,7 @@ function renderGrupo() {
     <div class="q-cab">
       <div class="q-cab-txt">
         <div class="small"><a href="#painel">← Painel geral</a> · <a href="#grupos">Gerenciar grupos</a></div>
-        <h1>🔗 ${esc(G.rotulo)} <small>${esc(P.grupo.membros.join(" + "))}</small></h1>
+        <h1>🔗 ${esc(G.rotulo)} <small>${esc(P.grupo.membros.join(" + "))}</small> <span class="pill warn" style="font-size:12px;vertical-align:middle" title="A lógica dos grupos ainda vai mudar (PEND-38)">EM DESENVOLVIMENTO</span></h1>
         <div>${G.fechado ? `<span class="pill ok" style="font-weight:600;padding:5px 10px">✓ Grupo fechado: todas as perguntas concluídas</span>`
           : `<span class="pill warn">Grupo em andamento — ${G.andamento.filter((a) => a.classificacao === "aprovado").length} de ${G.andamento.length} perguntas concluídas</span>`}</div>
       </div>
@@ -1756,7 +1756,8 @@ async function renderGrupos() {
       <span class="small">· ${s.em_comum ? `só ${s.em_comum} ${s.em_comum === 1 ? "pessoa respondeu" : "pessoas responderam"} as duas (${pctBR(s.pct)})` : "ninguém respondeu as duas"}</span></span>
       <button class="btn sm" data-sug="${i}">Criar grupo com estas</button></div>`).join("");
   $("#main").innerHTML = `
-    <h1>Grupos de perguntas</h1>
+    <h1>Grupos de perguntas <span class="pill warn" style="font-size:12px;vertical-align:middle">EM DESENVOLVIMENTO</span></h1>
+    <div class="aviso">🚧 <b>Em desenvolvimento.</b> A lógica dos grupos (quadro único, aprovação por pergunta) ainda vai mudar — a ideia é ter categorias base do grupo mais categorias próprias de cada pergunta (PEND-38). Use com cuidado e evite montar trabalho grande em cima dela por enquanto.</div>
     <div class="info">Um grupo junta perguntas que se complementam — quem responde uma não responde a outra (por exemplo, nota baixa × nota alta) — para que dividam
       <b>o mesmo quadro de categorias</b>. Cada pergunta continua sendo classificada e conferida separadamente. Mexer num grupo que já tem trabalho feito mostra um aviso antes de gravar.</div>
     ${sugestoes ? `<h2>Sugestões <small>pares de perguntas que quase ninguém respondeu juntas</small></h2><div class="gr-sugs">${sugestoes}</div>` : ""}
