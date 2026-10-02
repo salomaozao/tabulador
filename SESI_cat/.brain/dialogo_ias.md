@@ -1054,3 +1054,20 @@ Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancor
 - **PEND-40:** degradê verde, % à direita, projeção em 3 cenários (lento = p25, atual = média dos últimos 7 dias ativos, rápido = p75; some com menos de 2 dias com evolução) e previsão de conclusão na legenda. Eixo X agora em escala de calendário. Bônus: o gráfico usava `<polyline d>` (inválido), então a linha verde nunca era desenhada; trocado por `<path>`.
 
 **Próxima IA / Handoff:** validar as 3 na tela e mergear. Esta branch mexe em `app.js`/`app.css`, a `feat/congelar-resposta` também; esperar pequenos conflitos.
+
+---
+
+## 2026-10-02 — merges finais (PEND-42, 39, 40, 41) e correção da planilha de revisão
+
+**Autor:** Claude Sonnet 5.5 · operador: Gabriel Nascimento
+
+**Feito (main):**
+- `ba12596` merge de `feat/congelar-resposta` (PEND-42: congelar uma resposta; remove a trava por pergunta).
+- `0940272` merge de `feat/ui-troca-projeto-grafico-parar` (de outro agente: PEND-39 troca de projeto sem F5, PEND-40 gráfico de progresso, PEND-41 parar classificação), sem conflito, a pedido do Gabriel ("faça o merge"); semáforo estava 🟢.
+- **Bug meu achado na revisão:** `revisao.xlsx` ganhava uma coluna técnica `congelada` com o dicionário em texto. Corrigido (`23907ed`, merge `8c80645`): a coluna agora diz "sim"; a importação ignora a revisão das linhas congeladas e devolve `_congeladas_ignoradas`. Teste novo em `tests/test_congelar.py`.
+- Suíte na main: 192 passam, 1 pulado. Worktrees e branches mergeadas removidas; semáforo ⚪ NEUTRO (só a main).
+- App reiniciado em http://127.0.0.1:5000 com o código final (o processo antigo reportava a versão nova mas rodava o backend velho: o `/api/versao` recalcula o hash a cada chamada).
+
+**Pendente:** o Gabriel relatou "erros na hora de importar a planilha" sem dizer qual (carregar a base, importar `revisao.xlsx` ou o assistente de projeto novo). `/api/load` com a planilha real funciona em modo isolado (5.624 respondentes, 8 s). Faltam o texto do erro e o ponto da tela.
+
+**Próxima IA / Handoff:** pedir ao Gabriel o texto exato do erro antes de mexer no import.
