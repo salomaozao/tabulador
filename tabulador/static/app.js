@@ -534,7 +534,7 @@ function render() {
       <div class="q-cab-txt">
         <div class="small"><a href="#painel">← Painel geral</a></div>
         <h1>${esc(P.rotulo)} <small>${esc(P.qid)}</small></h1>
-        <div class="muted">${esc(R.enunciado || "")}</div>
+        <div class="muted">${esc(R.enunciado || P.enunciado || "")}</div>
         <div class="small">Quem respondeu: ${esc(R.base_descricao || "")}</div>
         <div id="presenca-banner"></div>
         ${C ? `<div style="margin-top:6px"><a class="btn sm ghost" href="#area-revisao" id="link-ir-revisao">↓ ir para a revisão</a></div>` : ""}
@@ -608,6 +608,7 @@ function render() {
   $("#b-saude-quadro")?.addEventListener("click", () => abrirJanelaSaudeQuadro());
   $("#b-reabrir")?.addEventListener("click", async () => refresh(await post(`/api/pergunta/${P.qid}/reabrir`, {}, "Reabrindo…")));
   bindFrame(); bindAcoesCod(); bindCodificacao(); bindAprovarBar();
+  medirAlturasFixas(); observarCabecalho();
 }
 
 // ---------------------------------------------------------------- frame
@@ -1705,6 +1706,7 @@ function renderGrupo() {
     ${P.codificacao ? renderCodificacao() : `<div class="info">Aprove as categorias em cada pergunta e classifique uma amostra para liberar a revisão.</div>`}
   `;
   bindFrame(); bindGrupo(); bindCodificacao();
+  medirAlturasFixas(); observarCabecalho();
 }
 function bindGrupo() {
   const P = state.P, G = P._G;
@@ -2452,9 +2454,28 @@ async function renderUsage() {
   $("#u-atualizar").onclick = renderUsage;
 }
 
-// altura real da barra do topo (quebra em 2 linhas em telas estreitas): usada pelos cabeçalhos fixos
-function medirTopo() { document.documentElement.style.setProperty("--topo", $(".top").offsetHeight + "px"); }
-window.addEventListener("resize", medirTopo);
+// alturas reais dos cabeçalhos fixos (topo, q-cab e revbar): mantêm sticky sincronizado sem sobreposição
+let roCab = null;
+function medirAlturasFixas() {
+  const topEl = $(".top");
+  if (topEl) document.documentElement.style.setProperty("--topo", topEl.offsetHeight + "px");
+  const qEl = $(".q-cab");
+  if (qEl) document.documentElement.style.setProperty("--qcab-h", qEl.offsetHeight + "px");
+  else document.documentElement.style.removeProperty("--qcab-h");
+  const revEl = $(".revbar-sticky");
+  if (revEl) document.documentElement.style.setProperty("--revbar-h", revEl.offsetHeight + "px");
+  else document.documentElement.style.removeProperty("--revbar-h");
+}
+function observarCabecalho() {
+  if (roCab) { roCab.disconnect(); roCab = null; }
+  const qEl = $(".q-cab");
+  if (qEl && window.ResizeObserver) {
+    roCab = new ResizeObserver(() => medirAlturasFixas());
+    roCab.observe(qEl);
+  }
+}
+function medirTopo() { medirAlturasFixas(); }
+window.addEventListener("resize", medirAlturasFixas);
 
 // ---- modo teste (IA simulada)
 function aplicarModoTeste() {
@@ -2729,14 +2750,14 @@ $("#btn-novo").onclick = () => { fecharPainelProjeto(); if (location.hash === "#
 function rota() {
   const h = decodeURIComponent(location.hash.slice(1));
   if (state.qid && h !== state.qid) pararPresenca();
-  if (h === "novo") renderNovo();
-  else if (h === "grupos") renderGrupos();
-  else if (h === "usage") renderUsage();
-  else if (h === "resultados") renderResultados();
-  else if (h === "gerenciar") renderGerenciar();
+  if (h === "novo") { renderNovo(); medirAlturasFixas(); observarCabecalho(); }
+  else if (h === "grupos") { renderGrupos(); medirAlturasFixas(); observarCabecalho(); }
+  else if (h === "usage") { renderUsage(); medirAlturasFixas(); observarCabecalho(); }
+  else if (h === "resultados") { renderResultados(); medirAlturasFixas(); observarCabecalho(); }
+  else if (h === "gerenciar") { renderGerenciar(); medirAlturasFixas(); observarCabecalho(); }
   else if (h.startsWith("grupo/") && state.status.perguntas.some((s) => s.grupo?.nome === h.slice(6))) abrirGrupo(h.slice(6));
   else if (h && h !== "painel" && state.status.perguntas.some((s) => s.qid === h)) abrir(h);
-  else renderPainel();
+  else { renderPainel(); medirAlturasFixas(); observarCabecalho(); }
 }
 window.addEventListener("hashchange", rota);
 // programa atualizado/reiniciado com a página aberta: avisa para recarregar (senão botões novos falham)
