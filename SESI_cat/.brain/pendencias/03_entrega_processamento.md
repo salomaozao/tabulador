@@ -6,6 +6,7 @@ criticidade: alta
 status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-09-28
+prazo: 2026-10-07
 resumo: "O processamento começa em 28/09, logo depois do fim do campo. A planilha categorizada (Q*_CAT preenchidas) precisa estar pronta para alimentar o relatório em PPT e Power BI."
 ---
 
@@ -19,3 +20,6 @@ resumo: "O processamento começa em 28/09, logo depois do fim do campo. A planil
 - `output/base_processamento_categorizada.xlsx` gerada com a base final (PEND-01 resolvida).
 - Categorias revisadas no loop de validação, com a taxa de acerto da IA registrada.
 - Arquivo enviado à Jucimara e ao Matheus.
+
+## Atualização (02/10): novo prazo
+- Meta de entrega: **quarta-feira, 07/10**, depois que as novas respostas de segunda (05/10) forem incorporadas (PEND-01).
