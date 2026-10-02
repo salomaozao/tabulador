@@ -874,3 +874,51 @@ Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancor
 
 **Próxima IA / Handoff:**
 - Worktree `worktrees/tabulador-header-sticky` pronta para revisão e merge pelo Gabriel.
+
+---
+
+## 2026-10-02 14:35 — feat(brain): integração da gestão de worktrees e gatekeeper de merge na esteira MetaGPT
+
+**Autor:** Antigravity (Gemini 3.8 Flash) · operador: Gabriel Nascimento
+**Onde:** `.brain` (governança multi-agente, `manage_brain.py`, `state.json`, `ciclos.md`, `README.md`)
+
+**Contexto:** O Gabriel solicitou documentar dentro do `.brain` o status em tempo real de todas as worktrees concorrentes, para que a última IA ativa saiba exatamente quando todas estiverem desocupadas/prontas e possa iniciar o processo de merge sequencial em `main`, integrado formalmente à metodologia MetaGPT.
+
+**Feito:**
+- **Papel MetaGPT (Role `Integrator`):**
+  - Adicionada a fase `INTEGRATION` (`FASES_ORDEM = [..., "QA", "INTEGRATION", "MERGED"]`) com a role `Integrator` e missão: *"Verificar semáforo de worktrees, integrar branches para main e desmontar worktrees desocupadas"*.
+- **Rastreamento de Concorrência em `state.json`:**
+  - Adicionado schema canônico `worktrees` mapeando identificador, caminho, branch, tarefa (`PEND-XX`), agente, status (`EM_ANDAMENTO`, `PRONTO_PARA_MERGE`, `DESOCUPADA`, `BLOQUEADA`, `MERGED`), contagem de diffs pendentes e commits.
+  - Adicionado bloco `merge_gatekeeper` com indicador de prontidão de merge (`status: LIBERADO | BLOQUEADO | NEUTRO`), lista de worktrees ocupadas vs prontas e instrução cognitiva para o próximo agente.
+- **Automação CLI em `manage_brain.py`:**
+  - `obter_raiz_git()` e `detectar_worktrees_git()`: Escaneia dinamicamente `git worktree list --porcelain`, `git status --porcelain` de cada worktree e `git branch --merged main`.
+  - `python .brain/scripts/manage_brain.py sop wt status`: Exibe o semáforo executivo formatado no terminal com diagnóstico claro.
+  - `python .brain/scripts/manage_brain.py sop wt set <worktree> <STATUS> [--tarefa PEND-XX] [--agente "Nome"]`: Atualiza o registro e sincroniza o `.brain`.
+  - `python .brain/scripts/manage_brain.py sop can-merge`: Guard-rail programático que retorna `exit 0` se liberado para merge ou `exit 1` se houver worktrees ocupadas.
+  - `python .brain/scripts/manage_brain.py sop merge-start`: Inicia a fase `INTEGRATION` na esteira MetaGPT caso o gatekeeper aprove.
+  - Validação estrita em `sop avancar`: Transição da fase `INTEGRATION` para `MERGED` bloqueada se houver qualquer worktree com diff pendente ou status `EM_ANDAMENTO`.
+- **Visibilidade Executiva em `ciclos.md` & `README.md`:**
+  - O `manage_brain.py sync` renderiza automaticamente a seção `## 🚦 Semáforo de Worktrees & Concorrência (MetaGPT Integrator)` com tabela viva.
+  - Documentação da role `Integrator` e comandos SOP no `.brain/README.md`.
+- **Propagação Canônica:** Script propagado com paridade idêntica para `INSPER/.brain` e `Transpetro/.brain`.
+
+**Próxima IA / Handoff:**
+- Para verificar se pode iniciar merge: execute `python .brain/scripts/manage_brain.py sop can-merge` ou `sop wt status`.
+- Para marcar sua worktree como concluída: `python .brain/scripts/manage_brain.py sop wt set <worktree> PRONTO_PARA_MERGE --tarefa PEND-XX --agente <Nome>`.
+- A última IA ativa (ao ver o semáforo 🟢 LIBERADO) pode rodar `sop merge-start` e conduzir a integração para `main`.
+
+
+---
+
+## 2026-10-02 — feat(tabulador): backfill de telemetria aplicado; trava de confirmações (PEND-42) e categorias em ordem alfabética (PEND-43) em worktree
+
+**Autor:** Claude Sonnet 5.5 · operador: Gabriel Nascimento
+
+**Feito:**
+- **Backfill da PEND-26 aplicado** em Q2, Q4, Q5, Q29, Q30, Q32 e Q33 do projeto `sesi` (Q35 ficou de fora: a Sara estava nela). Backup antes: `nuvem_20261002_141754.json`. Detalhes na PEND-26.
+- **Worktree** `worktrees/tabulador-trava-ordem`, branch `feat/trava-confirmacao-e-ordem-categorias` (a partir de `ca12d8c`): `fe3bd48` (PEND-43) e `8c6ffdb` (PEND-42). Suíte na worktree: 183 passam (copiei `projetos/sesi_cat/data` só para rodar os testes e apaguei depois). **Não mergeada na main.**
+
+**Próxima IA / Handoff:**
+- Merge da branch na main depende do Gabriel validar na tela. Não fazer `git checkout` na raiz: use a worktree.
+- Q35 ainda sem o carimbo do backfill (`python src/telemetria_backfill.py -p sesi Q35 --aplicar`, com ninguém em Q35).
+- PEND-24 (tela Versões) em validação pelo Gabriel.
