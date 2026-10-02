@@ -4,10 +4,11 @@ titulo: Aprendizado do quadro, etapa 2B (IA reescreve definição, inclui/não i
 objetivo_relacionado: OBJ-02
 modulo_afetado: [tabulador, src/aprendizado.py, src/codeframe.py]
 criticidade: media
-status: aberto
+status: resolvido
 responsavel: Gabriel Nascimento
 data_abertura: 2026-09-30
-resumo: "aprendizado.atualizar_descricoes(qid): manda à IA o dossiê só das categorias com sinal (confusão, auditor, 25+ revisões novas). O schema é restrito: só definicao, inclui, nao_inclui e keywords por código existente, sem estrutura. Aplica sozinho, registra antes/depois + evidências (rids) no histórico, avisa na tela e permite reverter para a versão N (desfazer multinível no lugar do frame_anterior.json)."
+data_resolucao: 2026-10-01
+resumo: "Concluída / absorvida: refinamento e proposta de definições com IA já incorporados na Saúde do Quadro (PEND-28) com visualização de diff e aprovação humana."
 ---
 
 # PEND-19: Reescrita automática da descrição

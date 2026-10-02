@@ -1,5 +1,5 @@
 ---
-id: PEND-44
+id: PEND-46
 titulo: Erros ao importar a planilha (relatado em 02/10, sem o texto do erro)
 objetivo_relacionado: OBJ-01
 modulo_afetado: [tabulador, src/load.py, src/coding.py, app.py, static/app.js]
@@ -10,7 +10,7 @@ data_abertura: 2026-10-02
 resumo: "O Gabriel disse no fim de 02/10 que 'deu uns erros na hora de importar a planilha', sem dizer qual botão nem a mensagem. Não reproduzido: /api/load com a planilha real funciona em modo isolado (5.624 respondentes, 8 s) e a exportação/importação do revisao.xlsx passa nos testes. Antes de mexer no código, PERGUNTAR ao Gabriel: qual botão, qual mensagem, e em qual instância (5000 real ou 5001 de teste)."
 ---
 
-# PEND-44: Erros ao importar a planilha
+# PEND-46: Erros ao importar a planilha
 
 - **Candidatos (por ordem de probabilidade):**
   1. **"Ler a planilha agora" / "Recarregar planilha"** (`POST /api/load`, `src/load.py`). Se foi na instância de TESTE (porta 5001, `TABULADOR_OUTPUT` temporário), o ambiente era artificial: a planilha tinha sido copiada para a worktree e, por um clique indevido num botão escondido, a instância entrou em "modo teste" (IA simulada, pasta `*_teste`). Esse estado não existe mais (instância encerrada, `.env` apagado).

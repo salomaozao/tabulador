@@ -1083,7 +1083,7 @@ Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancor
 **Estado em uma linha:** `main` integrada (PEND-23, 24, 26, 39–43), sem worktrees, suíte com 192 passando, app em http://127.0.0.1:5000 com o código final; **nada enviado ao GitHub** (main ~49 commits à frente).
 
 **Pendente para a próxima IA (nesta ordem):**
-1. **PEND-44:** perguntar ao Gabriel qual erro apareceu "ao importar a planilha" (botão, mensagem, instância). Não mexer no import antes disso.
+1. **PEND-46:** perguntar ao Gabriel qual erro apareceu "ao importar a planilha" (botão, mensagem, instância). Não mexer no import antes disso.
 2. **PEND-45:** lembrar o Gabriel de rotacionar a chave da OpenAI que saiu no terminal.
 3. Perguntar se pode **publicar no GitHub** (PEND-22/16) e aplicar o backfill da **Q35** (PEND-26) quando a Sara não estiver nela.
 4. Entrega do cliente na **quarta 07/10** (PEND-01/03; mais respostas entram na segunda 05/10).

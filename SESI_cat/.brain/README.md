@@ -37,7 +37,8 @@ flowchart LR
     ARCH --> TASKS["3. WBS / Tarefas\n(Project Manager)"]
     TASKS --> DEV["4. Código & Testes\n(Engineer)"]
     DEV --> QA["5. Laudo QA\n(QA Auditor)"]
-    QA --> MERGE["6. Merge & Prod\n(Main Branch)"]
+    QA --> INT["6. Integração\n(Integrator)"]
+    INT --> MERGE["7. Produção\n(Main Branch)"]
 ```
 
 ### Papéis e Responsabilidades (Roles)
@@ -46,6 +47,7 @@ flowchart LR
 3. **Project Manager:** Consome a arquitetura e elabora `03_TASKS.json` (decomposição atômica de tarefas WBS, dependências e critérios de verificação).
 4. **Engineer:** Consome sua tarefa específica e implementa o código na worktree cirúrgica, garantindo testes unitários locais.
 5. **QA Auditor:** Executa suítes completas de validação (`unittest`, `node --check`, scripts de integridade) e emite `04_QA_REPORT.md`.
+6. **Integrator (Gatekeeper de Worktrees):** Monitora o semáforo de concorrência. Quando todas as worktrees concorrentes estiverem desocupadas/prontas, a última IA assume esta role para integrar sequencialmente as branches em `main`, rodar testes de regressão e desmontar worktrees desocupadas.
 
 ---
 
@@ -57,10 +59,25 @@ Ao iniciar uma sessão, execute no terminal:
 python .brain/scripts/manage_brain.py sop status
 ```
 *Ou consulte diretamente `.brain/state.json`.*
-- Identifique o **Ciclo Ativo**, a **Fase Atual** e a **Role da Vez**.
+- Identifique o **Ciclo Ativo**, a **Fase Atual**, a **Role da Vez** e o **Semáforo de Worktrees**.
 - Assuma a persona designada para aquela fase e trabalhe estritamente no artefato correspondente.
 
-### 2. Operação dos Comandos SOP
+### 2. Gestão de Worktrees & Concorrência Multi-Agente
+```bash
+# Ver o status em tempo real de todas as worktrees e se o merge está liberado:
+python .brain/scripts/manage_brain.py sop wt status
+
+# Atualizar o status da sua worktree ao iniciar ou concluir:
+python .brain/scripts/manage_brain.py sop wt set <sua-worktree> PRONTO_PARA_MERGE --tarefa PEND-XX --agente "MeuAgente"
+
+# Verificar se você é a última IA e se todas as worktrees estão desocupadas para iniciar o merge:
+python .brain/scripts/manage_brain.py sop can-merge
+
+# Iniciar a fase de integração quando o semáforo estiver verde:
+python .brain/scripts/manage_brain.py sop merge-start
+```
+
+### 3. Operação dos Comandos SOP
 ```bash
 # Iniciar uma nova frente de trabalho / feature:
 python .brain/scripts/manage_brain.py sop novo <slug> --titulo "Título da Demanda" --obj OBJ-01

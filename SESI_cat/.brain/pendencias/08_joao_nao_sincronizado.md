@@ -3,10 +3,11 @@ id: PEND-08
 titulo: João baixou o Tabulador do GitHub e não vê a revisão sincronizada (falta .env/credenciais da nuvem)
 modulo_afetado: [tabulador, config.py, nuvem.py]
 criticidade: media
-status: aberto
+status: resolvido
 responsavel: Gabriel Nascimento
 data_abertura: 2026-09-24
-resumo: "João clonou o tabulador direto do GitHub, que só traz código (não traz .env nem SESI_cat/data, gitignorados de propósito). Sem as credenciais TABULADOR_TURSO_URL/TOKEN da equipe (ou o atalho OneDrive do SharePoint que o config.py acha sozinho), o app dele grava local e vazio: as respostas antigas da revisão ainda não sincronizaram com o banco da equipe."
+data_resolucao: 2026-10-01
+resumo: "Documentado e orientado: João recebeu instruções para uso do .env e apontamento para as credenciais da nuvem da equipe (Turso/OneDrive) necessárias para sincronização."
 ---
 
 # PEND-08: João sem sincronizar (clone via GitHub, sem nuvem configurada)

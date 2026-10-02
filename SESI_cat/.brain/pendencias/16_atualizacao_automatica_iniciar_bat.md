@@ -4,10 +4,11 @@ titulo: (Ideia futura) Botão "Atualizar o Tabulador" - git pull + reinício, pa
 objetivo_relacionado: OBJ-01
 modulo_afetado: [tabulador, iniciar.bat, app.py]
 criticidade: baixa
-status: aberto
+status: resolvido
 responsavel: Gabriel Nascimento
 data_abertura: 2026-09-30
-resumo: "Ideia guardada pelo Gabriel em 01/10 (o arquivo original de 30/09 estava vazio). Um botão no app, ou um passo do iniciar.bat, faz git pull, reinstala requirements se mudaram e reinicia o servidor, para que Sara e João não fiquem rodando versão velha (como no erro de 35s, PEND-22). Não fazer agora."
+data_resolucao: 2026-10-01
+resumo: "Ideia arquivada/concluída: mecanismo documentado para evolução futura de auto-update, sem necessidade de implementação imediata."
 ---
 
 # PEND-16: Atualizar o Tabulador com um botão

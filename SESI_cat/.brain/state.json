@@ -5,7 +5,7 @@
   "tarefa_atual": null,
   "worktree": "feat/amostra_controle",
   "instrucao_proximo_agente": "Role: Product Manager. Preencha e aprove o arquivo .brain/ciclos/2026-10-01_amostra_controle/01_PRD.md com requisitos e anti-escopos.",
-  "ultima_atualizacao": "2026-10-01T13:38:47.013193",
+  "ultima_atualizacao": "2026-10-02T16:00:21.364256",
   "historico_transicoes": [
     {
       "timestamp": "2026-09-29T18:00:00-03:00",
@@ -95,5 +95,16 @@
       "autor": "Product Manager",
       "nota": "Ciclo iniciado: Amostra de controle: erro real do que vai ao cliente sem conferência humana"
     }
-  ]
+  ],
+  "worktrees": {},
+  "merge_gatekeeper": {
+    "status": "NEUTRO",
+    "todas_desocupadas": true,
+    "total_worktrees": 0,
+    "ocupadas": [],
+    "prontas_para_merge": [],
+    "desocupadas": [],
+    "ultima_verificacao": "2026-10-02T16:00:21.364236",
+    "instrucao_ia": "Nenhuma worktree concorrente ativa. Árvore limpa para desenvolvimento."
+  }
 }
