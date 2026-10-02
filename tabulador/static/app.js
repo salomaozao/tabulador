@@ -112,9 +112,17 @@ async function api(path, opts = {}, msg, progresso = false) {
       throw new Error("o Tabulador não respondeu — a janela do programa foi fechada ou reiniciada. Abra-o de novo pelo atalho e recarregue a página.");
     });
     const j = await r.json().catch(() => ({ erro: r.statusText }));
+    if (r.status === 409 && j.precisa_confirmar) {
+      // mudança que afeta outras perguntas do grupo: mostra o impacto e reenvia já confirmada
+      if (msg) idle();
+      if (!confirm("Esta mudança afeta o grupo:\n\n• " + j.avisos.join("\n• ") + "\n\nContinuar?")) throw new Error("cancelado");
+      const corpo = opts.body ? JSON.stringify({ ...JSON.parse(opts.body), confirmado: true }) : undefined;
+      const url = opts.method === "DELETE" ? path + (path.includes("?") ? "&" : "?") + "confirmado=1" : path;
+      return api(url, { ...opts, ...(corpo ? { body: corpo } : {}) }, msg, progresso);
+    }
     if (!r.ok) throw new Error(j.erro || r.statusText);
     return j;
-  } catch (e) { toast("Erro: " + e.message, true); throw e; }
+  } catch (e) { if (e.message !== "cancelado") toast("Erro: " + e.message, true); throw e; }
   finally { if (msg) idle(); }
 }
 const post = (path, body, msg, progresso, opts = {}) => api(path, { method: "POST", body: JSON.stringify(body || {}), ...opts }, msg, progresso);

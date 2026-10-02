@@ -234,6 +234,7 @@ RESPOSTAS (frequência x pergunta x texto):
         "modelo": config.OPENAI_MODEL,
         "raciocinio": saida.get("raciocinio", ""),
         "cobertura": cobertura,
+        "aprovacoes": {},
         "categorias": categorias + [dict(f_) for f_ in CF.FIXAS],
         "historico": [],
         "versao": 1,
@@ -243,16 +244,92 @@ RESPOSTAS (frequência x pergunta x texto):
     return f
 
 
-def aprovar(nome_grupo: str) -> dict:
-    """Aprova o frame mestre do grupo."""
+# ----------------------------------------------------------------------------- aprovação por pergunta
+# O quadro é UM só, mas cada pergunta o aprova para si depois de conferir contra as respostas dela:
+# frame.json guarda "aprovacoes": {QID: {em, versao}} e o `status` que cada pergunta enxerga é calculado.
+def aprovacoes(f: dict | None) -> dict:
+    """Aprovações por pergunta. Quadro antigo (sem o campo) que estava aprovado vale para todas as perguntas."""
+    if not f:
+        return {}
+    if "aprovacoes" in f:
+        return f["aprovacoes"]
+    if f.get("status") == "aprovado":
+        return {q: {"em": f.get("aprovado_em"), "versao": f.get("versao")} for q in membros(f.get("grupo", ""))}
+    return {}
+
+
+def frame_para(nome_grupo: str, qid: str) -> dict | None:
+    """O quadro do grupo como a pergunta `qid` o vê: `status` aprovado só se ELA aprovou."""
+    f = frame(nome_grupo)
+    if not f:
+        return None
+    f = dict(f)
+    aprov = aprovacoes(f)
+    f["aprovacoes"] = aprov
+    f["status"] = "aprovado" if qid in aprov else "rascunho"
+    f["aprovado_em"] = (aprov.get(qid) or {}).get("em")
+    return f
+
+
+def para_gravar(f: dict) -> dict:
+    """Volta o frame lido por uma pergunta (frame_para) ao formato do grupo: o status do grupo é só
+    'alguma pergunta aprovou' e o aprovado_em é de uma pergunta específica, então não vai junto."""
+    f = dict(f)
+    f["status"] = "aprovado" if f.get("aprovacoes") else "rascunho"
+    f.pop("aprovado_em", None)
+    return f
+
+
+def aprovar_pergunta(nome_grupo: str, qid: str) -> dict:
+    """A pergunta `qid` aprova o quadro do grupo (as outras não são afetadas)."""
+    if qid not in membros(nome_grupo):
+        raise ValueError(f"{qid} não pertence ao grupo '{nome_grupo}'.")
     f = frame(nome_grupo)
     if not f:
         raise FileNotFoundError(f"Grupo '{nome_grupo}': frame.json não existe.")
-    f["status"] = "aprovado"
-    f["aprovado_em"] = datetime.now().isoformat(timespec="seconds")
-    f.setdefault("historico", []).append({"quando": f["aprovado_em"], "acao": "aprovar"})
-    _gravar_grupo(nome_grupo, "frame.json", f)
-    return f
+    f["aprovacoes"] = dict(aprovacoes(f))
+    agora = datetime.now().isoformat(timespec="seconds")
+    f["aprovacoes"][qid] = {"em": agora, "versao": f.get("versao")}
+    f.setdefault("historico", []).append({"quando": agora, "acao": "aprovar", "pergunta": qid})
+    _gravar_grupo(nome_grupo, "frame.json", para_gravar(f))
+    return frame_para(nome_grupo, qid)
+
+
+def andamento(nome_grupo: str) -> list[dict]:
+    """Por pergunta: aprovou o quadro? e em que pé está a classificação."""
+    import coding as CD
+    f = frame(nome_grupo)
+    aprov = aprovacoes(f)
+    return [{"qid": q, "quadro_aprovado": q in aprov, "classificacao": (CD.codificacao(q) or {}).get("status")} for q in membros(nome_grupo)]
+
+
+def fechado(nome_grupo: str) -> bool:
+    """O grupo fecha quando TODAS as perguntas estão concluídas (classificação aprovada)."""
+    a = andamento(nome_grupo)
+    return bool(a) and all(x["classificacao"] == "aprovado" for x in a)
+
+
+# Mudanças que mexem no que já foi classificado/conferido pedem confirmação (a tela mostra os avisos)
+ACOES_QUE_PEDEM_CONFIRMACAO = {"induzir", "refinar", "fundir", "remover", "definicao"}
+
+
+def impacto_edicao(nome_grupo: str, acao: str) -> dict:
+    """{nivel: 'alto'|'baixo', avisos: [...]} de mexer no quadro do grupo — o que cada pergunta perde ou remapeia."""
+    if acao not in ACOES_QUE_PEDEM_CONFIRMACAO:
+        return {"nivel": "baixo", "avisos": []}
+    avisos, alto = [], False
+    aprov = aprovacoes(frame(nome_grupo))
+    for q in membros(nome_grupo):
+        s = _situacao(q)
+        if s["n_cod"]:
+            alto = True
+            avisos.append(f"{q}: {s['n_cod']} respostas classificadas ({s['n_rev']} conferidas por pessoas) usam este quadro — "
+                          + ("serão apagadas e terão de ser refeitas." if acao == "induzir" else "serão remapeadas; as conferidas por pessoa voltam para reconferência."))
+        elif q in aprov:
+            avisos.append(f"{q}: já aprovou as categorias; essa aprovação será desfeita.")
+    if acao == "induzir" and aprov and not alto:
+        alto = True
+    return {"nivel": "alto" if alto else "baixo", "avisos": avisos}
 
 
 # ----------------------------------------------------------------------------- administração (aba Grupos)

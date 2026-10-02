@@ -132,16 +132,21 @@ class TestEdicaoDoGrupo(Base):
         c = CF.frame("Q32")["categorias"][0]
         self.assertEqual((c["nome"], c["definicao"], c["keywords"]), ("Valor", "Preço percebido", ["caro"]))
 
-    def test_sem_classificacao_a_edicao_volta_para_rascunho(self):
-        self.quadro_do_grupo(status="aprovado")
-        CF.adicionar("Q32", "Transporte")
-        self.assertEqual(grupos_frame.frame("motivo_troca")["status"], "rascunho")
+    def test_sem_classificacao_a_edicao_tira_a_aprovacao_da_pergunta(self):
+        f = self.quadro_do_grupo()
+        f["aprovacoes"] = {"Q32": {"em": "x", "versao": 1}}
+        grupos_frame._gravar_grupo("motivo_troca", "frame.json", f)
+        CF.adicionar("Q33", "Transporte")
+        self.assertEqual(CF.frame("Q32")["status"], "rascunho")
 
-    def test_com_classificacao_em_qualquer_pergunta_a_edicao_mantem_aprovado(self):
-        self.quadro_do_grupo(status="aprovado")
-        self.classificar("Q33", [1])  # só a Q33 foi classificada; a edição é feita pela Q32
+    def test_com_classificacao_a_edicao_mantem_a_aprovacao_so_de_quem_classificou(self):
+        f = self.quadro_do_grupo()
+        f["aprovacoes"] = {"Q32": {"em": "x", "versao": 1}, "Q33": {"em": "x", "versao": 1}}
+        grupos_frame._gravar_grupo("motivo_troca", "frame.json", f)
+        self.classificar("Q33", [1])  # só a Q33 classificou
         CF.adicionar("Q32", "Transporte")
-        self.assertEqual(grupos_frame.frame("motivo_troca")["status"], "aprovado")
+        self.assertEqual(CF.frame("Q33")["status"], "aprovado")
+        self.assertEqual(CF.frame("Q32")["status"], "rascunho")
 
 
 class TestRefinoDoGrupo(Base):

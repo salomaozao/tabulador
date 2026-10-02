@@ -59,6 +59,21 @@ def _erro(e: Exception, status: int = 400):
     return jsonify({"erro": str(e), "tipo": type(e).__name__, "trace": traceback.format_exc()}), status
 
 
+def _precisa_confirmar(qid_ou_grupo: str, acao: str, confirmado, por_grupo: bool = False):
+    """Mexer no quadro de um GRUPO pode apagar/remapear o que outras perguntas já classificaram: sem
+    `confirmado` devolve 409 com os avisos (o front mostra e reenvia com confirmado=true). None = pode seguir."""
+    if confirmado:
+        return None
+    nome = qid_ou_grupo if por_grupo else grupos_frame.grupo_efetivo(qid_ou_grupo)[0]
+    if not nome or not grupos_frame.frame(nome):
+        return None
+    imp = grupos_frame.impacto_edicao(nome, acao)
+    if imp["nivel"] != "alto":
+        return None
+    return jsonify({"precisa_confirmar": True, "avisos": imp["avisos"],
+                    "erro": "Esta mudança afeta o grupo todo: " + " ".join(imp["avisos"])}), 409
+
+
 def _payload_pergunta(qid: str) -> dict:
     spec = V.por_id(qid)
     resp = CF._ler(qid, "respostas.json")
@@ -714,6 +729,8 @@ def api_instrucoes(qid):
 def api_induzir(qid):
     try:
         d = request.get_json(silent=True) or {}
+        if (bloq := _precisa_confirmar(qid, "induzir", d.get("confirmado"))):
+            return bloq
         with _lock, progresso.operacao(f"Gerando categorias com IA · {qid}", [("ler", "Ler as respostas da base"), ("pedido", "Montar o pedido para a IA"),
                                                                             ("ia", "A IA lê as respostas e propõe as categorias", 10), ("gravar", "Gravar as categorias propostas")]):
             CF.induzir(qid, forcar=True, min_cat=int(d.get("min", 6)), max_cat=int(d.get("max", 15)))
@@ -727,6 +744,9 @@ def api_frame_categoria(qid):
     """{codigo, nome?, definicao?} edita; {nome, definicao} sem codigo adiciona."""
     try:
         d = request.get_json() or {}
+        if d.get("codigo") is not None and d.get("definicao") is not None                 and d["definicao"].strip() != (CF._cat(CF.frame(qid), d["codigo"]).get("definicao") or ""):
+            if (bloq := _precisa_confirmar(qid, "definicao", d.get("confirmado"))):
+                return bloq
         with _lock:
             if d.get("codigo") is None:
                 CF.adicionar(qid, d["nome"], d.get("definicao", ""), por=_por())
@@ -800,6 +820,8 @@ def api_frame_aprender(qid):
 @app.delete("/api/pergunta/<qid>/frame/categoria/<codigo>")
 def api_frame_remover(qid, codigo):
     try:
+        if (bloq := _precisa_confirmar(qid, "remover", request.args.get("confirmado"))):
+            return bloq
         with _lock:
             CF.remover(qid, codigo)
         return jsonify(_payload_pergunta(qid))
@@ -811,6 +833,8 @@ def api_frame_remover(qid, codigo):
 def api_frame_fundir(qid):
     try:
         d = request.get_json() or {}
+        if (bloq := _precisa_confirmar(qid, "fundir", d.get("confirmado"))):
+            return bloq
         with _lock:
             CF.fundir(qid, d["destino"], *d["origens"])
         return jsonify(_payload_pergunta(qid))
@@ -833,6 +857,8 @@ def api_frame_refinar(qid):
     """{feedback} -> a IA revisa o frame conforme o pedido do pesquisador."""
     try:
         d = request.get_json() or {}
+        if (bloq := _precisa_confirmar(qid, "refinar", d.get("confirmado"))):
+            return bloq
         with _lock, progresso.operacao(f"Ajustando as categorias com IA · {qid}", [("ia", "A IA revisa a lista conforme o seu pedido", 10),
                                                                                    ("gravar", "Gravar a lista revisada")]):
             CF.refinar(qid, d.get("feedback", ""))
@@ -1105,7 +1131,8 @@ def _info_grupo(qid: str) -> dict | None:
     if not nome:
         return None
     return {"nome": nome, "rotulo": cfg.get("rotulo", nome), "membros": cfg.get("perguntas", []),
-            "tem_quadro": grupos_frame.frame(nome) is not None}
+            "tem_quadro": grupos_frame.frame(nome) is not None,
+            "andamento": grupos_frame.andamento(nome), "fechado": grupos_frame.fechado(nome)}
 
 
 def _grupo_completo(nome: str, cfg: dict) -> dict:
@@ -1119,6 +1146,7 @@ def _grupo_completo(nome: str, cfg: dict) -> dict:
         "nome": nome, "rotulo": cfg.get("rotulo", nome), "instrucoes_frame": cfg.get("instrucoes_frame", ""),
         "membros": membros,
         "frame": {"status": f.get("status"), "n_categorias": len([c for c in f["categorias"] if not c.get("fixa")])} if f else None,
+        "andamento": grupos_frame.andamento(nome), "fechado": grupos_frame.fechado(nome),
     }
 
 
@@ -1148,7 +1176,8 @@ def _payload_grupo(nome: str) -> dict:
     f = grupos_frame.frame(nome)
     return {"nome": nome, "rotulo": cfg.get("rotulo", nome), "instrucoes_frame": cfg.get("instrucoes_frame", ""),
             "perguntas": [grupos_frame._situacao(q) | {"qid": q, "rotulo": V.por_id(q).get("rotulo")} for q in cfg.get("perguntas", [])],
-            "frame": f, "cobertura": (f or {}).get("cobertura"), "avisos_atributo": CF.avisos_atributo(f),
+            "frame": f, "cobertura": (f or {}).get("cobertura"),
+            "andamento": grupos_frame.andamento(nome), "fechado": grupos_frame.fechado(nome), "avisos_atributo": CF.avisos_atributo(f),
             "pode_desfazer_refino": bool(f) and (grupos_frame.pasta(nome) / "frame_anterior.json").exists()}
 
 
@@ -1169,6 +1198,8 @@ def api_grupo_induzir(nome):
         d = request.get_json(silent=True) or {}
         if nome not in grupos_frame.todos():
             raise KeyError(f"Grupo desconhecido: {nome}")
+        if (bloq := _precisa_confirmar(nome, "induzir", d.get("confirmado"), por_grupo=True)):
+            return bloq
         with _lock, progresso.operacao(f"Gerando categorias do grupo · {grupos_frame.rotulo(nome)}", [("ler", "Ler as respostas de todas as perguntas do grupo"),
                                                                          ("ia", "A IA lê as respostas e propõe as categorias", 10), ("gravar", "Gravar as categorias propostas")]):
             grupos_frame.induzir(nome, forcar=True, min_cat=int(d.get("min", 6)), max_cat=int(d.get("max", 15)))
@@ -1185,6 +1216,8 @@ def api_grupo_refinar(nome):
         membros = grupos_frame.membros(nome)
         if not membros or not grupos_frame.frame(nome):
             raise KeyError(f"Grupo '{nome}' não existe ou ainda não tem quadro.")
+        if (bloq := _precisa_confirmar(nome, "refinar", d.get("confirmado"), por_grupo=True)):
+            return bloq
         with _lock, progresso.operacao(f"Ajustando as categorias do grupo · {grupos_frame.rotulo(nome)}", [("ia", "A IA revisa a lista conforme o seu pedido", 10),
                                                                                   ("gravar", "Gravar a lista revisada")]):
             CF.refinar(membros[0], d.get("feedback", ""))

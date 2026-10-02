@@ -85,7 +85,7 @@ def _gravar(qid: str, nome: str, dados: dict, permitir_reducao: bool = False) ->
     grupo = _grupo_do_quadro(qid, nome)
     if grupo:
         import grupos_frame
-        grupos_frame._gravar_grupo(grupo, nome, dados)
+        grupos_frame._gravar_grupo(grupo, nome, grupos_frame.para_gravar(dados))
         return
     if nuvem.ativa():
         nuvem.gravar(config.PROJETO, qid, nome, dados)
@@ -599,7 +599,7 @@ def frame(qid: str) -> dict | None:
     import grupos_frame
     nome, _ = grupos_frame.grupo_efetivo(qid)
     if nome:
-        return grupos_frame.frame(nome)
+        return grupos_frame.frame_para(nome, qid)  # status = aprovação DESTA pergunta
     f = _ler(qid, "frame.json")
     # antes, qualquer edição depois de classificar voltava o frame para rascunho e travava a
     # classificação; frames que já foram aprovados e têm classificação voltam a valer
@@ -637,12 +637,12 @@ def _membros_quadro(chave: str) -> list[str]:
     return list(grupos_frame.membros(nome)) if nome else [chave]
 
 
-def _status_apos_edicao(chave: str) -> str:
+def _status_apos_edicao(qid: str) -> str:
     """Aprovar as categorias é uma etapa só, antes da PRIMEIRA classificação. Depois disso, editar
     (renomear, mesclar, excluir, ajustar com a IA) vale na hora e não trava a classificação: as
-    respostas já são remapeadas, e as próximas chamadas à IA usam a lista nova. Em grupo, basta
-    uma das perguntas já ter classificação."""
-    return "aprovado" if any(classificacao_iniciada(q) for q in _membros_quadro(chave)) else "rascunho"
+    respostas já são remapeadas, e as próximas chamadas à IA usam a lista nova. (Em grupo a aprovação
+    é por pergunta e o `_registrar` cuida dela; o status que a pergunta enxerga é calculado.)"""
+    return "aprovado" if classificacao_iniciada(qid) else "rascunho"
 
 
 def _registrar(f: dict, acao: str, **kw) -> None:
@@ -650,9 +650,11 @@ def _registrar(f: dict, acao: str, **kw) -> None:
     guarda a versão do frame com que foi feita, em `frame_versao`)."""
     f["versao"] = int(f.get("versao") or 1) + 1
     f.setdefault("historico", []).append({"quando": datetime.now().isoformat(timespec="seconds"), "acao": acao, "versao": f["versao"], **kw})
-    if f.get("status") == "aprovado":
-        dono = f.get("grupo") or f.get("pergunta")
-        f["status"] = _status_apos_edicao(dono) if dono else "rascunho"
+    if f.get("grupo"):
+        # como na pergunta sozinha: quem ainda não classificou perde a aprovação do quadro; quem já classificou mantém
+        f["aprovacoes"] = {q: a for q, a in (f.get("aprovacoes") or {}).items() if classificacao_iniciada(q)}
+    elif f.get("status") == "aprovado":
+        f["status"] = _status_apos_edicao(f["pergunta"]) if f.get("pergunta") else "rascunho"
 
 
 def marcar_respostas_alteradas(qid: str, codigos: int | list[int] | set[int] | None = None,
@@ -828,7 +830,8 @@ def aprovar(qid: str) -> dict:
     import grupos_frame
     nome, _ = grupos_frame.grupo_efetivo(qid)
     if nome:
-        return grupos_frame.aprovar(nome)
+        snapshot_antes(qid, "aprovar quadro")
+        return grupos_frame.aprovar_pergunta(nome, qid)
     snapshot_antes(qid, "aprovar quadro")
     f = _exigir_frame(qid)
     f["status"] = "aprovado"
