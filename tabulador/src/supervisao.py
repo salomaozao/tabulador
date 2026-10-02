@@ -40,8 +40,6 @@ def auto_aceitar(qid: str, limiar: float = LIMIAR_PADRAO, exigir_auditoria: bool
     """Confirma sozinho o que tem confiança >= limiar (e auditoria concordando, se exigido).
     Se categoria for informada, restringe a essa categoria.
     Nunca mexe no que uma pessoa já conferiu/corrigiu. Retorna a contagem por motivo."""
-    cod = CD.codificacao(qid)
-    CD._exigir_destravada(qid, cod, "aceitar respostas automaticamente")
     CF.snapshot_antes(qid, "aceite automático")
     cod = CD.codificacao(qid)
     if not cod:
@@ -51,6 +49,9 @@ def auto_aceitar(qid: str, limiar: float = LIMIAR_PADRAO, exigir_auditoria: bool
         if categoria is not None and i.get("primaria") != categoria:
             continue
         if i.get("primaria") is None or i.get("validado") or i.get("origem") == "humano":
+            continue
+        if i.get("congelada"):
+            n["congelada"] += 1
             continue
         motivo = None
         if i.get("origem") == "erro":
@@ -163,7 +164,7 @@ def auditar(qid: str, provedor: str | None = None, modelo: str | None = None, es
         raise RuntimeError(f"{qid}: ainda não há classificação para auditar")
     textos = {r["rid"]: r["texto"] for r in CF.respostas(qid)["respostas"]}
     alvo = [i for i in cod["itens"]
-            if i.get("primaria") is not None and not i.get("validado") and i.get("origem") not in ("humano", "regra", "erro")
+            if i.get("primaria") is not None and not i.get("validado") and not i.get("congelada") and i.get("origem") not in ("humano", "regra", "erro")
             and (escopo == "todas" or not i.get("auditoria"))]
     if not alvo:
         return {"auditadas": 0, "concorda": 0, "discorda": 0, "por": None}
