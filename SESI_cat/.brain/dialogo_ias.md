@@ -1041,3 +1041,16 @@ Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancor
 **Próxima IA / Handoff:**
 - Falta o Gabriel validar; depois merge na main (sem conflito esperado: parte de `490eab1`; a main só andou com handoffs e o rótulo "(recomendado)").
 - O app em http://127.0.0.1:5000 (se ainda estiver rodando) é da main antiga, com a trava por pergunta.
+
+---
+
+## 2026-10-02 — alterações de UI em worktree (PEND-39, 40, 41)
+
+**Autor:** Claude Sonnet 5.5 · operador: Gabriel Nascimento
+
+**Worktree `worktrees/tabulador-ui`, branch `feat/ui-troca-projeto-grafico-parar` (a partir de `eae3b91`), commits `d25d41c` e `f76d9c5`. Não mergeada. Suíte: 161 passam.**
+- **PEND-39:** NÃO consegui reproduzir (nem por chamada direta, nem clicando no menu, de todas as telas). Achei e corrigi um defeito real: o heartbeat de presença da pergunta antiga seguia rodando no projeto novo. `trocarProjeto` agora zera pergunta, filtros, grupo e rascunho de projeto novo. **Validar na tela; se ainda precisar de F5, pedir o passo a passo.**
+- **PEND-41:** guarda `parada_pedida()` no início de cada chamada (coding e supervisao); `progresso.interromper()` marca a etapa da IA como `interrompida` (⏹ âmbar, sem ✓ verde, barra proporcional ao feito); modal esconde o tempo restante ao parar e avisa "Cancelando lotes pendentes…"; lotes já em voo ganham a nota no log; toast e evento final dizem quantas ficaram salvas e pendentes.
+- **PEND-40:** degradê verde, % à direita, projeção em 3 cenários (lento = p25, atual = média dos últimos 7 dias ativos, rápido = p75; some com menos de 2 dias com evolução) e previsão de conclusão na legenda. Eixo X agora em escala de calendário. Bônus: o gráfico usava `<polyline d>` (inválido), então a linha verde nunca era desenhada; trocado por `<path>`.
+
+**Próxima IA / Handoff:** validar as 3 na tela e mergear. Esta branch mexe em `app.js`/`app.css`, a `feat/congelar-resposta` também; esperar pequenos conflitos.
