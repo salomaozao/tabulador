@@ -401,8 +401,7 @@ function renderPainel() {
   const nArq = Object.values(R).filter((r) => r.existe).length;
   $("#main").innerHTML = `
     <h1>${esc(S.projeto.nome)}</h1>
-    <div class="small">Planilha-fonte: ${esc(b.fonte)}</div>
-    ${b.carregada ? `<div class="small">Base: <b>${b.n}</b> respondentes · atualizada ${b.atualizada_em}</div>` : ""}
+    <div class="meta-base">${b.carregada ? `<span>Base: <b>${b.n}</b> respondentes</span><span>atualizada ${b.atualizada_em}</span>` : ""}<span title="${esc(b.fonte)}">Planilha: <b>${esc(String(b.fonte || "").split(/[\\/]/).pop())}</b></span></div>
     ${cabecalhoProjeto(S)}
     ${avisos.join("")}
     <h2>Perguntas abertas <small>${aprovadas} de ${S.perguntas.length} aprovadas${gruposVistos.size ? ` · ${[...gruposVistos.values()].filter((b) => b.grupo.fechado).length} de ${gruposVistos.size} grupos fechados` : ""}</small></h2>
@@ -1574,7 +1573,7 @@ function renderCodificacao() {
     const cards = [...grupos.values()].map((g) => `
       <div class="card-sug-grupo" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;background:var(--surface-2);border-radius:8px;margin-bottom:6px;font-size:13px">
         <div>
-          De: <b>${g.deCod}. ${esc(g.deNome)}</b> ➔ Sugestão: <b style="color:var(--accent)">${g.paraCod}. ${esc(g.paraNome)}</b>
+          De: <b>${g.deCod}. ${esc(g.deNome)}</b> ➔ Sugestão: <b style="color:var(--accent-text)">${g.paraCod}. ${esc(g.paraNome)}</b>
           <span class="small muted">(${g.rids.length} resposta${g.rids.length > 1 ? "s" : ""})</span>
         </div>
         <button type="button" class="btn sm ok b-aceitar-grupo" data-paracod="${g.paraCod}" data-rids="${g.rids.join(',')}">✓ Aceitar todas (${g.rids.length})</button>
