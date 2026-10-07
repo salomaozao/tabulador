@@ -699,7 +699,7 @@ function renderFrame() {
   return `
     ${F.raciocinio && !F.fixo ? `<div class="info">💡 ${esc(F.raciocinio)}</div>` : ""}
     ${avisos.length ? `<div class="aviso">⚠️ Uma categoria = um atributo:<ul>${avisos.map((m) => `<li>${esc(m)}</li>`).join("")}</ul></div>` : ""}
-    <table id="tab-frame"><thead><tr><th style="width:44px">Cód.</th><th style="width:16%">Categoria</th><th style="width:24%">Definição</th><th style="width:17%" title="Palavras típicas da categoria. Entram no pedido à IA como pista. Tracejadas = aprendidas com a revisão (📌 fixa, × descarta e não volta).">Palavras-chave</th><th>Exemplos</th><th class="num" style="width:60px">Prim.</th><th class="num" style="width:60px">Sec.</th><th class="num" style="width:90px">Menções</th><th style="width:200px">Ações</th></tr></thead>
+    <table id="tab-frame"><thead><tr><th style="width:44px">Cód.</th><th style="width:14%">Categoria</th><th style="width:21%">Definição</th><th style="width:13%" title="Palavras típicas da categoria. Entram no pedido à IA como pista. Tracejadas = aprendidas com a revisão (📌 fixa, × descarta e não volta).">Palavras-chave</th><th style="width:22%;min-width:150px">Exemplos</th><th class="num" style="width:60px">Prim.</th><th class="num" style="width:60px">Sec.</th><th class="num" style="width:90px">Menções</th><th style="width:200px">Ações</th></tr></thead>
     <tbody>${rows}
       ${F.fixo ? "" : `<tr class="frame-add"><td>+</td><td><input class="inline" id="f-novo-nome" placeholder="Nova categoria"></td><td><input class="inline" id="f-novo-def" placeholder="Definição (1 frase)"></td><td colspan="5"></td><td><button class="btn sm" id="f-add">Adicionar</button></td></tr>`}
     </tbody></table>
