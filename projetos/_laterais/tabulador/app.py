@@ -197,7 +197,7 @@ def index():
     # sem cache e com ?v=<versão> dinâmica nos estáticos: a cada atualização de CSS/JS, o navegador baixa na hora sem precisar reiniciar o servidor
     v = _versao_codigo()
     html = (Path(app.template_folder) / "index.html").read_text(encoding="utf-8")
-    html = html.replace("/static/app.css", f"/static/app.css?v={v}").replace("/static/app.js", f"/static/app.js?v={v}")
+    html = html.replace("/static/app.css", f"/static/app.css?v={v}").replace("/static/app.js", f"/static/app.js?v={v}").replace("/static/icones.js", f"/static/icones.js?v={v}")
     return html, 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, no-cache, must-revalidate"}
 
 
