@@ -3,3 +3,6 @@ output/llm_log/
 .env
 # dados de cliente (planilha-fonte de cada projeto embutido em projetos/<slug>/): nunca versionar
 projetos/*/data/
+projetos/*/output/
+projetos/*/output_teste/
+.ui_check_tmp/
