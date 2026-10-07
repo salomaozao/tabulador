@@ -1136,9 +1136,9 @@ async function abrirJanelaSaudeQuadro() {
   const placarHtml = `
     <div class="sq-placar">
       <div class="sq-stat"><span class="sq-val">${resumo.total_categorias || 0}</span><span class="sq-lbl">Categorias no quadro</span></div>
-      <div class="sq-stat" style="border-left:4px solid var(--warn)"><span class="sq-val" style="color:var(--warn)">${atencao.length}</span><span class="sq-lbl">Com pontos de atenção</span></div>
+      <div class="sq-stat" style="border-color:color-mix(in srgb,var(--warn) 50%,var(--border))"><span class="sq-val" style="color:var(--warn)">${atencao.length}</span><span class="sq-lbl">Com pontos de atenção</span></div>
       <div class="sq-stat"><span class="sq-val">${raras.length}</span><span class="sq-lbl">Baixo volume (&lt; 1%)</span></div>
-      <div class="sq-stat" style="border-left:4px solid var(--ok)"><span class="sq-val" style="color:var(--ok)">${saudaveis.length}</span><span class="sq-lbl">Saudáveis</span></div>
+      <div class="sq-stat" style="border-color:color-mix(in srgb,var(--ok) 50%,var(--border))"><span class="sq-val" style="color:var(--ok)">${saudaveis.length}</span><span class="sq-lbl">Saudáveis</span></div>
     </div>
     <div class="sq-barra-topo">
       <div>
