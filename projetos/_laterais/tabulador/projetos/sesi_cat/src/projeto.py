@@ -1,4 +1,4 @@
-﻿"""Projeto SESI — Pesquisa de satisfação das Escolas SESI Minas (pais e responsáveis).
+"""Projeto SESI — Pesquisa de satisfação das Escolas SESI Minas (pais e responsáveis).
 
 Definição do projeto para o Tabulador (código em ../tabulador). Para abrir a
 interface já neste projeto, dê dois cliques em "Abrir Tabulador.bat" nesta pasta.
@@ -89,11 +89,13 @@ PERGUNTAS: list[dict] = [
     {"id": "date_modified", "tipo": "meta", "rotulo": "Data de conclusão"},
     {"id": "ESCOLA", "coluna": "custom_1", "tipo": "meta", "rotulo": "Escola (unidade SESI)"},
     # ---- perfil / NPS ------------------------------------------------------------------
+    {"id": "Q0", "tipo": "unica", "rotulo": "Termo de consentimento / Participação", "niveis": ["Sim"]},
     {"id": "Q1", "tipo": "unica", "rotulo": "Relação com o(a) aluno(a)",
      "niveis": ["Mãe", "Pai", "Responsável legal", "Outro vínculo. Qual?"]},
     {"id": "Q2", "tipo": "aberta", "rotulo": "Outro vínculo com o aluno (qual?)", "base": "vinculo_outro", "codificar": True,
      "instrucoes_frame": "Categorias de PARENTESCO/VÍNCULO com o aluno (ex.: Avó/Avô, Tia/Tio, Irmã/Irmão, Padrasto/Madrasta). Respostas com nome próprio de pessoa vão para NS/NR."},
     {"id": "Q3", "tipo": "numerica", "rotulo": "NPS - probabilidade de indicar a Escola SESI (0-10)", "nps": True},
+    {"id": "NPS", "tipo": "unica", "rotulo": "Classificação NPS (base)", "niveis": ["Promotor", "Neutro", "Detrator"]},
     {"id": "Q4", "tipo": "aberta", "rotulo": "O que precisa melhorar para nota 10", "base": "nps_0_7", "codificar": True,
      "instrucoes_frame": "Categorias de PONTOS A MELHORAR. " + _INSTR_ESCOLA},
     {"id": "Q5", "tipo": "aberta", "rotulo": "O que mais se destaca (motivo da nota alta)", "base": "nps_8_10", "codificar": True,
@@ -145,24 +147,15 @@ PERGUNTAS: list[dict] = [
     {"id": "Q35", "tipo": "aberta", "rotulo": "Principal melhoria para aumentar a satisfação", "codificar": True,
      "instrucoes_frame": "Categorias de SUGESTÃO DE MELHORIA. " + _INSTR_ESCOLA
                          + " Separe 'Nada a melhorar / está tudo bom' como categoria própria."},
+    # ---- segmentos escolares -----------------------------------------------------------
+    {"id": "SEG_INF", "coluna": "INF", "tipo": "meta", "rotulo": "Segmento - Educação Infantil"},
+    {"id": "SEG_FUND_INI", "coluna": "FUND_INI", "tipo": "meta", "rotulo": "Segmento - Ensino Fundamental Anos Iniciais"},
+    {"id": "SEG_FUND_FIN", "coluna": "FUND_FIN", "tipo": "meta", "rotulo": "Segmento - Ensino Fundamental Anos Finais"},
+    {"id": "SEG_MEDIO", "coluna": "MEDIO", "tipo": "meta", "rotulo": "Segmento - Ensino Médio"},
+    {"id": "SEG_MEDIO_INT", "coluna": "MEDIO_INT", "tipo": "meta", "rotulo": "Segmento - Ensino Médio Integrado"},
 ]
 
 # --------------------------------------------------------------------------------------
-
-# --------------------------------------------------------------------------------------
-# Grupos de perguntas com categorias compartilhadas
-# --------------------------------------------------------------------------------------
-GRUPOS = {
-    "motivo_troca": {
-        "rotulo": "Motivo para trocar de escola",
-        "perguntas": ["Q32", "Q33"],
-        "instrucoes_frame": (
-            "Categorias de MOTIVO PARA TROCAR DE ESCOLA (insatisfações com a escola e também motivos "
-            "externos, ex.: mudança de cidade, conclusão do ciclo/formatura, custo/mensalidade, "
-            "distância). Respostas que só remetem a respostas anteriores formam categoria própria."
-        ),
-    },
-}
 # Variáveis derivadas (banners dos cruzamentos)
 # --------------------------------------------------------------------------------------
 DERIVADAS = {
@@ -185,14 +178,16 @@ DERIVADAS = {
     "RETENCAO2": {
         "rotulo": "Intenção de manter o aluno", "origem": "Q31",
         "mapa": {"Certamente manterá": "Vai manter", "Provavelmente manterá": "Vai manter",
-                 "Provavelmente vai trocar de escola": "Pode trocar", "Certamente vai trocar de escola": "Pode trocar"},
+                 "Provavelmente vai trocar de escola": "Pode trocar", "Certamente vai trocar de escola": "Pode trocar",
+                 "NS/NR": None},
         "niveis": ["Vai manter", "Pode trocar"],
     },
     "SATISFACAO3": {
         "rotulo": "Satisfação geral (3 grupos)", "origem": "Q34",
         "mapa": {"Muito satisfeito(a)": "Satisfeitos", "Satisfeito(a)": "Satisfeitos",
                  "Nem satisfeito(a), nem insatisfeito(a)": "Neutros",
-                 "Insatisfeito(a)": "Insatisfeitos", "Muito insatisfeito(a)": "Insatisfeitos"},
+                 "Insatisfeito(a)": "Insatisfeitos", "Muito insatisfeito(a)": "Insatisfeitos",
+                 "NS/NR": None},
         "niveis": ["Satisfeitos", "Neutros", "Insatisfeitos"],
     },
 }
@@ -219,4 +214,3 @@ SAIDA_PLANILHA = {
     "colunas": {"Q2": "Q2_CAT", "Q4": "Q4_CAT", "Q5": "Q5_CAT", "Q29": "Q29_CAT", "Q30": "Q30_CAT",
                 "Q32": "Q32_CAT", "Q33": "Q33_CAT", "Q35": "Q35_CAT"},
 }
-

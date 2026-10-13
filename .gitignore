@@ -2,8 +2,20 @@
 # Todo o resto da pasta jumppi (outros projetos) fica fora.
 /*
 !/.gitignore
-!/tabulador/
-!/SESI_cat/
+!/projetos/
+/projetos/*
+!/projetos/SESI_cat/
+# SESI_cat: só a definição do projeto e a memória (.brain); o resto é cópia local do tabulador e material de cliente
+/projetos/SESI_cat/*
+!/projetos/SESI_cat/.brain/
+!/projetos/SESI_cat/LEIA-ME.md
+!/projetos/SESI_cat/Abrir Tabulador.bat
+!/projetos/SESI_cat/src/
+/projetos/SESI_cat/src/*
+!/projetos/SESI_cat/src/projeto.py
+!/projetos/_laterais/
+/projetos/_laterais/*
+!/projetos/_laterais/tabulador/
 
 # nunca versionar: chaves, dados de clientes e resultados (contêm respostas de pesquisa)
 .env
@@ -11,7 +23,7 @@
 !.env.example
 credentials.json
 token.json
-/SESI_cat/data/
+/projetos/SESI_cat/data/
 **/output/
 **/output_teste/
 **/output*/
@@ -24,4 +36,9 @@ token.json
 *.xls
 *.mp4
 *.docx
+*.zip
+*.bak
+*_old_backup.py
+.pytest_cache/
+settings.local.json
 SALVAR.txt

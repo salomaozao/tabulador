@@ -1,7 +1,0 @@
-{
- "ativo": "sesi",
- "projetos": {
-  "sesi": "projetos/sesi_cat",
-  "sesi_categorias_novas": "projetos/sesi_categorias_novas"
- }
-}

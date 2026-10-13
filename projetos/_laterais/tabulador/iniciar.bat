@@ -4,7 +4,7 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title Tabulador de respostas abertas
 
-rem ---- ambiente Python proprio (fora do OneDrive, para nao sincronizar milhares de arquivos)
+rem ---- ambiente Python proprio (fora do OneDrive, para nao sincronizar \milhares de arquivos)
 set "VENV=%LOCALAPPDATA%\Tabulador\venv"
 set "VPY=%VENV%\Scripts\python.exe"
 
