@@ -1111,3 +1111,25 @@ Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancor
 2. Validar o `feat/design-v2` na tela e, quando ele pedir, fazer o merge.
 3. Investigar as 2 falhas do `TestGabaritoSESI`.
 4. Apagar de vez a quarentena quando ele confirmar.
+
+---
+
+## 2026-10-13 (continuação) — "conclua tudo": merge do design e correção do gabarito SESI
+
+**Autor:** Claude Opus 5.5 · operador: Gabriel Nascimento ("conclua tudo")
+
+**Feito (main):**
+- `f48fac0`: commit da junção `projetos/SESI_cat/_sharepoint` → `Shortcuts/Projetos - Tabulador` (feita fora desta sessão, às 13:04), ignorada pelo git, com nota no LEIA-ME.
+- `1e2ad76`: merge de `feat/design-v2` (tokens de contraste AA, ícones SVG, PRODUCT/DESIGN.md, modo isolado opcional). Sem conflito. A suíte depois dele deu as mesmas 2 falhas de antes, sem regressão.
+- `d794fa1`: merge de `fix/gabarito-sesi` (`af54ce0`):
+  - `deduzir_filtro` passa a escolher a fechada mais precisa (folga de 2 p.p. para trocar a mais próxima). Na Q5, "Q3 entre 8 e 10" ganha de "NPS = Neutro ou Promotor", que incluía a nota 7: das 476 notas 7, só 3 responderam a Q5.
+  - `projeto.py` do SESI ganha "NS/NR" na Q31 (37 casos) e na Q34. Nos cruzamentos já aparecia no fim, então nenhum número muda.
+  - O teste do gabarito ignora colunas sem variação. Na base de 05/10, os segmentos INF/FUND_*/MEDIO* vieram vazios ou constantes; isso é um alerta sobre a base, vale conferir com o cliente.
+- **Suíte na main final (`d794fa1`): 192 passam, 1 pulado, 0 falhas.**
+- Worktrees `jumppi-design-v2` e `jumppi-fix-gabarito` e as branches foram removidas. Só a main ficou.
+
+**Pendente (Gabriel):**
+1. Orca: mover o SESI_cat para o grupo Jumppi e remover o `tabulador_design`, pela interface.
+2. Depois, mover `projetos/_laterais/tabulador_design` para a quarentena. O `mv` deu "Permission denied" porque a pasta está aberta em algum programa.
+3. Confirmar se pode apagar `_general/quarentena_2026-10-13/` de vez.
+4. Ver com o cliente por que as colunas de segmento vieram vazias na base de 05/10.

@@ -16,14 +16,13 @@ Este documento centraliza todos os ciclos de engenharia do projeto **Sesi Cat**,
 
 > **Regra de Ouro da Janela de Merge:** Nenhuma IA deve iniciar o merge para `main` enquanto houver qualquer worktree com status `EM_ANDAMENTO` ou com alterações não comitadas (`diff > 0`). O processo de merge só é liberado para a **última IA** quando todas as worktrees estiverem desocupadas/prontas.
 
-- **Status do Gatekeeper:** 🟢 **`LIBERADO`**
-- **Diagnóstico da Vez:** 🟢 TODAS AS WORKTREES DESOCUPADAS! A última IA deve assumir a Role: Integrator e iniciar o processo de merge sequencial das branches (25484-8e8e41aa-df82-4647-81e5-1d4a53e18210, jumppi-design-v2) para main.
-- **Total de Worktrees:** `2` (Ocupadas: `0` · Prontas: `2` · Desocupadas: `0`)
+- **Status do Gatekeeper:** ⚪ **`NEUTRO`**
+- **Diagnóstico da Vez:** Nenhuma worktree concorrente ativa. Árvore limpa para desenvolvimento.
+- **Total de Worktrees:** `0` (Ocupadas: `0` · Prontas: `0` · Desocupadas: `0`)
 
 | Worktree | Branch | Tarefa | Agente | Status | Diff Pendente | Situação |
 | :--- | :--- | :---: | :--- | :---: | :---: | :--- |
-| `25484-8e8e41aa-df82-4647-81e5-1d4a53e18210` | `(detached)` | `-` | Claude Code | `PRONTO_PARA_MERGE` | Limpo (0) | Pronta para merge |
-| `jumppi-design-v2` | `feat/design-v2` | `-` | Claude Code | `PRONTO_PARA_MERGE` | Limpo (0) | Pronta para merge |
+| *Nenhuma worktree concorrente ativa* | - | - | - | - | - | - |
 
 ---
 
