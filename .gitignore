@@ -5,14 +5,12 @@
 !/projetos/
 /projetos/*
 !/projetos/SESI_cat/
-# SESI_cat: só a definição do projeto e a memória (.brain); o resto é cópia local do tabulador e material de cliente
+# SESI_cat: só a memória (.brain), o LEIA-ME e o atalho; o resto é material de cliente.
+# A definição do projeto (projeto.py) fica em projetos/_laterais/tabulador/projetos/sesi_cat/.
 /projetos/SESI_cat/*
 !/projetos/SESI_cat/.brain/
 !/projetos/SESI_cat/LEIA-ME.md
 !/projetos/SESI_cat/Abrir Tabulador.bat
-!/projetos/SESI_cat/src/
-/projetos/SESI_cat/src/*
-!/projetos/SESI_cat/src/projeto.py
 !/projetos/_laterais/
 /projetos/_laterais/*
 !/projetos/_laterais/tabulador/
