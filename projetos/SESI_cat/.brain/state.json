@@ -5,7 +5,7 @@
   "tarefa_atual": null,
   "worktree": "feat/amostra_controle",
   "instrucao_proximo_agente": "Role: Product Manager. Preencha e aprove o arquivo .brain/ciclos/2026-10-01_amostra_controle/01_PRD.md com requisitos e anti-escopos.",
-  "ultima_atualizacao": "2026-10-07T12:31:12.317333",
+  "ultima_atualizacao": "2026-10-13T12:46:57.730914",
   "historico_transicoes": [
     {
       "timestamp": "2026-09-29T18:00:00-03:00",
@@ -96,15 +96,49 @@
       "nota": "Ciclo iniciado: Amostra de controle: erro real do que vai ao cliente sem conferência humana"
     }
   ],
-  "worktrees": {},
+  "worktrees": {
+    "25484-8e8e41aa-df82-4647-81e5-1d4a53e18210": {
+      "identificador": "25484-8e8e41aa-df82-4647-81e5-1d4a53e18210",
+      "caminho": "C:/Users/GabrielNascimento/orca/workspaces/.orca-preparing/25484-8e8e41aa-df82-4647-81e5-1d4a53e18210",
+      "branch": "(detached)",
+      "tarefa": null,
+      "ciclo": null,
+      "agente": "Claude Code",
+      "status": "PRONTO_PARA_MERGE",
+      "diff_arquivos": [],
+      "diff_count": 0,
+      "merged_in_main": false,
+      "head": "b006f63",
+      "nota": "feat(tabulador): barra sticky de revisao com aprovacao rapida e metricas por respostas (PEND-13, PEND-15)",
+      "atualizado_em": "2026-10-13T12:46:57.730828"
+    },
+    "jumppi-design-v2": {
+      "identificador": "jumppi-design-v2",
+      "caminho": "C:/Users/GabrielNascimento/orca/workspaces/jumppi-design-v2",
+      "branch": "feat/design-v2",
+      "tarefa": null,
+      "ciclo": null,
+      "agente": "Claude Code",
+      "status": "PRONTO_PARA_MERGE",
+      "diff_arquivos": [],
+      "diff_count": 0,
+      "merged_in_main": false,
+      "head": "79b0884",
+      "nota": "fix(isolado): modo isolado passa a ser opt-in (TABULADOR_ISOLADO=1) e projetos.json volta ao da main",
+      "atualizado_em": "2026-10-13T12:46:57.730883"
+    }
+  },
   "merge_gatekeeper": {
-    "status": "NEUTRO",
+    "status": "LIBERADO",
     "todas_desocupadas": true,
-    "total_worktrees": 0,
+    "total_worktrees": 2,
     "ocupadas": [],
-    "prontas_para_merge": [],
+    "prontas_para_merge": [
+      "25484-8e8e41aa-df82-4647-81e5-1d4a53e18210",
+      "jumppi-design-v2"
+    ],
     "desocupadas": [],
-    "ultima_verificacao": "2026-10-07T12:31:12.317310",
-    "instrucao_ia": "Nenhuma worktree concorrente ativa. Árvore limpa para desenvolvimento."
+    "ultima_verificacao": "2026-10-13T12:46:57.730908",
+    "instrucao_ia": "🟢 TODAS AS WORKTREES DESOCUPADAS! A última IA deve assumir a Role: Integrator e iniciar o processo de merge sequencial das branches (25484-8e8e41aa-df82-4647-81e5-1d4a53e18210, jumppi-design-v2) para main."
   }
 }

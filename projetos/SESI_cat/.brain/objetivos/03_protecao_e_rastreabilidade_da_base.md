@@ -27,7 +27,7 @@ data_criacao: 2026-10-01
 
 ### 4. Anti-Escopo / No-Gos (Shape Up - Limites Rígidos)
 - ❌ **Não** montar o painel de administração antes de a telemetria existir e ter algumas semanas de dados.
-- ❌ **Não** trocar o Turso por outro banco nem criar um servidor central.
+- ❌ **Não** trocar o Turso por outro banco nem criar um servidor central. *(Revisto em 13/10/2026: a direção de longo prazo é virar site, ver [OBJ-04](04_tabulador_como_site.md). Vale até o OBJ-04 ser planejado.)*
 - ❌ **Não** versionar dados de cliente no git (os snapshots ficam no Turso e em `output/_backup`, que é ignorado pelo git).
 - ❌ **Não** criar login com senha. A identificação continua sendo o nome autodeclarado da aba (PEND-09).
 

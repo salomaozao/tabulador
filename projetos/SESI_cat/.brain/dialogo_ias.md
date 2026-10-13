@@ -1090,3 +1090,24 @@ Na implementação anterior (PEND-15), o cabeçalho `.q-cab` havia sido desancor
 5. Validação do Gabriel na tela: congelar (PEND-42), categorias alfabéticas (PEND-43), tela Versões (PEND-24), fusão/alterada, troca de projeto, gráfico, parar.
 
 **Regras que valem:** código novo em worktree; merge só quando o Gabriel pedir; `git add` cirúrgico; nunca imprimir `.env`; testar em instância isolada (`TABULADOR_OUTPUT` + `TABULADOR_PORTA=5001`); olhar a presença antes de escrever em massa numa pergunta real.
+
+---
+
+## 2026-10-13 — arrumação do tabulador no Orca e direção "tudo num site"
+
+**Autor:** Claude Opus 5.5 · operador: Gabriel Nascimento
+
+**Feito:**
+- **Código do app num lugar só** (`projetos/_laterais/tabulador`). A cópia do app no SESI_cat, a terceira cópia do projeto (`SESI_cat/projetos/sesi_cat`), o `tabulador_equipe`, os projetos `sesi_categorias_novas` e `sesi_minas_satisfacao_das_escolas_copia` (o Gabriel pediu para apagar), zip, `.bak` e os `.code-workspace` duplicados foram para `_general/quarentena_2026-10-13/`, com manifesto SHA-256 conferido. O SESI_cat ficou só com o material do projeto (`data/` e `output/` intactos). O único arquivo exclusivo da cópia (`output/_backup/nuvem_20261009_143106.json`) foi copiado para o projeto canônico.
+- `projetos.json` só com `sesi`. `SESI_cat/src/projeto.py` saiu do git (duplicata idêntica). `.gitignore`, atalho e LEIA-ME do SESI_cat atualizados.
+- **Design:** os 6 commits do repositório separado `tabulador_design` foram para a branch `feat/design-v2` do HUB, mais um ajuste (`79b0884`: modo isolado opcional). Worktree em `~/orca/workspaces/jumppi-design-v2`. Suíte nela: 165 passam, 28 pulados (sem `data`/`.env`). **Sem merge**: esperando o Gabriel validar na tela.
+- SESI_cat registrado no Orca.
+- **OBJ-04 (novo):** transformar tudo num site, porque a maior parte dos problemas vem da sincronização e do versionamento entre pessoas. O anti-escopo do OBJ-03 foi revisto.
+
+**Suíte na main:** 190 passam, 1 pulado, **2 falham** em `TestGabaritoSESI`: Q5 com 0,918 < 0,98 e opção `NS/NR` a mais na Q31. As duas vêm da base atual do SESI, já que a limpeza não tocou em `projeto.py` nem em `data/`. Falta investigar.
+
+**Pendente / handoff:**
+1. Gabriel: mover o SESI_cat para o grupo Jumppi no Orca (botão direito) e, depois do merge do design, tirar o `tabulador_design` do Orca e arquivá-lo.
+2. Validar o `feat/design-v2` na tela e, quando ele pedir, fazer o merge.
+3. Investigar as 2 falhas do `TestGabaritoSESI`.
+4. Apagar de vez a quarentena quando ele confirmar.
