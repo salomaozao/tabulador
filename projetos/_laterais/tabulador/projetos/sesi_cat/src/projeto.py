@@ -133,7 +133,7 @@ PERGUNTAS: list[dict] = [
      "instrucoes_frame": "Categorias de DESVANTAGENS / pontos a melhorar frente a outras escolas. " + _INSTR_ESCOLA},
     # ---- retenção ----------------------------------------------------------------------------
     {"id": "Q31", "tipo": "unica", "rotulo": "Possibilidade de manter o aluno no próximo ano",
-     "niveis": ["Certamente manterá", "Provavelmente manterá", "Provavelmente vai trocar de escola", "Certamente vai trocar de escola"]},
+     "niveis": ["Certamente manterá", "Provavelmente manterá", "Provavelmente vai trocar de escola", "Certamente vai trocar de escola", "NS/NR"]},
     {"id": "Q32", "tipo": "aberta", "rotulo": "Por que provavelmente vai trocar de escola", "base": "prov_trocar", "codificar": True,
      "instrucoes_frame": "Categorias de MOTIVO PARA TROCAR DE ESCOLA (insatisfações com a escola e também motivos externos, "
                          "ex.: mudança de cidade, conclusão do ciclo/formatura, custo/mensalidade, distância). "
@@ -143,7 +143,7 @@ PERGUNTAS: list[dict] = [
                          "ex.: mudança de cidade, conclusão do ciclo/formatura ('último ano', 'vai se formar'), custo, distância). "
                          "Respostas que só remetem a respostas anteriores formam categoria própria."},
     {"id": "Q34", "tipo": "unica", "rotulo": "Satisfação geral com a Escola SESI",
-     "niveis": ["Muito satisfeito(a)", "Satisfeito(a)", "Nem satisfeito(a), nem insatisfeito(a)", "Insatisfeito(a)", "Muito insatisfeito(a)"]},
+     "niveis": ["Muito satisfeito(a)", "Satisfeito(a)", "Nem satisfeito(a), nem insatisfeito(a)", "Insatisfeito(a)", "Muito insatisfeito(a)", "NS/NR"]},
     {"id": "Q35", "tipo": "aberta", "rotulo": "Principal melhoria para aumentar a satisfação", "codificar": True,
      "instrucoes_frame": "Categorias de SUGESTÃO DE MELHORIA. " + _INSTR_ESCOLA
                          + " Separe 'Nada a melhorar / está tudo bom' como categoria própria."},

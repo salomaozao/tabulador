@@ -215,10 +215,16 @@ class TestGabaritoSESI(unittest.TestCase):
         cls.perfil = PF.perfilar(_SESI / "data" / "base_processamento.xlsx")
         cls.proj = R.gerar(cls.perfil, _SESI, "SESI")
         cls.por_coluna = {p.get("coluna", p["id"]): p for p in cls.proj["PERGUNTAS"]}
+        # colunas sem variação na base atual (vazias ou com um valor só) não dão para classificar:
+        # na base de 05/10 os segmentos INF/FUND_*/MEDIO* vieram assim, e o gabarito foi feito com eles cheios
+        bruto = PF.ler(_SESI / "data" / "base_processamento.xlsx", "base")
+        cls.sem_variacao = {c for c in bruto.columns if bruto[c].nunique(dropna=True) <= 1}
 
     def test_tipos_e_opcoes(self):
         for g in self.gold.PERGUNTAS:
             col = g.get("coluna", g["id"])
+            if col in self.sem_variacao:
+                continue
             r = self.por_coluna[col]
             self.assertEqual(r["tipo"], g["tipo"], col)
             if g.get("niveis"):
