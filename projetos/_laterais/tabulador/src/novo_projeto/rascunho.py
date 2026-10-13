@@ -24,6 +24,7 @@ SUFIXO_SAIDA = re.compile(r"^(?P<base>.+)_CAT2?$")
 TAXA_DENTRO = 0.5   # valor entra na regra se >= 50% de quem o escolheu respondeu a aberta
 TAXA_FORA = 0.2     # e nenhum valor de fora pode passar de 20%
 COBERTURA = 0.9     # a regra precisa explicar >= 90% de quem respondeu a aberta
+MARGEM_PRECISAO = 0.02  # pergunta mais distante só substitui a mais próxima se for 2 p.p. mais precisa
 NPS_FAIXAS = [[0, 6, "Detratores (0-6)"], [7, 8, "Neutros (7-8)"], [9, 10, "Promotores (9-10)"]]
 
 
@@ -84,10 +85,14 @@ def classificar(c: dict, tem_saida: bool, eh_id: bool) -> tuple[str, str]:
 
 def deduzir_filtro(aberta: str, candidatos: list[tuple[str, str, pd.Series]], resp: pd.Series) -> dict | None:
     """Procura, entre as fechadas anteriores (da mais próxima para a mais distante), a pergunta que
-    explica quem respondeu a aberta. candidatos = [(id, tipo, valores limpos)]."""
+    explica quem respondeu a aberta. candidatos = [(id, tipo, valores limpos)].
+    Entre as que servem, fica a mais precisa (maior % de respondentes dentro da regra); uma mais distante
+    só ganha da mais próxima com folga de MARGEM_PRECISAO. Ex.: no SESI, "NPS = Neutro ou Promotor"
+    (inclui a nota 7) perde para "Q3 entre 8 e 10" na Q5."""
     total = int(resp.sum())
     if total < 5:
         return None
+    melhor, melhor_prec = None, -1.0
     for qid, tipo, s in candidatos:
         valido = s.notna()
         if (valido & resp).sum() < 0.9 * total:
@@ -116,8 +121,10 @@ def deduzir_filtro(aberta: str, candidatos: list[tuple[str, str, pd.Series]], re
         else:
             regra = {"pergunta": qid, "em": sorted(dentro)}
             desc = f"{qid} = " + " ou ".join(sorted(dentro))
-        return {"descricao": desc + f" (ou respondeu {aberta})", **regra, "ou_respondeu": aberta}
-    return None
+        prec = float(resp[s.isin(dentro)].mean())
+        if prec > melhor_prec + MARGEM_PRECISAO:
+            melhor, melhor_prec = {"descricao": desc + f" (ou respondeu {aberta})", **regra, "ou_respondeu": aberta}, prec
+    return melhor
 
 
 def _n(v):
