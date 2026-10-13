@@ -59,9 +59,9 @@ ENV_EQUIPE = [
                  + sorted((_ONEDRIVE / "Shortcuts").glob("*Projeto IA*")))
     for sub in ("V3", "CategorizadorDeRespostasAbertas1")
 ]
-# ISOLAMENTO (nova versão): por padrão esta cópia NÃO lê o .env da equipe e NUNCA liga na nuvem
-# (Turso), para os dados de teste não tocarem a base real. Para religar: TABULADOR_ISOLADO=0.
-ISOLADO = os.getenv("TABULADOR_ISOLADO", "1") != "0"
+# ISOLAMENTO (opcional): com TABULADOR_ISOLADO=1 o app NÃO lê o .env da equipe e NUNCA liga na
+# nuvem (Turso), para dados de teste não tocarem a base real. Desligado por padrão (comportamento da main).
+ISOLADO = os.getenv("TABULADOR_ISOLADO", "0") == "1"
 if ISOLADO:
     ENV_EQUIPE = []
     for _k in ("TABULADOR_TURSO_URL", "TABULADOR_TURSO_TOKEN"):
