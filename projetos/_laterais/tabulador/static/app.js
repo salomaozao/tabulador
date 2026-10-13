@@ -401,8 +401,7 @@ function renderPainel() {
   const nArq = Object.values(R).filter((r) => r.existe).length;
   $("#main").innerHTML = `
     <h1>${esc(S.projeto.nome)}</h1>
-    <div class="small">Planilha-fonte: ${esc(b.fonte)}</div>
-    ${b.carregada ? `<div class="small">Base: <b>${b.n}</b> respondentes · atualizada ${b.atualizada_em}</div>` : ""}
+    <div class="meta-base">${b.carregada ? `<span>Base: <b>${b.n}</b> respondentes</span><span>atualizada ${b.atualizada_em}</span>` : ""}<span title="${esc(b.fonte)}">Planilha: <b>${esc(String(b.fonte || "").split(/[\\/]/).pop())}</b></span></div>
     ${cabecalhoProjeto(S)}
     ${avisos.join("")}
     <h2>Perguntas abertas <small>${aprovadas} de ${S.perguntas.length} aprovadas${gruposVistos.size ? ` · ${[...gruposVistos.values()].filter((b) => b.grupo.fechado).length} de ${gruposVistos.size} grupos fechados` : ""}</small></h2>
@@ -700,7 +699,7 @@ function renderFrame() {
   return `
     ${F.raciocinio && !F.fixo ? `<div class="info">💡 ${esc(F.raciocinio)}</div>` : ""}
     ${avisos.length ? `<div class="aviso">⚠️ Uma categoria = um atributo:<ul>${avisos.map((m) => `<li>${esc(m)}</li>`).join("")}</ul></div>` : ""}
-    <table id="tab-frame"><thead><tr><th style="width:44px">Cód.</th><th style="width:16%">Categoria</th><th style="width:24%">Definição</th><th style="width:17%" title="Palavras típicas da categoria. Entram no pedido à IA como pista. Tracejadas = aprendidas com a revisão (📌 fixa, × descarta e não volta).">Palavras-chave</th><th>Exemplos</th><th class="num" style="width:60px">Prim.</th><th class="num" style="width:60px">Sec.</th><th class="num" style="width:90px">Menções</th><th style="width:200px">Ações</th></tr></thead>
+    <table id="tab-frame"><thead><tr><th style="width:44px">Cód.</th><th style="width:14%">Categoria</th><th style="width:21%">Definição</th><th style="width:13%" title="Palavras típicas da categoria. Entram no pedido à IA como pista. Tracejadas = aprendidas com a revisão (📌 fixa, × descarta e não volta).">Palavras-chave</th><th style="width:22%;min-width:150px">Exemplos</th><th class="num" style="width:60px">Prim.</th><th class="num" style="width:60px">Sec.</th><th class="num" style="width:90px">Menções</th><th style="width:200px">Ações</th></tr></thead>
     <tbody>${rows}
       ${F.fixo ? "" : `<tr class="frame-add"><td>+</td><td><input class="inline" id="f-novo-nome" placeholder="Nova categoria"></td><td><input class="inline" id="f-novo-def" placeholder="Definição (1 frase)"></td><td colspan="5"></td><td><button class="btn sm" id="f-add">Adicionar</button></td></tr>`}
     </tbody></table>
@@ -1136,9 +1135,9 @@ async function abrirJanelaSaudeQuadro() {
   const placarHtml = `
     <div class="sq-placar">
       <div class="sq-stat"><span class="sq-val">${resumo.total_categorias || 0}</span><span class="sq-lbl">Categorias no quadro</span></div>
-      <div class="sq-stat" style="border-left:4px solid var(--warn)"><span class="sq-val" style="color:var(--warn)">${atencao.length}</span><span class="sq-lbl">Com pontos de atenção</span></div>
+      <div class="sq-stat" style="border-color:color-mix(in srgb,var(--warn) 50%,var(--border))"><span class="sq-val" style="color:var(--warn)">${atencao.length}</span><span class="sq-lbl">Com pontos de atenção</span></div>
       <div class="sq-stat"><span class="sq-val">${raras.length}</span><span class="sq-lbl">Baixo volume (&lt; 1%)</span></div>
-      <div class="sq-stat" style="border-left:4px solid var(--ok)"><span class="sq-val" style="color:var(--ok)">${saudaveis.length}</span><span class="sq-lbl">Saudáveis</span></div>
+      <div class="sq-stat" style="border-color:color-mix(in srgb,var(--ok) 50%,var(--border))"><span class="sq-val" style="color:var(--ok)">${saudaveis.length}</span><span class="sq-lbl">Saudáveis</span></div>
     </div>
     <div class="sq-barra-topo">
       <div>
@@ -1574,7 +1573,7 @@ function renderCodificacao() {
     const cards = [...grupos.values()].map((g) => `
       <div class="card-sug-grupo" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;background:var(--surface-2);border-radius:8px;margin-bottom:6px;font-size:13px">
         <div>
-          De: <b>${g.deCod}. ${esc(g.deNome)}</b> ➔ Sugestão: <b style="color:var(--accent)">${g.paraCod}. ${esc(g.paraNome)}</b>
+          De: <b>${g.deCod}. ${esc(g.deNome)}</b> ➔ Sugestão: <b style="color:var(--accent-text)">${g.paraCod}. ${esc(g.paraNome)}</b>
           <span class="small muted">(${g.rids.length} resposta${g.rids.length > 1 ? "s" : ""})</span>
         </div>
         <button type="button" class="btn sm ok b-aceitar-grupo" data-paracod="${g.paraCod}" data-rids="${g.rids.join(',')}">✓ Aceitar todas (${g.rids.length})</button>

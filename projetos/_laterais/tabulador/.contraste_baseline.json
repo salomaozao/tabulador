@@ -1,0 +1,83 @@
+{
+ "pares": 50,
+ "falhas": [
+  {
+   "tema": "claro",
+   "texto": "text-3",
+   "fundo": "surface",
+   "razao": 4.12
+  },
+  {
+   "tema": "claro",
+   "texto": "text-3",
+   "fundo": "surface-2",
+   "razao": 3.71
+  },
+  {
+   "tema": "claro",
+   "texto": "text-3",
+   "fundo": "surface-3",
+   "razao": 3.33
+  },
+  {
+   "tema": "claro",
+   "texto": "accent-text",
+   "fundo": "surface",
+   "razao": 4.3
+  },
+  {
+   "tema": "claro",
+   "texto": "accent-text",
+   "fundo": "surface-2",
+   "razao": 3.88
+  },
+  {
+   "tema": "claro",
+   "texto": "accent-text",
+   "fundo": "surface-3",
+   "razao": 3.48
+  },
+  {
+   "tema": "claro",
+   "texto": "ok",
+   "fundo": "surface-2",
+   "razao": 4.4
+  },
+  {
+   "tema": "claro",
+   "texto": "ok",
+   "fundo": "surface-3",
+   "razao": 3.94
+  },
+  {
+   "tema": "claro",
+   "texto": "#fff",
+   "fundo": "accent",
+   "razao": 4.42
+  },
+  {
+   "tema": "escuro",
+   "texto": "text-3",
+   "fundo": "surface-3",
+   "razao": 4.08
+  },
+  {
+   "tema": "escuro",
+   "texto": "accent-text",
+   "fundo": "surface-2",
+   "razao": 4.27
+  },
+  {
+   "tema": "escuro",
+   "texto": "accent-text",
+   "fundo": "surface-3",
+   "razao": 3.69
+  },
+  {
+   "tema": "escuro",
+   "texto": "#fff",
+   "fundo": "accent",
+   "razao": 3.64
+  }
+ ]
+}
