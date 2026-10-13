@@ -21,6 +21,8 @@
 !.env.example
 credentials.json
 token.json
+_sharepoint/
+**/_sharepoint/
 /projetos/SESI_cat/data/
 **/output/
 **/output_teste/

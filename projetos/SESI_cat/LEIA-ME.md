@@ -17,3 +17,8 @@ das IAs (`.brain/`). Não existe cópia do programa aqui. O código do Tabulador
 Em 13/10/2026 a cópia antiga do programa que ficava nesta pasta foi para
 `_general/quarentena_2026-10-13/` (com manifesto SHA-256). As pastas `data/` e `output/` daqui
 foram mantidas como estavam.
+
+## Pasta da Equipe (SharePoint)
+- `_sharepoint/`: junção NTFS apontando diretamente para a pasta corporativa da empresa no SharePoint
+  (`Shortcuts/Projetos - Tabulador`). Permite leitura e escrita instantânea pela IA no Orca sem duplicar espaço em disco.
+
