@@ -194,9 +194,11 @@ def _adicionar_cabecalhos_cache(response):
 
 @app.get("/")
 def index():
-    dist_index = _DIR / "frontend" / "dist" / "index.html"
-    if dist_index.exists() and os.environ.get("TABULADOR_LEGACY") != "1":
-        return send_file(dist_index)
+    # Frontend canônico completo: Design v2 com todas as telas, grupos, supervisão e atalhos
+    if os.environ.get("TABULADOR_V2") == "1":
+        dist_index = _DIR / "frontend" / "dist" / "index.html"
+        if dist_index.exists():
+            return send_file(dist_index)
     v = _versao_codigo()
     html = (Path(app.template_folder) / "index.html").read_text(encoding="utf-8")
     html = html.replace("/static/app.css", f"/static/app.css?v={v}").replace("/static/app.js", f"/static/app.js?v={v}").replace("/static/icones.js", f"/static/icones.js?v={v}")
