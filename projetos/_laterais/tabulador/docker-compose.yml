@@ -1,0 +1,24 @@
+services:
+  tabulador:
+    build: .
+    container_name: tabulador-web
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./projetos:/app/projetos
+      - ./output:/app/output
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+
+  # Túnel Cloudflare para gerar URL pública segura (HTTPS) instantânea no POC
+  # Para túnel permanente, passe CLOUDFLARE_TUNNEL_TOKEN no .env
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: tabulador-tunnel
+    restart: unless-stopped
+    depends_on:
+      - tabulador
+    command: tunnel --no-autoupdate --url http://tabulador:5000

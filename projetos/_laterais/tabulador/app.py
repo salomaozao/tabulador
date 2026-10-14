@@ -24,9 +24,10 @@ _SRC = _DIR / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from flask import Flask, abort, jsonify, request, send_file, send_from_directory
+from flask import Flask, abort, jsonify, redirect, render_template, request, send_file, send_from_directory, session
 
 import aprendizado
+import auth
 import backcoding
 import codebook
 import codeframe as CF
@@ -52,6 +53,7 @@ import variables as V
 import grupos_frame
 
 app = Flask(__name__, static_folder=str(_DIR / "static"), template_folder=str(_DIR / "templates"))
+app.secret_key = os.getenv("FLASK_SECRET_KEY") or "tabulador-jumppi-auth-key-2026"
 _lock = threading.Lock()  # uma operação de escrita por vez (arquivos JSON)
 
 
@@ -137,7 +139,10 @@ def _saude(frame, resp, cod) -> list:
 
 
 def _por() -> str | None:
-    """Nome de quem está usando esta aba (autodeclarado na tela inicial; vem codificado no cabeçalho)."""
+    """Nome de quem está usando esta aba (prioriza login corporativo Microsoft se ativo, ou autodeclarado)."""
+    user = auth.usuario_logado()
+    if user and user.get("nome"):
+        return user["nome"][:60]
     nome = unquote(request.headers.get("X-Tabulador-Usuario", "")).strip()
     return nome[:60] or None
 
@@ -217,6 +222,35 @@ def legacy_index():
     html = (Path(app.template_folder) / "index.html").read_text(encoding="utf-8")
     html = html.replace("/static/app.css", f"/static/app.css?v={v}").replace("/static/app.js", f"/static/app.js?v={v}").replace("/static/icones.js", f"/static/icones.js?v={v}")
     return html, 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, no-cache, must-revalidate"}
+
+
+@app.get("/login")
+def login():
+    if auth.usuario_logado():
+        return redirect("/")
+    url_login = auth.gerar_url_login() if auth.auth_ativa() else "#"
+    erro = request.args.get("erro")
+    return render_template("login.html", login_url=url_login, erro=erro)
+
+
+@app.get("/auth/callback")
+def auth_callback():
+    code = request.args.get("code")
+    state = request.args.get("state")
+    if not code or not state:
+        return redirect("/login?erro=Parâmetros+de+autorização+ausentes")
+    try:
+        auth.processar_callback(code, state)
+        return redirect("/")
+    except Exception as e:
+        import urllib.parse
+        return redirect(f"/login?erro={urllib.parse.quote(str(e))}")
+
+
+@app.get("/logout")
+def logout():
+    auth.logout()
+    return redirect("/login")
 
 
 @app.get("/relatorio/<qid>")
@@ -1137,6 +1171,25 @@ def api_aprovar(qid):
         return jsonify(_payload_pergunta(qid))
     except Exception as e:
         return _erro(e)
+
+
+@app.before_request
+def _verificar_autenticacao():
+    if not auth.auth_ativa():
+        return None
+    caminho = request.path
+    if (
+        caminho in ("/login", "/auth/callback", "/logout")
+        or caminho.startswith("/static/")
+        or caminho.startswith("/assets/")
+        or caminho == "/favicon.ico"
+    ):
+        return None
+    if not auth.usuario_logado():
+        if caminho.startswith("/api/") or caminho.startswith("/arquivo/"):
+            return jsonify({"erro": "Não autenticado. Conecte-se com sua conta corporativa @jumppi.", "precisa_login": True}), 401
+        return redirect("/login")
+    return None
 
 
 @app.before_request
