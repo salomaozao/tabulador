@@ -194,7 +194,23 @@ def _adicionar_cabecalhos_cache(response):
 
 @app.get("/")
 def index():
-    # sem cache e com ?v=<versão> dinâmica nos estáticos: a cada atualização de CSS/JS, o navegador baixa na hora sem precisar reiniciar o servidor
+    dist_index = _DIR / "frontend" / "dist" / "index.html"
+    if dist_index.exists() and os.environ.get("TABULADOR_LEGACY") != "1":
+        return send_file(dist_index)
+    v = _versao_codigo()
+    html = (Path(app.template_folder) / "index.html").read_text(encoding="utf-8")
+    html = html.replace("/static/app.css", f"/static/app.css?v={v}").replace("/static/app.js", f"/static/app.js?v={v}").replace("/static/icones.js", f"/static/icones.js?v={v}")
+    return html, 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, no-cache, must-revalidate"}
+
+
+@app.get("/assets/<path:filename>")
+def spa_assets(filename):
+    assets_dir = _DIR / "frontend" / "dist" / "assets"
+    return send_from_directory(assets_dir, filename)
+
+
+@app.get("/legacy")
+def legacy_index():
     v = _versao_codigo()
     html = (Path(app.template_folder) / "index.html").read_text(encoding="utf-8")
     html = html.replace("/static/app.css", f"/static/app.css?v={v}").replace("/static/app.js", f"/static/app.js?v={v}").replace("/static/icones.js", f"/static/icones.js?v={v}")
