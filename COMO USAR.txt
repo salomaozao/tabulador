@@ -1,0 +1,63 @@
+========================================================================
+TABULADOR DE RESPOSTAS ABERTAS — GUIA RÁPIDO DE USO
+========================================================================
+
+Bem-vindo(a) ao Tabulador!
+Este programa classifica, categoriza e sintetiza respostas abertas de pesquisa
+usando Inteligência Artificial (OpenAI, Gemini, Groq, etc.) e salva o trabalho
+diretamente na Nuvem corporativa (Turso).
+
+------------------------------------------------------------------------
+1. COMO INICIAR O PROGRAMA
+------------------------------------------------------------------------
+- Dê 2 cliques no arquivo:
+    iniciar.bat
+
+- Na primeira vez, ele prepara o ambiente Python e baixa as dependências
+  automaticamente (leva de 1 a 3 minutos).
+  (Se o seu computador não tiver o Python instalado, o instalador perguntará
+   se você deseja instalar automaticamente via winget).
+- Ao final, o navegador abrirá automaticamente na tela do Tabulador:
+    http://127.0.0.1:5000
+
+* IMPORTANTE: Deixe a janela preta (Prompt de comando) aberta enquanto
+  estiver usando o Tabulador. Quando terminar, basta fechar essa janela.
+
+------------------------------------------------------------------------
+2. ACESSO À NUVEM E CHAVES DE IA (.env)
+------------------------------------------------------------------------
+Todas as categorizações, codeframes e respostas ficam salvos na Nuvem (Turso).
+Para que todos da equipe vejam o mesmo projeto sincronizado:
+
+- Se você já tem a pasta de atalhos da equipe no OneDrive sincronizada
+  ("Categorização de Respostas Abertas" / "Projeto IA"), o Tabulador
+  reconhece as chaves e o banco de dados automaticamente!
+- Se você não tem o atalho sincronizado, basta ter o arquivo ".env"
+  na pasta raiz do Tabulador com as variáveis:
+    TABULADOR_TURSO_URL=libsql://...
+    TABULADOR_TURSO_TOKEN=...
+    OPENAI_API_KEY=sk-... (ou Gemini / Groq)
+
+(Dica: você também pode configurar as chaves diretamente pela interface
+ web clicando no botão "⚙ Configurar IA" no topo da página).
+
+------------------------------------------------------------------------
+3. COMO USAR O TABULADOR
+------------------------------------------------------------------------
+1. No menu superior ou no Painel Geral, selecione o projeto desejado
+   (ex.: SESI Minas).
+2. Escolha a pergunta que deseja trabalhar (ex.: Q2, Q4, Q5...).
+3. Se a pergunta for nova:
+   - Clique em "✨ Gerar categorias" para a IA propor o codeframe.
+   - Ajuste, mescle ou edite as categorias na tabela e clique em "✓ Aprovar".
+4. Classificação:
+   - Clique em "✨ Classificar AMOSTRA" (ex.: 50 a 100 respostas).
+   - O pesquisador confere e clica em "✓" para aprovar o que está certo ou
+     corrige no menu suspenso o que a IA errou.
+   - Quando o índice de acerto estiver satisfatório, clique em "Classificar restantes".
+5. Exportação:
+   - Na aba "Painel geral" ou "Exportar", baixe o Excel consolidado,
+     codebook e cruzamentos de variáveis.
+
+Em caso de dúvidas ou problemas técnicos, contate o time de inteligência da Jump.
+========================================================================
