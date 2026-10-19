@@ -1,35 +1,35 @@
-# Repositório do Tabulador: versiona SÓ o código do tabulador e a definição do projeto SESI.
-# Todo o resto da pasta jumppi (outros projetos) fica fora.
-/*
-!/.gitignore
-!/projetos/
-/projetos/*
-!/projetos/SESI_cat/
-# SESI_cat: só a memória (.brain), o LEIA-ME e o atalho; o resto é material de cliente.
-# A definição do projeto (projeto.py) fica em projetos/_laterais/tabulador/projetos/sesi_cat/.
-/projetos/SESI_cat/*
-!/projetos/SESI_cat/.brain/
-!/projetos/SESI_cat/LEIA-ME.md
-!/projetos/SESI_cat/Abrir Tabulador.bat
-!/projetos/_laterais/
-/projetos/_laterais/*
-!/projetos/_laterais/tabulador/
+# ==============================================================================
+# Gitignore — Tabulador de Respostas Abertas
+# ==============================================================================
 
-# nunca versionar: chaves, dados de clientes e resultados (contêm respostas de pesquisa)
+# Ambientes virtuais e caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ui_check_tmp/
+
+# Logs e arquivos de saída gerados pelo Tabulador
+output/
+output_teste/
+output*/
+**/llm_log/
+
+# Dados de clientes e entregas dentro de projetos/<slug>/ (nuvem Turso preserva a revisão)
+projetos/*/data/
+projetos/*/output/
+projetos/*/output_teste/
+projetos/*/_sharepoint/
+
+# Chaves e credenciais (NUNCA versionar)
 .env
 .env.*
 !.env.example
 credentials.json
 token.json
-_sharepoint/
-**/_sharepoint/
-/projetos/SESI_cat/data/
-**/output/
-**/output_teste/
-**/output*/
-**/llm_log/
-**/__pycache__/
-*.pyc
+
+# Arquivos de clientes, temporários e mídias
 ~$*
 *.tmp
 *.xlsx
@@ -38,7 +38,26 @@ _sharepoint/
 *.docx
 *.zip
 *.bak
-*_old_backup.py
-.pytest_cache/
-settings.local.json
 SALVAR.txt
+
+# Pastas locais e workspaces corporativos fora do escopo do Tabulador
+_documentos/
+_general/
+_projetos_arquivados_desync/
+projetos/ASSERTIVA/
+projetos/AXEL/
+projetos/Cesec/
+projetos/INSPER/
+projetos/petrobras/
+projetos/Transpetro/
+projetos/SESI_cat/
+projetos/_laterais/
+*.code-workspace
+settings.local.json
+.stfolder/
+.stversions/
+.stignore
+
+# Windows system
+desktop.ini
+Thumbs.db
