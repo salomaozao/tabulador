@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 resumo: "Redesenhada em 02/10 após a validação do Gabriel: a trava NÃO é por pergunta, é por RESPOSTA. Ele vê uma resposta que não quer confirmar nem mexer agora, para voltar a ela mais tarde: ela não fica a conferir nem confirmada, e a categoria fica congelada. MERGEADA na main em 02/10 (`ba12596`; ajuste da planilha de revisão em `8c80645`); aguarda validação do Gabriel na tela. Substitui a trava por pergunta (merge c00fcdd, removida)."
+linear: JUM-28
 ---
 
 # PEND-42: Congelar uma resposta

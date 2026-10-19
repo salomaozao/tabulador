@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 resumo: "Ao clicar em '⏹ Parar', os lotes futuros são cancelados, mas a interface induz à falsa impressão de que 'classificou tudo mas não carregou': a barra salta para 100% com checkmarks verdes ao entrar na etapa de gravação, o tempo restante continua estimando a base total e workers paralelos em andamento emitem logs ambíguos. Correção de UX no modal de progresso e travas de interrupção."
+linear: JUM-27
 ---
 
 # PEND-41: Desambiguação visual e feedback correto ao parar classificação/auditoria

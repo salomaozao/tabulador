@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-01
 resumo: "Achado da revisão do plano (01/10), deduzido do código e ainda não reproduzido. codificacao.json é um blob único. Cada ✓/correção lê o arquivo inteiro, muda um item e regrava o arquivo inteiro (nuvem.gravar = upsert sem condição). O _lock de app.py só vale dentro de um processo, e cada máquina tem o seu. Com o cache de leitura de 5s, a leitura pode estar atrasada. Resultado: se Sara e João conferem a mesma pergunta ao mesmo tempo, o último a gravar apaga os ✓ do outro, sem erro e sem aviso. É o caminho de perda de dados mais provável hoje, mais do que um bug de código."
+linear: JUM-18
 ---
 
 # PEND-31: Perda por gravação simultânea

@@ -1,0 +1,322 @@
+{
+ "itens": {
+  "PEND-01": {
+   "campos": {
+    "criticidade": "alta",
+    "prazo": "2026-10-07",
+    "status": "aberto",
+    "titulo": "Base parcial - incorporar novas entrevistas até o fim do campo"
+   },
+   "desc_enviada": "3f61a7904fa95146",
+   "desc_linear": "762928000f6fe1a7",
+   "id": "bd260ef0-63c0-453c-9dee-30907660cc22",
+   "linear": "JUM-7",
+   "sincronizado_em": "2026-10-15T21:46:10"
+  },
+  "PEND-03": {
+   "campos": {
+    "criticidade": "alta",
+    "prazo": "2026-10-07",
+    "status": "aberto",
+    "titulo": "Entregar base categorizada para o processamento (PPT + Power BI)"
+   },
+   "desc_enviada": "c5b6d7f5ee7c390f",
+   "desc_linear": "1252a1114f41916a",
+   "id": "8c8f2930-1a88-4b19-971d-b3fcb4ba5c01",
+   "linear": "JUM-8",
+   "sincronizado_em": "2026-10-15T21:46:10"
+  },
+  "PEND-20": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Aprendizado do quadro, etapa 2C (reauditar só as não conferidas afetadas quando o quadro muda)"
+   },
+   "desc_enviada": "2451cf4df29ac9cf",
+   "desc_linear": "9877faf9455e88a0",
+   "id": "1d35938d-6487-42fd-99b5-1d013b6a8d2d",
+   "linear": "JUM-9",
+   "sincronizado_em": "2026-10-15T21:46:10"
+  },
+  "PEND-21": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Aprendizado do quadro, etapa 3 (propostas de separar/mesclar/criar com evidência e prévia; resolve o \"separe Qualidade do Ensino\" da Sara)"
+   },
+   "desc_enviada": "a1df06eec7c368b6",
+   "desc_linear": "27b8fcbb627a5c07",
+   "id": "4820a740-154a-41c3-b76e-2ebc1704ff3c",
+   "linear": "JUM-10",
+   "sincronizado_em": "2026-10-15T21:46:11"
+  },
+  "PEND-22": {
+   "campos": {
+    "criticidade": "alta",
+    "prazo": "2026-10-02",
+    "status": "aberto",
+    "titulo": "Erro \"servidor demorou mais de 35s\" ainda aparece - a correção nunca foi commitada; publicar e cobrir toda chamada de IA"
+   },
+   "desc_enviada": "3340e731c6852210",
+   "desc_linear": "1d5a70f820d193f0",
+   "id": "ee6e6bc0-bab1-4a31-b03a-b7e907990f73",
+   "linear": "JUM-11",
+   "sincronizado_em": "2026-10-15T21:46:11"
+  },
+  "PEND-24": {
+   "campos": {
+    "criticidade": "alta",
+    "prazo": "2026-10-02",
+    "status": "aberto",
+    "titulo": "Snapshots automáticos e guarda contra perda da base classificada (nuvem e local)"
+   },
+   "desc_enviada": "bccde72f4e1202cf",
+   "desc_linear": "f928574bbb623902",
+   "id": "9f7ebd67-ae89-4337-a229-235a282be14b",
+   "linear": "JUM-12",
+   "sincronizado_em": "2026-10-15T21:46:11"
+  },
+  "PEND-25": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Apagar classificações com filtros (popup com escopo, prévia e confirmação forte)"
+   },
+   "desc_enviada": "842f774367ba8436",
+   "desc_linear": "d3c73bbdc82f5453",
+   "id": "0e96b78a-9ab5-49a3-a4d7-e0613d83327d",
+   "linear": "JUM-13",
+   "sincronizado_em": "2026-10-15T21:46:12"
+  },
+  "PEND-26": {
+   "campos": {
+    "criticidade": "alta",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Telemetria - qual modelo classificou cada resposta, quem e quando criou/alterou cada categoria, quem revisou o quê"
+   },
+   "desc_enviada": "1831bd0defd29b67",
+   "desc_linear": "1831a69d17fef21a",
+   "id": "f3c9b6b1-cc8c-4e86-9be0-a033e37fbe0d",
+   "linear": "JUM-14",
+   "sincronizado_em": "2026-10-15T21:46:12"
+  },
+  "PEND-27": {
+   "campos": {
+    "criticidade": "baixa",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Painel de administração (pessoas, modelos, quadros) sobre a telemetria"
+   },
+   "desc_enviada": "b41d2c5dc30c7633",
+   "desc_linear": "df0e8cf12e53d687",
+   "id": "aa22f065-2d53-43b8-944e-7f18977e767e",
+   "linear": "JUM-15",
+   "sincronizado_em": "2026-10-15T21:46:12"
+  },
+  "PEND-29": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Varrer a base pelas keywords de uma categoria e recategorizar candidatas (ex.: 'Ensino técnico' criada no meio da revisão)"
+   },
+   "desc_enviada": "5b5826184ba81ef4",
+   "desc_linear": "3ce10f18eebcf666",
+   "id": "ab87ae7e-57ff-47a0-8412-4b6e347bbbe0",
+   "linear": "JUM-16",
+   "sincronizado_em": "2026-10-15T21:46:13"
+  },
+  "PEND-30": {
+   "campos": {
+    "criticidade": "baixa",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Avaliar mixture of agents (2-3 modelos classificando e agregando) no lugar de classificador + auditor"
+   },
+   "desc_enviada": "d2afb31fd9898280",
+   "desc_linear": "f12acea34c623e75",
+   "id": "6ee0d493-2a8b-4471-bcf1-33f18cc1af69",
+   "linear": "JUM-17",
+   "sincronizado_em": "2026-10-15T21:46:13"
+  },
+  "PEND-31": {
+   "campos": {
+    "criticidade": "alta",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Duas pessoas revisando a mesma pergunta podem apagar o trabalho uma da outra (gravação sem checagem de versão)"
+   },
+   "desc_enviada": "bde489ee34c5f38b",
+   "desc_linear": "898d32b58a17120f",
+   "id": "1e5f6444-fe37-400e-b2ac-a7bcb33b2854",
+   "linear": "JUM-18",
+   "sincronizado_em": "2026-10-15T21:46:14"
+  },
+  "PEND-32": {
+   "campos": {
+    "criticidade": "alta",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Amostra de controle aleatória - medir o erro real das automáticas e corrigir o viés do \"a IA acertou X%"
+   },
+   "desc_enviada": "8d9735cd2482ddd7",
+   "desc_linear": "a8b765a695226fb4",
+   "id": "c3aae718-59b5-48d4-90df-5ee8621977fa",
+   "linear": "JUM-19",
+   "sincronizado_em": "2026-10-15T21:46:14"
+  },
+  "PEND-33": {
+   "campos": {
+    "criticidade": "baixa",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "(Ideia futura) Auto-agrupamento inteligente de categorias criadas por humano (metodologia Sara)"
+   },
+   "desc_enviada": "f152e7907382aec0",
+   "desc_linear": "8b731983aa0d988f",
+   "id": "7d3fde88-7849-4384-b568-21a67f932286",
+   "linear": "JUM-20",
+   "sincronizado_em": "2026-10-15T21:46:15"
+  },
+  "PEND-35": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Assistente de IA na criação de grupos (rótulo, escopo, instrucoes_frame e compatibilidade semântica)"
+   },
+   "desc_enviada": "9811d87d610e9843",
+   "desc_linear": "04a46cea561c2aad",
+   "id": "5bd12e3a-703d-4442-9c4b-9b74a259f799",
+   "linear": "JUM-21",
+   "sincronizado_em": "2026-10-15T21:46:15"
+  },
+  "PEND-36": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Relatório síntese visual na aba Resultados (ideias, perfis de respondentes e verbatins vivos)"
+   },
+   "desc_enviada": "55c0119066e40411",
+   "desc_linear": "ef8c639b42d02a6c",
+   "id": "ec2ddc14-3362-4216-bcda-10a179a7db76",
+   "linear": "JUM-22",
+   "sincronizado_em": "2026-10-15T21:46:15"
+  },
+  "PEND-37": {
+   "campos": {
+    "criticidade": "baixa",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "(Ideia futura) Exibição de dados de uso do modelo, tokens e custo estimado por pergunta e no consolidado"
+   },
+   "desc_enviada": "8027278a294f9f99",
+   "desc_linear": "c3e29378ac82f657",
+   "id": "92befaea-2806-4099-ac61-344c435f8b14",
+   "linear": "JUM-23",
+   "sincronizado_em": "2026-10-15T21:46:16"
+  },
+  "PEND-38": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Grupos de perguntas - categorias base do grupo + categorias próprias de cada pergunta (rever a lógica do quadro único e da aprovação por pergunta)"
+   },
+   "desc_enviada": "fae78ed6f70e1bc6",
+   "desc_linear": "0b12dfb495440993",
+   "id": "ac25e76b-71a8-4f19-b003-eee9494764a7",
+   "linear": "JUM-24",
+   "sincronizado_em": "2026-10-15T21:46:16"
+  },
+  "PEND-39": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Ao trocar de projeto é preciso recarregar a página para a tela mudar"
+   },
+   "desc_enviada": "40e92085669e9ed3",
+   "desc_linear": "58a9f6f3e7139ef6",
+   "id": "20ff24d3-3d76-460a-a824-d1775746e426",
+   "linear": "JUM-25",
+   "sincronizado_em": "2026-10-15T21:46:17"
+  },
+  "PEND-40": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Gráfico de respostas conferidas com degradê verde, porcentagem no eixo Y e projeção de conclusão (3 cenários discretos)"
+   },
+   "desc_enviada": "a6718134bcdaf1c9",
+   "desc_linear": "72aff8620bc5e495",
+   "id": "37261b48-2be1-42e8-94de-40e4a272e7c0",
+   "linear": "JUM-26",
+   "sincronizado_em": "2026-10-15T21:46:17"
+  },
+  "PEND-41": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Feedback claro e desambiguação visual ao parar classificação (barra, etapas e cancelamento imediato)"
+   },
+   "desc_enviada": "2077261081a5fa25",
+   "desc_linear": "352ea67954dc1be7",
+   "id": "c33f202a-dfef-4427-8bb7-e2abde8f76dc",
+   "linear": "JUM-27",
+   "sincronizado_em": "2026-10-15T21:46:18"
+  },
+  "PEND-42": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Congelar uma resposta (nem a conferir, nem confirmada, categoria travada)"
+   },
+   "desc_enviada": "1bb323df6fc0a855",
+   "desc_linear": "a400a0493b09a306",
+   "id": "dd360e55-3d27-4e06-96dd-8adc685ccd18",
+   "linear": "JUM-28",
+   "sincronizado_em": "2026-10-15T21:46:18"
+  },
+  "PEND-45": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Rotacionar a chave da OpenAI que apareceu na saída do terminal em 02/10"
+   },
+   "desc_enviada": "3adb2511755b68ea",
+   "desc_linear": "7680f704291efdd9",
+   "id": "44dad8d0-b884-46dc-81c9-7bc0cbbf00b6",
+   "linear": "JUM-29",
+   "sincronizado_em": "2026-10-15T21:46:18"
+  },
+  "PEND-46": {
+   "campos": {
+    "criticidade": "media",
+    "prazo": "",
+    "status": "aberto",
+    "titulo": "Erros ao importar a planilha (relatado em 02/10, sem o texto do erro)"
+   },
+   "desc_enviada": "025e63018a03209d",
+   "desc_linear": "ff4acf2342d94b61",
+   "id": "57a00077-b7ab-46e0-b92d-4bc38fc1ae1c",
+   "linear": "JUM-30",
+   "sincronizado_em": "2026-10-15T21:46:19"
+  }
+ },
+ "projeto": {
+  "enviado": "fd3a429d8a72e940",
+  "id": "59e21f5d-be7e-4ed4-8d3b-e8a711fff3a8",
+  "linear": "51d87456a2d16560"
+ },
+ "versao": 2
+}

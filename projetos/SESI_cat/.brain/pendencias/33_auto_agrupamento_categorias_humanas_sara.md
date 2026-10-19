@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-01
 resumo: "Ideia guardada para amadurecimento (pensamento registrado): a metodologia de codificação humana (ex.: Sara na Q29) cria micro-categorias granulares de altíssima riqueza semântica, mas com volumetria baixa (< 1%). A auto-melhora do tabulador deve usar essa riqueza para propor fusões e agrupamentos inteligentes sem perda semântica (sintetizando definições e unindo keywords/exemplos), apresentando propostas no modal de Saúde com prévia e aprovação em 1 clique."
+linear: JUM-20
 ---
 
 # PEND-33: Auto-Agrupamento Inteligente de Categorias Humanas (Metodologia Sara)

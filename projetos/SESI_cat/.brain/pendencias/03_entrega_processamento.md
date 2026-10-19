@@ -8,6 +8,7 @@ responsavel: Gabriel Nascimento
 data_abertura: 2026-09-28
 prazo: 2026-10-07
 resumo: "O processamento começa em 28/09, logo depois do fim do campo. A planilha categorizada (Q*_CAT preenchidas) precisa estar pronta para alimentar o relatório em PPT e Power BI."
+linear: JUM-8
 ---
 
 # PEND-03: Entregar base categorizada para o processamento

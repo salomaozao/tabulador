@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-01
 resumo: "Ideia do Gabriel (01/10). Hoje já existe uma forma simples de MoA: um modelo classifica e outro audita (supervisao.auditar), e o auto-aceite exige a concordância dos dois. Avaliar o voto de 3 modelos baratos, ou um proposer + aggregator, medindo acerto contra o humano e custo. Só faz sentido depois da telemetria por modelo (PEND-26), que permite comparar sem achismo."
+linear: JUM-17
 ---
 
 # PEND-30: Mixture of agents

@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 resumo: "O Gabriel disse no fim de 02/10 que 'deu uns erros na hora de importar a planilha', sem dizer qual botão nem a mensagem. Não reproduzido: /api/load com a planilha real funciona em modo isolado (5.624 respondentes, 8 s) e a exportação/importação do revisao.xlsx passa nos testes. Antes de mexer no código, PERGUNTAR ao Gabriel: qual botão, qual mensagem, e em qual instância (5000 real ou 5001 de teste)."
+linear: JUM-30
 ---
 
 # PEND-46: Erros ao importar a planilha

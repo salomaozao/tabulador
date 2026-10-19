@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 resumo: "O gráfico de respostas conferidas no painel geral deve exibir a linha de evolução em verde com degradê escurecendo; inclusão de porcentagem no eixo Y e projeção em linha cinza com 3 cenários (otimista, neutro e pessimista) do ritmo de respostas, informando data estimada de conclusão de forma secundária e discreta."
+linear: JUM-26
 ---
 
 # PEND-40: Gráfico de evolução de respostas com degradê, eixo percentual e projeção de ritmo

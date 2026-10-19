@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 resumo: "Criação de um relatório executivo visual integrado à aba Resultados do Tabulador, dispensando PDFs ou planilhas para a primeira leitura. Sintetiza em cards e gráficos web a relação entre ideias (elogios, dores, sugestões) e perfis de respondentes (cruzamentos de controle e NPS), acompanhados por verbatins reais para uso direto em apresentações."
+linear: JUM-22
 ---
 
 # PEND-36: Relatório Síntese Visual na aba Resultados

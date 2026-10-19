@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-09-30
 resumo: "Depois de uma atualização automática do quadro (PEND-19), rodar supervisao.auditar só nas respostas não conferidas por humano, cuja categoria (ou o par de confusão dela) mudou e cujo frame_versao é anterior ao atual. Se o auditor discordar de uma auto-aceita, ela volta para 'a conferir' com o motivo. A guarda volumétrica (PEND-14) vale acima de 100 respostas."
+linear: JUM-9
 ---
 
 # PEND-20: Reauditoria seletiva

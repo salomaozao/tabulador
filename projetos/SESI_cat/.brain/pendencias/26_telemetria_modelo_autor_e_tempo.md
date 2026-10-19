@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-01
 resumo: "Hoje cada item tem origem, frame_versao e revisado_por; o 'modelo' fica só no topo do codificacao.json (sobrescrito a cada rodada); o histórico do frame tem quando/acao/versao, mas não quem nem o modelo. Ação: carimbar em cada item classificado_por (provedor:modelo) e classificado_em, revisado_em; nas categorias, criada_por/criada_em/criada_com (modelo ou pessoa) e a autoria em cada entrada do histórico do frame; mais um log de eventos append-only (quem, quando, ação, rid/código, de→para, modelo, frame_versao), base do painel de administração (PEND-27)."
+linear: JUM-14
 ---
 
 # PEND-26: Telemetria

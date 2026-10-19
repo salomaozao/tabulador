@@ -8,6 +8,7 @@ responsavel: Gabriel Nascimento / Jucimara
 data_abertura: 2026-09-22
 prazo: 2026-10-07
 resumo: "A base recebida (3.743 respostas, ~70%) não é a final; devem entrar ~500 entrevistas (disparos de e-mail em 22/09 e 24/09) até o fim do campo em 25/09. Recategorizar só as respostas novas mantendo as validadas."
+linear: JUM-7
 ---
 
 # PEND-01: Base parcial - incorporar novas entrevistas

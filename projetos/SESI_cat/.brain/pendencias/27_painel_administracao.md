@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-01
 resumo: "Depois do PEND-26: uma aba Administração com (1) pessoas: revisões por dia, % de correções e categorias mais revisadas; (2) modelos: acerto contra humano, concordância com o auditor, custo e tempo (reaproveita usage.py, que já agrega por modelo, pergunta e dia); (3) quadros: linha do tempo de cada categoria (criada por, definições, mesclas) e acerto por frame_versao; (4) segurança: snapshots e bloqueios do PEND-24."
+linear: JUM-15
 ---
 
 # PEND-27: Painel de administração

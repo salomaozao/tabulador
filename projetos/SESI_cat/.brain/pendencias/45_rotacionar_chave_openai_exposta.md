@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 resumo: "Ao conferir um .env gerado por engano dentro de uma worktree, o conteúdo (com a chave TABULADOR_CHAVE_OPENAI da equipe) foi impresso no terminal da sessão do Claude porque a ocultação com sed não funcionou. A cópia local foi apagada e nenhum arquivo com a chave existe mais na worktree, mas a chave ficou registrada no histórico da conversa. A conta já estava sem créditos (a PEND-04 teve um incidente parecido). Recomendação: gerar chave nova e atualizar na Central Canônica."
+linear: JUM-29
 ---
 
 # PEND-45: Rotacionar a chave da OpenAI

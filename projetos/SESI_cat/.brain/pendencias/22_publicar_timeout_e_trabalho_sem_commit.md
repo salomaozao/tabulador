@@ -9,6 +9,7 @@ responsavel: Gabriel Nascimento
 data_abertura: 2026-10-01
 prazo: 2026-10-02
 resumo: "A correção de 29/09 (sem timeout nas operações com progresso, 4 min nas demais, TABULADOR_LLM_TIMEOUT=240) está só na árvore de trabalho desta máquina. O HEAD e o GitHub ainda têm 'opts.timeout || 35000', então quem roda pelo GitHub (Sara, João) ou com app.js em cache continua vendo o erro. Além disso, chamadas de IA sem barra de progresso (gerar categorias, 'Pedir ajuste à IA') ficam limitadas a 4 min. Ação: separar os hunks e commitar o trabalho de 29-30/09; toda chamada que envolve IA passa a usar progresso (sem corte no navegador)."
+linear: JUM-11
 ---
 
 # PEND-22: Publicar o timeout e o trabalho sem commit

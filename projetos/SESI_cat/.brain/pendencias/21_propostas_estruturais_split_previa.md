@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-09-30
 resumo: "Transformar os alertas da caixa 'Saúde do quadro' (PEND-18) em cards com proposta concreta: separar X em Y+Z (com quantas e quais respostas iriam para cada lado), mesclar (via fundir, inclusive em 97/98), criar a partir de Outros e renomear. Tudo com clique humano. O 'Pedir ajuste à IA' livre passa a mostrar a prévia (diff + respostas afetadas) antes de aplicar. Causa do 'não aconteceu nada' da Sara: refinar() mantém o código antigo na categoria dividida, então nenhuma resposta muda de lugar e nada é reclassificado."
+linear: JUM-10
 ---
 
 # PEND-21: Propostas estruturais com prévia

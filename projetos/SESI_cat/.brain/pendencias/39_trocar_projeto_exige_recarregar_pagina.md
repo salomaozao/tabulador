@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 resumo: "Relato do Gabriel (02/10): ao escolher outro projeto no menu do topo, a tela continua mostrando o anterior até recarregar a página (F5). Esperado: a troca atualizar tudo sozinha (painel, barra lateral, perguntas, nome do projeto)."
+linear: JUM-25
 ---
 
 # PEND-39: Trocar de projeto sem recarregar a página

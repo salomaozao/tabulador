@@ -9,6 +9,7 @@ responsavel: Gabriel Nascimento
 data_abertura: 2026-10-01
 prazo: 2026-10-02
 resumo: "Com a nuvem ativa, nuvem.gravar faz upsert (substitui) e _remover apaga de vez, sem lixeira. Um bug pode zerar milhares de respostas conferidas sem deixar rastro. Três camadas: (1) guarda em _gravar: recusa gravar codificacao.json que perca itens validados por humano ou encolha mais de 20% sem liberação explícita; (2) tabela blobs_historico no Turso, append-only, com a versão anterior de codificacao/frame a cada N minutos ou antes de toda operação em massa; (3) backup diário automático do projeto inteiro em output/_backup ao abrir o app, mais uma tela 'Restaurar versão'."
+linear: JUM-12
 ---
 
 # PEND-24: Snapshots e guarda contra perda

@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 resumo: "Ideia guardada para evolução: expor métricas de uso de IA (modelo utilizado, total de tokens de prompt e conclusão, tempo de execução e custo estimado em R$/US$) diretamente nos cards do Painel Geral, no cabeçalho de cada pergunta e na aba de Resultados/Exportações, permitindo auditoria de custo por projeto e transparência operacional."
+linear: JUM-23
 ---
 
 # PEND-37: (Ideia futura) Exibição de dados de uso de modelo, tokens e custo estimado

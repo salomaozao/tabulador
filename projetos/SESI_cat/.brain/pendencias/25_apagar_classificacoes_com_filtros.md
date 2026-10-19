@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-01
 resumo: "Botão 'Apagar classificações…' abre um popup com filtros combináveis: categoria(s), situação (só não conferidas / só automáticas / só com erro / inclui conferidas por humano), origem/modelo e frame_versao. A prévia mostra quantas e quais respostas saem. As apagadas voltam a 'não classificadas'. Snapshot automático antes (PEND-24). Incluir conferidas por humano exige marcar uma caixa a mais e digitar o número de respostas para confirmar."
+linear: JUM-13
 ---
 
 # PEND-25: Apagar classificações com filtros

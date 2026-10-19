@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-01
 resumo: "Lacuna metodológica achada na revisão do plano (01/10). (1) O 'a IA acertou X%' é calculado só sobre o que humanos conferiram, e humanos conferem de preferência o que a IA marcou como duvidoso (baixa confiança, auditor discordou): é uma amostra viciada, e o número não representa a base. (2) As que 'passaram pelo auditor' nunca são conferidas, então não há medida do erro delas; dois modelos podem errar juntos. Ação: sortear uma amostra de controle aleatória (ex.: 5%, mínimo 30 por pergunta, estratificada por categoria) dentro das automáticas, conferida às cegas, e reportar o erro estimado com intervalo de confiança por pergunta."
+linear: JUM-19
 ---
 
 # PEND-32: Amostra de controle

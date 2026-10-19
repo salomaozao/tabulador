@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 resumo: "Substitui a sugestão estatística cega de pares de perguntas por um assistente de IA sob demanda na criação do grupo. O pesquisador seleciona as perguntas e a IA analisa enunciados e micro-amostras de respostas reais para gerar nome semântico, descrição, diretrizes metodológicas para o codeframe compartilhado (instrucoes_frame) e diagnóstico de compatibilidade."
+linear: JUM-21
 ---
 
 # PEND-35: Assistente de IA na criação e configuração de grupos de perguntas

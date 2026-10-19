@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-02
 resumo: "Depois de usar a primeira versão dos grupos (quadro único + aprovação por pergunta), o Gabriel não gostou da lógica. Ideia a amadurecer: o grupo define categorias BASE (compartilhadas) que aparecem na página de cada pergunta, e cada pergunta pode ter categorias PRÓPRIAS (que só existem em Q4 ou só em Q5). Isso também esclarece o que significa 'aprovar' em cada pergunta. Sem pressa: já existe uma base implementada; evoluir mais para frente."
+linear: JUM-24
 ---
 
 # PEND-38: Grupos - categorias base do grupo + categorias próprias da pergunta

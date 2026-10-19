@@ -8,6 +8,7 @@ status: aberto
 responsavel: Gabriel Nascimento
 data_abertura: 2026-10-01
 resumo: "Cenário: no meio da revisão percebe-se que 'ensino técnico' é muito citado, mas essas respostas já estão em outras categorias. Ao criar ou ajustar uma categoria (ou pelo botão '🔍 Varrer a base' na linha dela), buscar fora dela as respostas que casam com as keywords (sem acento, radical simples), mostrar a prévia (quantas por categoria atual + exemplos) e mandar SÓ essas candidatas para a IA reclassificar com o quadro atual. As não conferidas mudam direto. As conferidas por humano não mudam e ganham uma sugestão '🔎 pode ser <nova categoria>' para alguém decidir."
+linear: JUM-16
 ---
 
 # PEND-29: Varredura por keywords
